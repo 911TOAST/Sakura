@@ -160,16 +160,31 @@ namespace AndroidSettings {
 
 
         // These threads run the driver's shader compiler via vkCreateGraphicsPipelines, which is
-        // the slow path on Mali and the reason async shaders exist. Desktop sizes this pool as
-        // cores-1; Android was pinned to the bottom of its own 4-8 UI range even though MediaTek
-        // SoCs ship eight cores. GetTotalPipelineWorkers() already caps it at hardware_concurrency
-        // - 1, so this cannot oversubscribe a smaller chip - it just uses more of an eight-core one.
-        // Reversible per-user: Graphics -> Hacks -> "Pipeline worker cores".
-        Settings::Setting<s32> pipeline_worker_count{linkage, 8, "pipeline_worker_count",
+        // the slow path on Mali. Each worker holds its own compile working set, so eight of them
+        // spike memory on a phone that has none to spare. GetTotalPipelineWorkers() also caps the
+        // pool at hardware_concurrency - 1. Raise it in Graphics -> Advanced for faster warm-up.
+        Settings::Setting<s32> pipeline_worker_count{linkage, 4, "pipeline_worker_count",
                                  Settings::Category::Android,
                                  Settings::Specialization::Default,
                                  true,
                                  true};
+
+        // Host-visible upload buffer, which is plain system RAM on an integrated Mali part and is
+        // committed up front. Read at renderer construction, so it needs a restart to take effect.
+        Settings::Setting<s32> mali_stream_buffer_mib{linkage, 64, "mali_stream_buffer_mib",
+                                                      Settings::Category::Android,
+                                                      Settings::Specialization::Default,
+                                                      true,
+                                                      false};
+
+        // Ceiling for the video memory the caches may plan against. Mali's DDK reports no memory
+        // budget, so without this the estimate falls back to a share of system RAM and the caches
+        // keep absolute desktop floors that outrank it. Read at device construction.
+        Settings::Setting<s32> vram_budget_mib{linkage, 1536, "vram_budget_mib",
+                                              Settings::Category::Android,
+                                              Settings::Specialization::Default,
+                                              true,
+                                              false};
 
 
         Settings::Setting<bool> show_input_overlay{linkage, true, "show_input_overlay",

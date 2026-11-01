@@ -603,6 +603,26 @@ abstract class SettingsItem(
                 )
             )
             put(
+                SliderSetting(
+                    IntSetting.MALI_STREAM_BUFFER,
+                    titleId = R.string.mali_stream_buffer,
+                    descriptionId = R.string.mali_stream_buffer_description,
+                    min = 16,
+                    max = 256,
+                    units = "MiB"
+                )
+            )
+            put(
+                SliderSetting(
+                    IntSetting.ANDROID_VRAM_BUDGET,
+                    titleId = R.string.vram_budget,
+                    descriptionId = R.string.vram_budget_description,
+                    min = 1024,
+                    max = 3072,
+                    units = "MiB"
+                )
+            )
+            put(
                 SingleChoiceSetting(
                     IntSetting.RENDERER_ANTI_ALIASING,
                     titleId = R.string.renderer_anti_aliasing,

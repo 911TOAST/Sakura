@@ -332,6 +332,8 @@ class SettingsFragmentPresenter(
             add(BooleanSetting.RESCALE_HACK.key)
             add(BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS.key)
             add(IntSetting.ANDROID_PIPELINE_WORKERS.key)
+            add(IntSetting.MALI_STREAM_BUFFER.key)
+            add(IntSetting.ANDROID_VRAM_BUDGET.key)
             add(BooleanSetting.RENDERER_ASYNCHRONOUS_GPU_EMULATION.key)
             add(BooleanSetting.RENDERER_ASYNC_PRESENTATION.key)
             add(SettingsItem.GPU_UNSWIZZLE_COMBINED)

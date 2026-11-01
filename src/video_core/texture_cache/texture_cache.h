@@ -79,11 +79,14 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
 
 #if defined(__ANDROID__)
     // There is no dedicated VRAM on a phone: every texture byte competes with the guest's 4 GiB
-    // of DRAM and the rest of the system. Even when the device reports a large heap (or omits
-    // VK_EXT_memory_budget and leaves the caller guessing), keep the texture cache's planning
-    // ceiling well below that so eviction, not the platform's reclaimer, is what trims it.
-    expected_memory = std::min<u64>(expected_memory, 1_GiB + 256_MiB);
-    critical_memory = std::min<u64>(critical_memory, 1_GiB + 768_MiB);
+    // of DRAM and the rest of the system. Plan against a share of the budget the device reports
+    // rather than a fixed ceiling, so the Graphics -> Advanced video memory budget actually
+    // reaches this cache instead of being overridden by the DEFAULT_* floors above.
+    {
+        const u64 budget = runtime.GetDeviceLocalMemory();
+        expected_memory = std::min<u64>(expected_memory, budget * 3 / 4);
+        critical_memory = std::min<u64>(critical_memory, budget * 7 / 8);
+    }
     // The formula above yields zero once device_local_memory drops below TARGET_THRESHOLD, which
     // made TickFrame run the garbage collector every single frame. Keep a floor so a mostly-idle
     // cache is left alone.

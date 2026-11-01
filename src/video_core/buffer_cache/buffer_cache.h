@@ -33,21 +33,29 @@ BufferCache<P>::BufferCache(Tegra::MaxwellDeviceMemoryManager& device_memory_, R
     if (!runtime.CanReportMemoryUsage()) {
         minimum_memory = DEFAULT_EXPECTED_MEMORY;
         critical_memory = DEFAULT_CRITICAL_MEMORY;
-        return;
+    } else {
+        const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
+        const s64 min_spacing_expected = device_local_memory - 1_GiB;
+        const s64 min_spacing_critical = device_local_memory - 512_MiB;
+        const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
+        const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
+        const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
+        minimum_memory = static_cast<u64>(
+            (std::max)((std::min)(device_local_memory - min_vacancy_expected, min_spacing_expected),
+                     DEFAULT_EXPECTED_MEMORY));
+        critical_memory = static_cast<u64>(
+            (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
+                     DEFAULT_CRITICAL_MEMORY));
     }
-
-    const s64 device_local_memory = static_cast<s64>(runtime.GetDeviceLocalMemory());
-    const s64 min_spacing_expected = device_local_memory - 1_GiB;
-    const s64 min_spacing_critical = device_local_memory - 512_MiB;
-    const s64 mem_threshold = (std::min)(device_local_memory, TARGET_THRESHOLD);
-    const s64 min_vacancy_expected = (6 * mem_threshold) / 10;
-    const s64 min_vacancy_critical = (2 * mem_threshold) / 10;
-    minimum_memory = static_cast<u64>(
-        (std::max)((std::min)(device_local_memory - min_vacancy_expected, min_spacing_expected),
-                 DEFAULT_EXPECTED_MEMORY));
-    critical_memory = static_cast<u64>(
-        (std::max)((std::min)(device_local_memory - min_vacancy_critical, min_spacing_critical),
-                 DEFAULT_CRITICAL_MEMORY));
+#if defined(__ANDROID__)
+    // Same reasoning as the texture cache: the driver reports no dedicated VRAM here, so keep the
+    // buffer pools inside the budget the user allowed rather than the desktop default floors.
+    {
+        const u64 budget = runtime.GetDeviceLocalMemory();
+        minimum_memory = std::min<u64>(minimum_memory, budget * 3 / 4);
+        critical_memory = std::min<u64>(critical_memory, budget * 7 / 8);
+    }
+#endif
 }
 
 template <class P>

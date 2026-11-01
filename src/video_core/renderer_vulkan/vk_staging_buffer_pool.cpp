@@ -20,6 +20,10 @@
 #include "video_core/vulkan_common/vulkan_device.h"
 #include "video_core/vulkan_common/vulkan_wrapper.h"
 
+#ifdef __ANDROID__
+#include "../../android/app/src/main/jni/android_settings.h"
+#endif
+
 namespace Vulkan {
 namespace {
 
@@ -43,8 +47,15 @@ size_t GetStreamBufferSize(const Device& device) {
     if (!device.HasDebuggingToolAttached()) {
         // The stream buffer is host-visible memory, i.e. system RAM on every Mali device, and it
         // is committed up front. A ring drained every frame does not need the desktop 256 MiB;
-        // 128 MiB has never needed more headroom and leaves the rest to the guest.
-        return device.IsMali() ? 128_MiB : MAX_STREAM_BUFFER_SIZE;
+        // on Android the size is a user choice, because there it competes directly with the
+        // guest's RAM rather than with dedicated VRAM.
+        VkDeviceSize mali_size = 128_MiB;
+#ifdef __ANDROID__
+        const s32 configured =
+            std::clamp(AndroidSettings::values.mali_stream_buffer_mib.GetValue(), 16, 256);
+        mali_size = static_cast<VkDeviceSize>(configured) * 1_MiB;
+#endif
+        return device.IsMali() ? mali_size : MAX_STREAM_BUFFER_SIZE;
     }
 
     VkDeviceSize size{0};

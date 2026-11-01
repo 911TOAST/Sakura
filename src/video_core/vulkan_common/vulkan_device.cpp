@@ -26,6 +26,10 @@
 #include "video_core/vulkan_common/vulkan_wrapper.h"
 #include "video_core/gpu_logging/gpu_logging.h"
 
+#ifdef __ANDROID__
+#include "../../android/app/src/main/jni/android_settings.h"
+#endif
+
 #if defined(__ANDROID__) && defined(ARCHITECTURE_arm64)
 #include <adrenotools/bcenabler.h>
 #include <android/api-level.h>
@@ -1606,7 +1610,12 @@ void Device::CollectPhysicalMemoryInfo() {
         if (phys_pages > 0 && page_size > 0) {
             const u64 system_ram =
                 static_cast<u64>(phys_pages) * static_cast<u64>(page_size);
-            memory_size = std::clamp<u64>(system_ram / 5, 2_GiB, 3_GiB);
+            // The user's ceiling wins over the system-RAM estimate so the caches have something
+            // to plan against; 1 GiB stays as the lower bound for very small devices.
+            const s64 budget_mib =
+                std::clamp(AndroidSettings::values.vram_budget_mib.GetValue(), 1024, 3072);
+            memory_size =
+                std::clamp<u64>(system_ram / 5, 1_GiB, static_cast<u64>(budget_mib) * 1_MiB);
         }
 #else
         const u64 memory_size = Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive ? 6_GiB : 4_GiB;

@@ -73,6 +73,10 @@
     <string name="show_shaders_building_description">Display current number of shaders being built</string>
     <string name="pipeline_worker_cores">Pipeline Worker Threads</string>
     <string name="pipeline_worker_cores_description">Manage the amount of cores used for building Vulkan pipelines, the higher value will improve pipeline compilation performance but temperatures will increase as well.</string>
+    <string name="mali_stream_buffer">Upload Buffer Size</string>
+    <string name="mali_stream_buffer_description">Host-visible memory reserved up front for uploads. On Mali this is ordinary system RAM, so a smaller buffer leaves more memory for the guest and the OS, at the cost of splitting large uploads into more batches. Applied when a game starts.</string>
+    <string name="vram_budget">Video Memory Budget</string>
+    <string name="vram_budget_description">How much memory the texture and buffer caches may plan against. Mali drivers report no video memory of their own, so this caps the share of system RAM they reserve. Lower it to leave more memory for the system and reduce reclaimer stutter, at the cost of more texture eviction and re-uploads. Applied when a game starts.</string>
     <string name="overlay_position">Overlay Position</string>
     <string name="overlay_position_description">Choose where the overlay is displayed on the screen</string>
     <string name="overlay_position_top_left">Top Left</string>
