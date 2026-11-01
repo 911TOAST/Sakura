@@ -36,6 +36,29 @@ void incrpdep(u32& value) {
     value = ((value | ~mask) + swizzled_incr) & mask;
 }
 
+// A GOB is 64 bytes wide and the block linear swizzle keeps the four low bits of the byte offset
+// inside a GOB contiguous (SWIZZLE_X_BITS starts with 0b1111). Every 16-byte aligned chunk is
+// therefore stored as a single contiguous run in the tiled image, no matter how the rest of the
+// address is swizzled. This lets us copy whole segments with wide loads/stores instead of moving
+// one pixel at a time.
+constexpr u32 GOB_SEGMENT_SHIFT = 4;
+constexpr u32 GOB_SEGMENT_SIZE = 1U << GOB_SEGMENT_SHIFT;
+
+/// Returns the swizzled byte offset of a 16-byte aligned offset 'x' inside a GOB. Only bits 4 and
+/// 5 of the offset contribute here, higher bits select the GOB and are applied by the caller.
+[[nodiscard]] constexpr u32 SegmentSwizzledX(u32 x) {
+    return ((x & 0x10) << 1) | ((x & 0x20) << 3);
+}
+
+template <bool TO_LINEAR>
+inline void CopySegment(u8* output, const u8* input, u32 swizzled_offset, u32 linear_offset) {
+    if constexpr (TO_LINEAR) {
+        std::memcpy(output + swizzled_offset, input + linear_offset, GOB_SEGMENT_SIZE);
+    } else {
+        std::memcpy(output + linear_offset, input + swizzled_offset, GOB_SEGMENT_SIZE);
+    }
+}
+
 template <bool TO_LINEAR, u32 BYTES_PER_PIXEL>
 void SwizzleImpl(std::span<u8> output, std::span<const u8> input, u32 width, u32 height, u32 depth,
                  u32 block_height, u32 block_depth, u32 stride) {
@@ -44,6 +67,9 @@ void SwizzleImpl(std::span<u8> output, std::span<const u8> input, u32 width, u32
     static constexpr u32 origin_x = 0;
     static constexpr u32 origin_y = 0;
     static constexpr u32 origin_z = 0;
+
+    // The segment copy below assumes that the X origin is zero.
+    static_assert(origin_x == 0, "Segment copies assume a zero X origin");
 
     // We can configure here a custom pitch
     // As it's not exposed 'width * BYTES_PER_PIXEL' will be the expected pitch.
@@ -58,10 +84,19 @@ void SwizzleImpl(std::span<u8> output, std::span<const u8> input, u32 width, u32
     const u32 block_depth_mask = (1U << block_depth) - 1;
     const u32 x_shift = GOB_SIZE_SHIFT + block_height + block_depth;
 
+    // Segments are only valid when they cover a whole number of pixels.
+    constexpr bool can_copy_segments = (GOB_SEGMENT_SIZE % BYTES_PER_PIXEL) == 0;
+    const u32 segment_bytes = can_copy_segments ? (pitch & ~(GOB_SEGMENT_SIZE - 1)) : 0;
+    const u32 segment_columns = segment_bytes / BYTES_PER_PIXEL;
+
+    u8* const output_data = output.data();
+    const u8* const input_data = input.data();
+
     for (u32 slice = 0; slice < depth; ++slice) {
         const u32 z = slice + origin_z;
         const u32 offset_z = (z >> block_depth) * slice_size +
                              ((z & block_depth_mask) << (GOB_SIZE_SHIFT + block_height));
+        const u32 linear_slice_base = slice * pitch * height;
         for (u32 line = 0; line < height; ++line) {
             const u32 y = line + origin_y;
             const u32 swizzled_y = pdep<SWIZZLE_Y_BITS>(y);
@@ -70,20 +105,50 @@ void SwizzleImpl(std::span<u8> output, std::span<const u8> input, u32 width, u32
             const u32 offset_y = (block_y >> block_height) * block_size +
                                  ((block_y & block_height_mask) << GOB_SIZE_SHIFT);
 
-            u32 swizzled_x = pdep<SWIZZLE_X_BITS>(origin_x * BYTES_PER_PIXEL);
-            for (u32 column = 0; column < width;
+            const u32 swizzled_row_base = offset_z + offset_y + swizzled_y;
+            const u32 linear_row_base = linear_slice_base + line * pitch;
+
+            if constexpr (can_copy_segments) {
+                const u32 gobs = segment_bytes >> GOB_SIZE_X_SHIFT;
+                u32 x = 0;
+                // Each full GOB of a row is four 16-byte segments. Their swizzled offsets inside
+                // the GOB are fixed because only bits 4 and 5 of the byte offset vary.
+                for (u32 gob = 0; gob < gobs; ++gob, x += GOB_SIZE_X) {
+                    const u32 swizzled_base = swizzled_row_base + (gob << x_shift);
+                    const u32 linear_base = linear_row_base + x;
+
+                    CopySegment<TO_LINEAR>(output_data, input_data, swizzled_base + 0,
+                                           linear_base + 0);
+                    CopySegment<TO_LINEAR>(output_data, input_data, swizzled_base + 32,
+                                           linear_base + 16);
+                    CopySegment<TO_LINEAR>(output_data, input_data, swizzled_base + 256,
+                                           linear_base + 32);
+                    CopySegment<TO_LINEAR>(output_data, input_data, swizzled_base + 288,
+                                           linear_base + 48);
+                }
+                // Segments of a partial trailing GOB, for widths that are not a multiple of 64
+                // bytes.
+                for (; x < segment_bytes; x += GOB_SEGMENT_SIZE) {
+                    const u32 swizzled_offset = swizzled_row_base + SegmentSwizzledX(x) +
+                                                ((x >> GOB_SIZE_X_SHIFT) << x_shift);
+                    CopySegment<TO_LINEAR>(output_data, input_data, swizzled_offset,
+                                           linear_row_base + x);
+                }
+            }
+
+            // Remainder of the row, at most 15 bytes (or the whole row for bytes-per-pixel values
+            // that cannot be copied in 16-byte segments).
+            u32 swizzled_x = pdep<SWIZZLE_X_BITS>(segment_bytes);
+            for (u32 column = segment_columns; column < width;
                  ++column, incrpdep<SWIZZLE_X_BITS, BYTES_PER_PIXEL>(swizzled_x)) {
-                const u32 x = (column + origin_x) * BYTES_PER_PIXEL;
+                const u32 x = column * BYTES_PER_PIXEL;
                 const u32 offset_x = (x >> GOB_SIZE_X_SHIFT) << x_shift;
 
-                const u32 base_swizzled_offset = offset_z + offset_y + offset_x;
-                const u32 swizzled_offset = base_swizzled_offset + (swizzled_x | swizzled_y);
+                const u32 swizzled_offset = swizzled_row_base + offset_x + swizzled_x;
+                const u32 unswizzled_offset = linear_row_base + x;
 
-                const u32 unswizzled_offset =
-                    slice * pitch * height + line * pitch + column * BYTES_PER_PIXEL;
-
-                u8* const dst = &output[TO_LINEAR ? swizzled_offset : unswizzled_offset];
-                const u8* const src = &input[TO_LINEAR ? unswizzled_offset : swizzled_offset];
+                u8* const dst = output_data + (TO_LINEAR ? swizzled_offset : unswizzled_offset);
+                const u8* const src = input_data + (TO_LINEAR ? unswizzled_offset : swizzled_offset);
 
                 std::memcpy(dst, src, BYTES_PER_PIXEL);
             }
@@ -113,14 +178,21 @@ void SwizzleSubrectImpl(std::span<u8> output, std::span<const u8> input, u32 wid
     const u32 block_depth_mask = (1U << block_depth) - 1;
     const u32 x_shift = GOB_SIZE_SHIFT + block_height + block_depth;
 
+    constexpr bool can_copy_segments = (GOB_SEGMENT_SIZE % BYTES_PER_PIXEL) == 0;
+    constexpr u32 segment_columns = can_copy_segments ? GOB_SEGMENT_SIZE / BYTES_PER_PIXEL : 0;
+
     u32 unprocessed_lines = num_lines;
     u32 extent_y = (std::min)(num_lines, height - origin_y);
+
+    u8* const output_data = output.data();
+    const u8* const input_data = input.data();
 
     for (u32 slice = 0; slice < depth; ++slice) {
         const u32 z = slice + origin_z;
         const u32 offset_z = (z >> block_depth) * slice_size +
                              ((z & block_depth_mask) << (GOB_SIZE_SHIFT + block_height));
         const u32 lines_in_y = (std::min)(unprocessed_lines, extent_y);
+        const u32 linear_slice_base = slice * pitch * height;
         for (u32 line = 0; line < lines_in_y; ++line) {
             const u32 y = line + origin_y;
             const u32 swizzled_y = pdep<SWIZZLE_Y_BITS>(y);
@@ -129,22 +201,47 @@ void SwizzleSubrectImpl(std::span<u8> output, std::span<const u8> input, u32 wid
             const u32 offset_y = (block_y >> block_height) * block_size +
                                  ((block_y & block_height_mask) << GOB_SIZE_SHIFT);
 
-            u32 swizzled_x = pdep<SWIZZLE_X_BITS>(origin_x * BYTES_PER_PIXEL);
-            for (u32 column = 0; column < extent_x;
-                 ++column, incrpdep<SWIZZLE_X_BITS, BYTES_PER_PIXEL>(swizzled_x)) {
-                const u32 x = (column + origin_x) * BYTES_PER_PIXEL;
+            const u32 swizzled_row_base = offset_z + offset_y + swizzled_y;
+            const u32 linear_row_base = linear_slice_base + line * pitch;
+
+            u32 column = 0;
+            u32 x = origin_x * BYTES_PER_PIXEL;
+            u32 swizzled_x = pdep<SWIZZLE_X_BITS>(x);
+
+            auto copy_pixel = [&] {
                 const u32 offset_x = (x >> GOB_SIZE_X_SHIFT) << x_shift;
+                const u32 swizzled_offset = swizzled_row_base + offset_x + swizzled_x;
+                const u32 unswizzled_offset = linear_row_base + column * BYTES_PER_PIXEL;
 
-                const u32 base_swizzled_offset = offset_z + offset_y + offset_x;
-                const u32 swizzled_offset = base_swizzled_offset + (swizzled_x | swizzled_y);
-
-                const u32 unswizzled_offset =
-                    slice * pitch * height + line * pitch + column * BYTES_PER_PIXEL;
-
-                u8* const dst = &output[TO_LINEAR ? swizzled_offset : unswizzled_offset];
-                const u8* const src = &input[TO_LINEAR ? unswizzled_offset : swizzled_offset];
+                u8* const dst = output_data + (TO_LINEAR ? swizzled_offset : unswizzled_offset);
+                const u8* const src = input_data + (TO_LINEAR ? unswizzled_offset : swizzled_offset);
 
                 std::memcpy(dst, src, BYTES_PER_PIXEL);
+            };
+
+            if constexpr (can_copy_segments) {
+                // Skip pixels until the byte offset is 16-byte aligned so the rest of the row can
+                // be copied with wide loads/stores.
+                while (column < extent_x && (x & (GOB_SEGMENT_SIZE - 1)) != 0) {
+                    copy_pixel();
+                    ++column;
+                    x += BYTES_PER_PIXEL;
+                    incrpdep<SWIZZLE_X_BITS, BYTES_PER_PIXEL>(swizzled_x);
+                }
+                while (column + segment_columns <= extent_x) {
+                    const u32 offset_x = (x >> GOB_SIZE_X_SHIFT) << x_shift;
+                    CopySegment<TO_LINEAR>(output_data, input_data,
+                                           swizzled_row_base + offset_x + swizzled_x,
+                                           linear_row_base + column * BYTES_PER_PIXEL);
+                    column += segment_columns;
+                    x += GOB_SEGMENT_SIZE;
+                    swizzled_x = pdep<SWIZZLE_X_BITS>(x);
+                }
+            }
+            for (; column < extent_x;
+                 ++column, x += BYTES_PER_PIXEL,
+                 incrpdep<SWIZZLE_X_BITS, BYTES_PER_PIXEL>(swizzled_x)) {
+                copy_pixel();
             }
         }
         unprocessed_lines -= lines_in_y;

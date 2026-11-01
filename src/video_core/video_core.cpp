@@ -18,6 +18,7 @@
 #ifdef HAS_OPENGL
 #include "video_core/renderer_opengl/renderer_opengl.h"
 #endif
+#include "video_core/renderer_malikan/renderer_malikan.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
 #include "video_core/video_core.h"
 
@@ -31,9 +32,20 @@ std::unique_ptr<VideoCore::RendererBase> CreateRenderer(Core::System& system, Co
     case Settings::RendererBackend::OpenGL_GLASM:
     case Settings::RendererBackend::OpenGL_SPIRV:
         return std::make_unique<OpenGL::RendererOpenGL>(emu_window, device_memory, gpu, std::move(context));
+#else
+    // A config written by an OpenGL-capable build can still ask for a GL backend. Without this
+    // it falls through to the default branch, which returns a null renderer and crashes on boot.
+    case Settings::RendererBackend::OpenGL_GLSL:
+    case Settings::RendererBackend::OpenGL_GLASM:
+    case Settings::RendererBackend::OpenGL_SPIRV:
+        LOG_WARNING(Common, "OpenGL backend requested but this build has no OpenGL support, using Vulkan");
+        [[fallthrough]];
 #endif
     case Settings::RendererBackend::Vulkan:
         return std::make_unique<Vulkan::RendererVulkan>(emu_window, device_memory, gpu, std::move(context));
+    case Settings::RendererBackend::Malikan:
+        return std::make_unique<Malikan::RendererMalikan>(emu_window, device_memory, gpu,
+                                                          std::move(context));
     case Settings::RendererBackend::Null:
         return std::make_unique<Null::RendererNull>(emu_window, gpu, std::move(context));
     default:
@@ -47,11 +59,15 @@ namespace VideoCore {
 
 /// @brief Creates an emulated GPU instance using the given system context.
 void CreateGPU(std::optional<Tegra::GPU>& gpu, Core::Frontend::EmuWindow& emu_window, Core::System& system) {
+    // Guarantee that the performance profile is in effect before the device, renderer and
+    // pipeline cache read any setting. Some loader paths do not call SetNceEnabled().
+    Settings::ApplyPerformanceProfile();
     Settings::UpdateRescalingInfo();
 
     const auto nvdec_value = Settings::values.nvdec_emulation.GetValue();
     const bool use_nvdec = nvdec_value != Settings::NvdecEmulation::Off;
-    const bool use_async = Settings::values.use_asynchronous_gpu_emulation.GetValue();
+    const bool use_async = Settings::values.use_asynchronous_gpu_emulation.GetValue() ||
+                           Settings::values.native_gpu_mode.GetValue();
     gpu.emplace(system, use_async, use_nvdec);
     auto context = emu_window.CreateSharedContext();
     auto scope = context->Acquire();

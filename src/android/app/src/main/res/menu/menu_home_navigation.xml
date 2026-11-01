@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_library"
+        android:icon="@drawable/ic_m3_library_books"
+        android:title="@string/home_library" />
+    <item
+        android:id="@+id/nav_qlaunch"
+        android:icon="@drawable/ic_m3_home"
+        android:title="@string/qlaunch_applet" />
+    <item
+        android:id="@+id/nav_settings"
+        android:icon="@drawable/ic_m3_settings"
+        android:title="@string/preferences_settings" />
+</menu>

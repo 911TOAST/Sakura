@@ -11,12 +11,15 @@ import android.provider.DocumentsContract
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.documentfile.provider.DocumentFile
+import androidx.core.view.doOnPreDraw
+import android.transition.TransitionInflater
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
@@ -70,8 +73,8 @@ class GamePropertiesFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enterTransition = MaterialSharedAxis(MaterialSharedAxis.Y, true)
-        returnTransition = MaterialSharedAxis(MaterialSharedAxis.Y, false)
+        enterTransition = MaterialSharedAxis(MaterialSharedAxis.Z, true)
+        returnTransition = MaterialSharedAxis(MaterialSharedAxis.Z, false)
         reenterTransition = MaterialSharedAxis(MaterialSharedAxis.X, false)
     }
 
@@ -87,6 +90,12 @@ class GamePropertiesFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         homeViewModel.setStatusBarShadeVisibility(true)
+
+        sharedElementEnterTransition = TransitionInflater.from(requireContext())
+            .inflateTransition(android.R.transition.move)
+            .apply { duration = 360L }
+        postponeEnterTransition()
+        binding.imageGameScreen.doOnPreDraw { startPostponedEnterTransition() }
 
         binding.buttonBack.setOnClickListener {
             view.findNavController().popBackStack()
@@ -351,7 +360,7 @@ class GamePropertiesFragment : Fragment() {
                 )
             }
 
-            if (GpuDriverHelper.supportsCustomDriverLoading()) {
+            if (GpuDriverHelper.supportsCustomDriver()) {
                 add(
                     SubmenuProperty(
                         R.string.gpu_driver_manager,
@@ -514,6 +523,17 @@ class GamePropertiesFragment : Fragment() {
             }
             layoutManager = staggered
             adapter = GamePropertiesAdapter(viewLifecycleOwner, properties)
+            itemAnimator = androidx.recyclerview.widget.DefaultItemAnimator().apply {
+                addDuration = 300L
+                moveDuration = 340L
+                changeDuration = 240L
+                removeDuration = 220L
+            }
+            layoutAnimation = AnimationUtils.loadLayoutAnimation(
+                requireContext(),
+                R.anim.sakura_list_enter
+            )
+            scheduleLayoutAnimation()
         }
     }
 

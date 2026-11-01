@@ -16,11 +16,12 @@ import org.yuzu.yuzu_emu.databinding.PageSetupBinding
 import org.yuzu.yuzu_emu.model.PageState
 import org.yuzu.yuzu_emu.model.SetupCallback
 import org.yuzu.yuzu_emu.model.SetupPage
-import org.yuzu.yuzu_emu.utils.ViewUtils
 import org.yuzu.yuzu_emu.viewholder.AbstractViewHolder
 import android.content.res.ColorStateList
+import android.view.View
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.model.ButtonState
+import org.yuzu.yuzu_emu.utils.SuyuMotion
 
 class SetupAdapter(val activity: AppCompatActivity, pages: List<SetupPage>) :
     AbstractListAdapter<SetupPage, SetupAdapter.SetupPageViewHolder>(pages) {
@@ -37,7 +38,7 @@ class SetupAdapter(val activity: AppCompatActivity, pages: List<SetupPage>) :
             }
 
             if (model.pageButtons != null && model.pageSteps.invoke() != PageState.COMPLETE) {
-                for (pageButton in model.pageButtons) {
+                model.pageButtons.forEachIndexed { index, pageButton ->
                     val pageButtonView = LayoutInflater.from(activity)
                         .inflate(
                             R.layout.page_button,
@@ -64,6 +65,19 @@ class SetupAdapter(val activity: AppCompatActivity, pages: List<SetupPage>) :
                     // Disable buton add if its already completed
                     if (pageButton.buttonState.invoke() == ButtonState.BUTTON_ACTION_COMPLETE) {
                         onStepCompleted(pageButton.titleId, pageFullyCompleted = false)
+                    } else {
+                        // Raw M3 cascade: page actions settle in one after another.
+                        pageButtonView.alpha = 0f
+                        pageButtonView.translationY =
+                            pageButtonView.resources
+                                .getDimensionPixelSize(R.dimen.spacing_med).toFloat()
+                        pageButtonView.animate()
+                            .alpha(1f)
+                            .translationY(0f)
+                            .setStartDelay(index * 50L)
+                            .setDuration(SuyuMotion.durationMedium2(activity))
+                            .setInterpolator(SuyuMotion.emphasizedDecelerate(activity))
+                            .start()
                     }
                 }
             }
@@ -84,15 +98,35 @@ class SetupAdapter(val activity: AppCompatActivity, pages: List<SetupPage>) :
             val button = binding.pageButtonContainer.findViewById<MaterialButton>(pageButtonId)
 
             if (pageFullyCompleted) {
-                ViewUtils.hideView(binding.pageButtonContainer, 200)
-                ViewUtils.showView(binding.textConfirmation, 200)
+                val actions = binding.pageButtonContainer
+                // Raw M3 exit: emphasize accelerate, then hide.
+                actions.animate()
+                    .alpha(0f)
+                    .setDuration(SuyuMotion.durationShort4(activity))
+                    .setInterpolator(SuyuMotion.emphasizedAccelerate(activity))
+                    .withEndAction { actions.visibility = View.INVISIBLE }
+                    .start()
+                binding.textConfirmation.apply {
+                    visibility = View.VISIBLE
+                    alpha = 0f
+                    scaleX = 0.92f
+                    scaleY = 0.92f
+                    animate()
+                        .alpha(1f)
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setDuration(SuyuMotion.durationMedium2(activity))
+                        .setInterpolator(SuyuMotion.emphasizedDecelerate(activity))
+                        .start()
+                }
             }
 
             if (button != null) {
                 button.isEnabled = false
                 button.animate()
                     .alpha(0.38f)
-                    .setDuration(200)
+                    .setDuration(SuyuMotion.durationShort4(activity))
+                    .setInterpolator(SuyuMotion.emphasizedAccelerate(activity))
                     .start()
                 button.setTextColor(button.context.getColor(com.google.android.material.R.color.material_on_surface_disabled))
                 button.iconTint =

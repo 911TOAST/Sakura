@@ -231,7 +231,8 @@ public:
         for (AsyncJobId async_job_id : *flush_list) {
             AsyncJob& async_job = slot_async_jobs[async_job_id];
             if (!async_job.collected) {
-                FlushAndRemoveRegion(async_job.query_location, 2, true);
+                FlushAndRemoveRegion(async_job.query_location,
+                                     async_job.timestamp.has_value() ? 16 : 8, true);
             }
         }
         committed_flushes.pop_front();

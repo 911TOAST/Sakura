@@ -231,6 +231,9 @@ public:
     /// Gets and resets core performance statistics
     [[nodiscard]] PerfStatsResults GetAndResetPerfStats();
 
+    /// Emulation speed ratio without resetting the counters the in-game overlay reads
+    [[nodiscard]] double PeekEmulationSpeed();
+
     /// Gets the physical core for the CPU core that is currently running
     [[nodiscard]] Kernel::PhysicalCore& CurrentPhysicalCore();
 

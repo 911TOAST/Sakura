@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <memory>
+#include <span>
 #include <type_traits>
 #include <ankerl/unordered_dense.h>
 #include <vector>
@@ -126,7 +127,11 @@ private:
     std::unique_ptr<GraphicsPipeline> CreateGraphicsPipeline(
         ShaderPools& pools, const GraphicsPipelineCacheKey& key,
         std::span<Shader::Environment* const> envs, PipelineStatistics* statistics,
-        bool build_in_parallel);
+        bool build_in_parallel, std::vector<u8>* out_cache_payload = nullptr);
+
+    std::unique_ptr<GraphicsPipeline> CreateGraphicsPipelineFromCache(
+        const GraphicsPipelineCacheKey& key, std::span<const u8> payload,
+        PipelineStatistics* statistics, bool build_in_parallel);
 
     std::unique_ptr<ComputePipeline> CreateComputePipeline(const ComputePipelineCacheKey& key,
                                                            const ShaderInfo* shader);
@@ -135,7 +140,12 @@ private:
                                                            const ComputePipelineCacheKey& key,
                                                            Shader::Environment& env,
                                                            PipelineStatistics* statistics,
-                                                           bool build_in_parallel);
+                                                           bool build_in_parallel,
+                                                           std::vector<u8>* out_cache_payload = nullptr);
+
+    std::unique_ptr<ComputePipeline> CreateComputePipelineFromCache(
+        const ComputePipelineCacheKey& key, std::span<const u8> payload,
+        PipelineStatistics* statistics, bool build_in_parallel);
 
     void SerializeVulkanPipelineCache(const std::filesystem::path& filename,
                                       const vk::PipelineCache& pipeline_cache, u32 cache_version);
@@ -164,6 +174,7 @@ private:
 
     Shader::Profile profile;
     Shader::HostTranslateInfo host_info;
+    u64 shader_cache_salt{};
 
     std::filesystem::path pipeline_cache_filename;
 

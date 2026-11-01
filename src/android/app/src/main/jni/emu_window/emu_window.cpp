@@ -126,7 +126,6 @@ float EmuWindow_Android::GetFrameTimeVerifiedHint() const {
 
 float EmuWindow_Android::GetFrameRateHint() const {
     const float observed_rate = std::clamp(m_smoothed_present_rate, 0.0f, 240.0f);
-    const float frame_time_verified_hint = GetFrameTimeVerifiedHint();
 
     if (m_last_frame_rate_hint > 0.0f && observed_rate > 0.0f) {
         const float tolerance = std::max(m_last_frame_rate_hint * 0.12f, 4.0f);
@@ -135,8 +134,13 @@ float EmuWindow_Android::GetFrameRateHint() const {
         }
     }
 
+    // GetFrameTimeVerifiedHint takes PerfStats::object_mutex - which the emulation thread already
+    // holds twice per system frame - and dereferences the perf_stats optional that shutdown
+    // disengages. It used to run before the early-out above, so every steady-state frame paid a
+    // contended lock and a driver-independent lookup for a value that was then thrown away.
     const float observed_hint = QuantizeFrameRateHint(observed_rate);
     if (observed_hint > 0.0f) {
+        const float frame_time_verified_hint = GetFrameTimeVerifiedHint();
         if (frame_time_verified_hint > 0.0f) {
             const float tolerance = std::max(observed_hint * 0.20f, 3.0f);
             if (std::fabs(observed_hint - frame_time_verified_hint) <= tolerance) {
@@ -146,7 +150,8 @@ float EmuWindow_Android::GetFrameRateHint() const {
         return observed_hint;
     }
 
-    if (frame_time_verified_hint > 0.0f) {
+    if (const float frame_time_verified_hint = GetFrameTimeVerifiedHint();
+        frame_time_verified_hint > 0.0f) {
         return frame_time_verified_hint;
     }
 

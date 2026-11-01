@@ -90,7 +90,7 @@
         android:layout_marginStart="16dp"
         android:layout_marginTop="8dp"
         android:layout_marginEnd="16dp"
-        android:background="?attr/colorOutline"
+        android:background="@android:color/transparent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/label_recommended_driver" />
@@ -105,12 +105,15 @@
         app:layout_constraintTop_toBottomOf="@id/divider"
         app:layout_constraintBottom_toBottomOf="parent" />
 
-    <ProgressBar
+    <com.google.android.material.progressindicator.CircularProgressIndicator
         android:id="@+id/loadingIndicator"
-        style="?android:attr/progressBarStyle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
+        android:indeterminate="true"
+        android:contentDescription="@string/loading"
+        app:indicatorSize="40dp"
+        app:trackThickness="4dp"
         android:visibility="invisible"
         app:layout_constraintEnd_toEndOf="@id/list_drivers"
         app:layout_constraintStart_toStartOf="@id/list_drivers"

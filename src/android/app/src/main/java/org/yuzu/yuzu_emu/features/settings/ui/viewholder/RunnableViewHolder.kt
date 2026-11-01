@@ -17,7 +17,7 @@ class RunnableViewHolder(val binding: ListItemSettingBinding, adapter: SettingsA
 
     override fun bind(item: SettingsItem) {
         setting = item as RunnableSetting
-        binding.icon.setVisible(setting.iconId != 0)
+        binding.iconContainer.setVisible(setting.iconId != 0)
         if (setting.iconId != 0) {
             binding.icon.setImageDrawable(
                 ResourcesCompat.getDrawable(

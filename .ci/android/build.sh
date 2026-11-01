@@ -78,7 +78,7 @@ TARGET_LOWER=$(echo "$TARGET" | tr '[:upper:]' '[:lower:]')
 
 case "$TARGET_LOWER" in
 	legacy) FLAVOR=Legacy ;;
-	optimized) FLAVOR=GenshinSpoof ;;
+	optimized) FLAVOR=Optimized ;;
 	standard) FLAVOR=Mainline ;;
     chromeos) FLAVOR=ChromeOS ;;
 	*) die "Invalid build flavor $TARGET."

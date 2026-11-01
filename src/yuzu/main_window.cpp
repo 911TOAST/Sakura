@@ -1190,8 +1190,9 @@ void MainWindow::InitializeWidgets() {
     connect(renderer_status_button, &QPushButton::clicked, this, &MainWindow::OnToggleGraphicsAPI);
     UpdateAPIText();
     renderer_status_button->setCheckable(true);
-    renderer_status_button->setChecked(Settings::values.renderer_backend.GetValue() ==
-                                       Settings::RendererBackend::Vulkan);
+    const auto backend = Settings::values.renderer_backend.GetValue();
+    renderer_status_button->setChecked(backend == Settings::RendererBackend::Vulkan ||
+                                       backend == Settings::RendererBackend::Malikan);
     renderer_status_button->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(renderer_status_button, &QPushButton::customContextMenuRequested,
             [this](const QPoint& menu_location) {
@@ -3621,6 +3622,7 @@ void MainWindow::OnToggleGraphicsAPI() {
     switch (api) {
 #ifdef HAS_OPENGL
     case Settings::RendererBackend::Vulkan:
+    case Settings::RendererBackend::Malikan:
         api = Settings::RendererBackend::OpenGL_GLSL;
         break;
     case Settings::RendererBackend::OpenGL_GLSL:
@@ -3634,6 +3636,9 @@ void MainWindow::OnToggleGraphicsAPI() {
         break;
 #else
     case Settings::RendererBackend::Vulkan:
+        api = Settings::RendererBackend::Malikan;
+        break;
+    case Settings::RendererBackend::Malikan:
         api = Settings::RendererBackend::Null;
         break;
 #endif
@@ -3644,7 +3649,8 @@ void MainWindow::OnToggleGraphicsAPI() {
         break;
     }
     Settings::values.renderer_backend.SetValue(api);
-    renderer_status_button->setChecked(api == Settings::RendererBackend::Vulkan);
+    renderer_status_button->setChecked(api == Settings::RendererBackend::Vulkan ||
+                                       api == Settings::RendererBackend::Malikan);
     UpdateAPIText();
 }
 
@@ -4173,8 +4179,9 @@ void MainWindow::UpdateVolumeUI() {
 }
 
 void MainWindow::UpdateStatusButtons() {
-    renderer_status_button->setChecked(Settings::values.renderer_backend.GetValue() ==
-                                       Settings::RendererBackend::Vulkan);
+    const auto backend = Settings::values.renderer_backend.GetValue();
+    renderer_status_button->setChecked(backend == Settings::RendererBackend::Vulkan ||
+                                       backend == Settings::RendererBackend::Malikan);
     UpdateAPIText();
     UpdateGPUAccuracyButton();
     UpdateDockedButton();

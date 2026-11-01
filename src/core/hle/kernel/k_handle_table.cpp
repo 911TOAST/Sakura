@@ -44,7 +44,8 @@ bool KHandleTable::Remove(KernelCore& kernel, Handle handle) {
         KScopedDisableDispatch dd{kernel};
         KScopedSpinLock lk(m_lock);
 
-        if (this->IsValidHandle(handle)) [[likely]] {
+        if (this->IsValidHandleFields(handle_pack.raw, handle_pack.index,
+                                       handle_pack.linear_id)) [[likely]] {
             const auto index = handle_pack.index;
 
             obj = m_objects[index];

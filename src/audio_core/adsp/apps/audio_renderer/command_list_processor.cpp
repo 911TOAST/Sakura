@@ -53,7 +53,15 @@ u64 CommandListProcessor::Process(u32 session_id) {
         current_processing_time = 0;
     }
 
-    std::string dump{fmt::format("\nSession {}\n", session_id)};
+    // dump is only ever consumed under dump_audio_commands (default off), but the header and the
+    // per-disabled-command appends were built unconditionally, so every render tick paid a format
+    // call plus a heap-allocating append per skipped command for output nobody asked for. Reading
+    // the setting once here also removes a virtual getter from the inner loop.
+    const bool dump_commands = Settings::values.dump_audio_commands.GetValue();
+    std::string dump;
+    if (dump_commands) {
+        dump = fmt::format("\nSession {}\n", session_id);
+    }
 
     for (u32 index = 0; index < command_count; index++) {
         auto& command{*reinterpret_cast<Renderer::ICommand*>(commands)};
@@ -74,7 +82,7 @@ u64 CommandListProcessor::Process(u32 session_id) {
             return system->CoreTiming().GetGlobalTimeUs().count() - start_time_;
         }
 
-        if (Settings::values.dump_audio_commands) {
+        if (dump_commands) {
             command.Dump(*this, dump);
         }
 
@@ -84,15 +92,15 @@ u64 CommandListProcessor::Process(u32 session_id) {
 
         if (command.enabled) {
             command.Process(*this);
-        } else {
-            dump += fmt::format("\tDisabled!\n");
+        } else if (dump_commands) {
+            dump += "\tDisabled!\n";
         }
 
         processed_command_count++;
         commands += command.size;
     }
 
-    if (Settings::values.dump_audio_commands && dump != last_dump) {
+    if (dump_commands && dump != last_dump) {
         LOG_WARNING(Service_Audio, "{}", dump);
         last_dump = dump;
     }

@@ -1,1 +1,7 @@
-<?xml version='1.0' encoding='utf-8'?><resources><color name='ic_launcher_background'>#1F143C</color></resources>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FBF8F5</color>
+    <color name="color_icon_poly_bg">#2C313A</color>
+    <color name="color_icon_dark_bg">#141419</color>
+    <color name="color_icon_neon_bg">#09090E</color>
+</resources>

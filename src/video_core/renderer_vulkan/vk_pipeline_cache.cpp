@@ -5,14 +5,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
+#include <exception>
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <span>
 #include <thread>
 #include <vector>
-#include <bit>
 #include <numeric>
 #include "common/cityhash.h"
 #include "common/fs/fs.h"
@@ -24,6 +26,7 @@
 #include "shader_recompiler/frontend/maxwell/control_flow.h"
 #include "shader_recompiler/frontend/maxwell/translate_program.h"
 #include "shader_recompiler/program_header.h"
+#include "shader_recompiler/shader_info_serialize.h"
 #include "video_core/engines/kepler_compute.h"
 #include "video_core/engines/maxwell_3d.h"
 #include "video_core/memory_manager.h"
@@ -62,8 +65,135 @@ using VideoCommon::FileEnvironment;
 using VideoCommon::GenericEnvironment;
 using VideoCommon::GraphicsEnvironment;
 
-constexpr u32 CACHE_VERSION = 18;
+constexpr u32 CACHE_VERSION = 20;
 constexpr std::array<char, 8> VULKAN_CACHE_MAGIC_NUMBER{'y', 'u', 'z', 'u', 'v', 'k', 'c', 'h'};
+
+constexpr u32 SPIRV_CACHE_MAGIC = 0x43565053; // "SPVC"
+constexpr u32 SPIRV_CACHE_VERSION = 1;
+constexpr size_t MAX_CACHED_STAGES = 5;
+constexpr size_t MAX_CACHED_SPIRV_WORDS = 16 * 1024 * 1024 / sizeof(u32);
+constexpr size_t MAX_CACHED_PAYLOAD_SIZE = 64 * 1024 * 1024;
+
+struct CachedStage {
+    u32 stage_index{};
+    std::vector<u32> spirv;
+    Shader::Info info;
+};
+
+std::vector<u8> SerializeCachedStages(std::span<const CachedStage> stages, u64 salt) {
+    std::vector<u8> out;
+    Shader::Serialize::AppendU32(out, SPIRV_CACHE_MAGIC);
+    Shader::Serialize::AppendU32(out, SPIRV_CACHE_VERSION);
+    Shader::Serialize::AppendU64(out, salt);
+    Shader::Serialize::AppendU32(out, static_cast<u32>(stages.size()));
+    for (const CachedStage& stage : stages) {
+        Shader::Serialize::AppendU32(out, stage.stage_index);
+        Shader::Serialize::AppendU32(out, static_cast<u32>(stage.spirv.size()));
+        for (const u32 word : stage.spirv) {
+            Shader::Serialize::AppendU32(out, word);
+        }
+        std::vector<u8> info_bytes;
+        Shader::Serialize::AppendInfo(info_bytes, stage.info);
+        Shader::Serialize::AppendU32(out, static_cast<u32>(info_bytes.size()));
+        out.insert(out.end(), info_bytes.begin(), info_bytes.end());
+    }
+    return out;
+}
+
+bool DeserializeCachedStages(std::span<const u8> payload, u64 salt,
+                             std::array<std::optional<CachedStage>, MAX_CACHED_STAGES>& stages) {
+    Shader::Serialize::Reader reader{payload};
+    u32 magic{};
+    u32 version{};
+    u64 cached_salt{};
+    u32 count{};
+    if (!reader.ReadU32(magic) || magic != SPIRV_CACHE_MAGIC) {
+        return false;
+    }
+    if (!reader.ReadU32(version) || version != SPIRV_CACHE_VERSION) {
+        return false;
+    }
+    if (!reader.ReadU64(cached_salt) || cached_salt != salt) {
+        return false;
+    }
+    if (!reader.ReadU32(count) || count == 0 || count > MAX_CACHED_STAGES) {
+        return false;
+    }
+    for (u32 i = 0; i < count; ++i) {
+        u32 stage_index{};
+        u32 word_count{};
+        if (!reader.ReadU32(stage_index) || stage_index >= MAX_CACHED_STAGES) {
+            return false;
+        }
+        if (stages[stage_index]) {
+            return false;
+        }
+        // Bound the allocation by what the entry can actually contain, not just by the global
+        // limit: a corrupt count must not be able to reserve 16 MiB per stage.
+        if (!reader.ReadU32(word_count) || word_count < 5 ||
+            word_count > MAX_CACHED_SPIRV_WORDS ||
+            static_cast<size_t>(word_count) * sizeof(u32) > reader.Remaining()) {
+            return false;
+        }
+        CachedStage stage;
+        stage.stage_index = stage_index;
+        stage.spirv.resize(word_count);
+        for (u32& word : stage.spirv) {
+            if (!reader.ReadU32(word)) {
+                return false;
+            }
+        }
+        // Magic, version 1.x and a non-zero id bound. Anything else is corrupt and must not be
+        // handed to vkCreateShaderModule.
+        if (stage.spirv[0] != 0x07230203U || (stage.spirv[1] & 0xFFFF0000U) != 0x00010000U ||
+            stage.spirv[3] == 0) {
+            return false;
+        }
+        u32 info_size{};
+        if (!reader.ReadU32(info_size) || info_size > reader.Remaining()) {
+            return false;
+        }
+        std::vector<u8> info_bytes(info_size);
+        if (!reader.ReadBytes(info_bytes)) {
+            return false;
+        }
+        Shader::Serialize::Reader info_reader{info_bytes};
+        if (!Shader::Serialize::ReadInfo(info_reader, stage.info) ||
+            info_reader.Remaining() != 0) {
+            return false;
+        }
+        stages[stage_index] = std::move(stage);
+    }
+    return reader.Remaining() == 0;
+}
+
+std::vector<u8> ReadCachedPayload(std::ifstream& file) {
+    u32 magic{};
+    u32 size{};
+    u64 expected_checksum{};
+    file.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+    file.read(reinterpret_cast<char*>(&size), sizeof(size));
+    file.read(reinterpret_cast<char*>(&expected_checksum), sizeof(expected_checksum));
+    if (magic != VideoCommon::PIPELINE_EXTRA_DATA_MAGIC || size == 0 ||
+        size > MAX_CACHED_PAYLOAD_SIZE) {
+        file.setstate(std::ios::failbit);
+        return {};
+    }
+    std::vector<u8> payload(size);
+    file.read(reinterpret_cast<char*>(payload.data()), size);
+
+    // A truncated or partially-written entry must never reach the driver: the payload is SPIR-V
+    // plus shader reflection data, and building a pipeline from garbage is a hard crash.
+    u64 checksum{1469598103934665603ULL};
+    for (const u8 byte : payload) {
+        checksum = (checksum ^ byte) * 1099511628211ULL;
+    }
+    if (checksum != expected_checksum) {
+        file.setstate(std::ios::failbit);
+        return {};
+    }
+    return payload;
+}
 
 template <typename Container>
 auto MakeSpan(Container& container) {
@@ -428,6 +558,9 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .has_broken_unsigned_image_offsets = false,
         .has_broken_signed_operations = false,
         .has_broken_fp16_float_controls = driver_id == VK_DRIVER_ID_NVIDIA_PROPRIETARY,
+        // Stays false on Vulkan. Only OpenGL enables this, and it rewrites every float compare
+        // into 5-7 SPIR-V instructions instead of one, so it is a semantics workaround with a real
+        // per-shader cost - not something to switch on without an observed driver bug.
         .ignore_nan_fp_comparisons = false,
         .has_broken_spirv_subgroup_mask_vector_extract_dynamic = false,
         .has_broken_robust =
@@ -435,6 +568,15 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .min_ssbo_alignment = device.GetStorageBufferAlignment(),
         .max_user_clip_distances = device.GetMaxUserClipDistances()
     };
+
+    const std::string_view model_name{device.GetModelName()};
+    // The salt must change whenever the serialized reflection layout changes, otherwise a cache
+    // written by a different build is accepted and its fields are reinterpreted as the new layout.
+    shader_cache_salt = Common::CityHash64(model_name.data(), model_name.size()) ^
+                        (static_cast<u64>(device.GetDriverVersion()) << 32) ^
+                        static_cast<u64>(device.ApiVersion()) ^
+                        (static_cast<u64>(sizeof(Shader::Info)) << 16) ^
+                        static_cast<u64>(Shader::Serialize::InfoSerializationVersion);
 
     host_info = Shader::HostTranslateInfo{
         .min_ssbo_alignment = device.GetStorageBufferAlignment(),
@@ -601,10 +743,25 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
     const auto load_compute{[&](std::ifstream& file, FileEnvironment env) {
         ComputePipelineCacheKey key;
         file.read(reinterpret_cast<char*>(&key), sizeof(key));
+        std::vector<u8> payload{ReadCachedPayload(file)};
 
-        workers.QueueWork([this, key, env_ = std::move(env), &state, &callback]() mutable {
-            ShaderPools pools;
-            auto pipeline{CreateComputePipeline(pools, key, env_, state.statistics.get(), false)};
+        workers.QueueWork([this, key, env_ = std::move(env), payload = std::move(payload),
+                           &state, &callback]() mutable {
+            std::unique_ptr<ComputePipeline> pipeline;
+            if (!payload.empty()) {
+                try {
+                    pipeline =
+                        CreateComputePipelineFromCache(key, payload, state.statistics.get(), false);
+                } catch (const std::exception& e) {
+                    // Never let a bad cache entry escape a worker thread: fall back to compiling.
+                    LOG_ERROR(Render_Vulkan, "Discarding cached compute pipeline: {}", e.what());
+                    pipeline.reset();
+                }
+            }
+            if (!pipeline) {
+                ShaderPools pools;
+                pipeline = CreateComputePipeline(pools, key, env_, state.statistics.get(), false);
+            }
             std::scoped_lock lock{state.mutex};
             if (pipeline) {
                 compute_cache.emplace(key, std::move(pipeline));
@@ -619,6 +776,7 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
     const auto load_graphics{[&](std::ifstream& file, std::vector<FileEnvironment> envs) {
         GraphicsPipelineCacheKey key;
         file.read(reinterpret_cast<char*>(&key), sizeof(key));
+        std::vector<u8> payload{ReadCachedPayload(file)};
 
         if ((key.state.extended_dynamic_state != 0) !=
                 dynamic_features.has_extended_dynamic_state ||
@@ -648,14 +806,27 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
             return;
         }
 
-        workers.QueueWork([this, key, envs_ = std::move(envs), &state, &callback]() mutable {
-            ShaderPools pools;
-            boost::container::static_vector<Shader::Environment*, 5> env_ptrs;
-            for (auto& env : envs_) {
-                env_ptrs.push_back(&env);
+        workers.QueueWork([this, key, envs_ = std::move(envs), payload = std::move(payload),
+                           &state, &callback]() mutable {
+            std::unique_ptr<GraphicsPipeline> pipeline;
+            if (!payload.empty()) {
+                try {
+                    pipeline = CreateGraphicsPipelineFromCache(key, payload,
+                                                               state.statistics.get(), false);
+                } catch (const std::exception& e) {
+                    LOG_ERROR(Render_Vulkan, "Discarding cached graphics pipeline: {}", e.what());
+                    pipeline.reset();
+                }
             }
-            auto pipeline{CreateGraphicsPipeline(pools, key, MakeSpan(env_ptrs),
-                                                 state.statistics.get(), false)};
+            if (!pipeline) {
+                ShaderPools pools;
+                boost::container::static_vector<Shader::Environment*, 5> env_ptrs;
+                for (auto& env : envs_) {
+                    env_ptrs.push_back(&env);
+                }
+                pipeline = CreateGraphicsPipeline(pools, key, MakeSpan(env_ptrs),
+                                                 state.statistics.get(), false);
+            }
 
             std::scoped_lock lock{state.mutex};
             if (pipeline) {
@@ -726,7 +897,10 @@ GraphicsPipeline* PipelineCache::BuiltPipeline(GraphicsPipeline* pipeline) const
 std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
     ShaderPools& pools, const GraphicsPipelineCacheKey& key,
     std::span<Shader::Environment* const> envs, PipelineStatistics* statistics,
-    bool build_in_parallel) try {
+    bool build_in_parallel, std::vector<u8>* out_cache_payload) try {
+    if (out_cache_payload) {
+        out_cache_payload->clear();
+    }
     auto hash = key.Hash();
     LOG_INFO(Render_Vulkan, "0x{:016x}", hash);
     size_t env_index{0};
@@ -774,6 +948,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
     }
     std::array<const Shader::Info*, Maxwell::MaxShaderStage> infos{};
     std::array<vk::ShaderModule, Maxwell::MaxShaderStage> modules;
+    std::array<std::vector<u32>, Maxwell::MaxShaderStage> stage_codes;
 
     const Shader::IR::Program* previous_stage{};
     Shader::Backend::Bindings binding;
@@ -792,7 +967,8 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
 
         const auto runtime_info{MakeRuntimeInfo(programs, key, program, previous_stage, device)};
         ConvertLegacyToGeneric(program, runtime_info);
-        const std::vector<u32> code{EmitSPIRV(profile, runtime_info, program, binding)};
+        std::vector<u32>& code{stage_codes[stage_index]};
+        code = EmitSPIRV(profile, runtime_info, program, binding);
         device.SaveShader(code);
         modules[stage_index] = BuildShader(device, code);
 
@@ -820,6 +996,21 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
         }
         previous_stage = &program;
     }
+    if (out_cache_payload) {
+        std::vector<CachedStage> stages;
+        stages.reserve(Maxwell::MaxShaderStage);
+        for (size_t stage = 0; stage < Maxwell::MaxShaderStage; ++stage) {
+            if (!infos[stage] || stage_codes[stage].empty()) {
+                continue;
+            }
+            stages.push_back(CachedStage{
+                .stage_index = static_cast<u32>(stage),
+                .spirv = std::move(stage_codes[stage]),
+                .info = *infos[stage],
+            });
+        }
+        *out_cache_payload = SerializeCachedStages(stages, shader_cache_salt);
+    }
     Common::ThreadWorker* const thread_worker{build_in_parallel ? &workers : nullptr};
     return std::make_unique<GraphicsPipeline>(
         scheduler, buffer_cache, texture_cache, vulkan_pipeline_cache, &shader_notify, device,
@@ -844,17 +1035,54 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
     return nullptr;
 }
 
+std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipelineFromCache(
+    const GraphicsPipelineCacheKey& key, std::span<const u8> payload,
+    PipelineStatistics* statistics, bool build_in_parallel) {
+    std::array<std::optional<CachedStage>, MAX_CACHED_STAGES> cached;
+    if (!DeserializeCachedStages(payload, shader_cache_salt, cached)) {
+        return nullptr;
+    }
+    // A cached entry must cover every stage that the pipeline key requires.
+    for (size_t index = 1; index < Maxwell::MaxShaderProgram; ++index) {
+        if (key.unique_hashes[index] != 0 && !cached[index - 1]) {
+            return nullptr;
+        }
+    }
+
+    std::array<vk::ShaderModule, Maxwell::MaxShaderStage> modules;
+    std::array<Shader::Info, Maxwell::MaxShaderStage> stage_infos;
+    std::array<const Shader::Info*, Maxwell::MaxShaderStage> infos{};
+    for (size_t stage = 0; stage < Maxwell::MaxShaderStage; ++stage) {
+        if (!cached[stage]) {
+            continue;
+        }
+        modules[stage] = BuildShader(device, cached[stage]->spirv);
+        device.SaveShader(cached[stage]->spirv);
+        stage_infos[stage] = cached[stage]->info;
+        infos[stage] = &stage_infos[stage];
+    }
+
+    Common::ThreadWorker* const thread_worker{build_in_parallel ? &workers : nullptr};
+    return std::make_unique<GraphicsPipeline>(
+        scheduler, buffer_cache, texture_cache, vulkan_pipeline_cache, &shader_notify, device,
+        descriptor_pool, guest_descriptor_queue, thread_worker, statistics, render_pass_cache, key,
+        std::move(modules), infos);
+}
+
 std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
     GraphicsEnvironments environments;
     GetGraphicsEnvironments(environments, graphics_key.unique_hashes);
 
     main_pools.ReleaseContents();
-    auto pipeline{
-        CreateGraphicsPipeline(main_pools, graphics_key, environments.Span(), nullptr, true)};
+    std::vector<u8> cache_payload;
+    auto pipeline{CreateGraphicsPipeline(main_pools, graphics_key, environments.Span(), nullptr,
+                                         true, &cache_payload)};
     if (!pipeline || pipeline_cache_filename.empty()) {
         return pipeline;
     }
-    serialization_thread.QueueWork([this, key = graphics_key, envs = std::move(environments.envs)] {
+    serialization_thread.QueueWork([this, key = graphics_key,
+                                    envs = std::move(environments.envs),
+                                    cache_payload = std::move(cache_payload)]() mutable {
         boost::container::static_vector<const GenericEnvironment*, Maxwell::MaxShaderProgram>
             env_ptrs;
         for (size_t index = 0; index < Maxwell::MaxShaderProgram; ++index) {
@@ -862,7 +1090,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
                 env_ptrs.push_back(&envs[index]);
             }
         }
-        SerializePipeline(key, env_ptrs, pipeline_cache_filename, CACHE_VERSION);
+        SerializePipeline(key, env_ptrs, pipeline_cache_filename, CACHE_VERSION, cache_payload);
     });
     return pipeline;
 }
@@ -875,20 +1103,26 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
     env.SetCachedSize(shader->size_bytes);
 
     main_pools.ReleaseContents();
-    auto pipeline{CreateComputePipeline(main_pools, key, env, nullptr, true)};
+    std::vector<u8> cache_payload;
+    auto pipeline{CreateComputePipeline(main_pools, key, env, nullptr, true, &cache_payload)};
     if (!pipeline || pipeline_cache_filename.empty()) {
         return pipeline;
     }
-    serialization_thread.QueueWork([this, key, env_ = std::move(env)] {
+    serialization_thread.QueueWork([this, key, env_ = std::move(env),
+                                    cache_payload = std::move(cache_payload)]() mutable {
         SerializePipeline(key, std::array<const GenericEnvironment*, 1>{&env_},
-                          pipeline_cache_filename, CACHE_VERSION);
+                          pipeline_cache_filename, CACHE_VERSION, cache_payload);
     });
     return pipeline;
 }
 
 std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
     ShaderPools& pools, const ComputePipelineCacheKey& key, Shader::Environment& env,
-    PipelineStatistics* statistics, bool build_in_parallel) try {
+    PipelineStatistics* statistics, bool build_in_parallel,
+    std::vector<u8>* out_cache_payload) try {
+    if (out_cache_payload) {
+        out_cache_payload->clear();
+    }
     auto hash = key.Hash();
     if (device.HasBrokenCompute()) {
         LOG_ERROR(Render_Vulkan, "Skipping 0x{:016x}", hash);
@@ -918,9 +1152,18 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
                     max_shared_memory / 1024);
         program.shared_memory_size = max_shared_memory;
     }
-    const std::vector<u32> code{EmitSPIRV(profile, program)};
+    std::vector<u32> code{EmitSPIRV(profile, program)};
     device.SaveShader(code);
     vk::ShaderModule spv_module{BuildShader(device, code)};
+
+    if (out_cache_payload) {
+        const std::array<CachedStage, 1> stages{CachedStage{
+            .stage_index = 0,
+            .spirv = code,
+            .info = program.info,
+        }};
+        *out_cache_payload = SerializeCachedStages(stages, shader_cache_salt);
+    }
 
     // Text log + .spv dump. Same split as the graphics path.
     const bool should_log = GPU::Logging::IsActive();
@@ -951,6 +1194,22 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
 } catch (const Shader::Exception& exception) {
     LOG_ERROR(Render_Vulkan, "{}", exception.what());
     return nullptr;
+}
+
+std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipelineFromCache(
+    const ComputePipelineCacheKey& key, std::span<const u8> payload,
+    PipelineStatistics* statistics, bool build_in_parallel) {
+    std::array<std::optional<CachedStage>, MAX_CACHED_STAGES> cached;
+    if (!DeserializeCachedStages(payload, shader_cache_salt, cached) || !cached[0]) {
+        return nullptr;
+    }
+    vk::ShaderModule spv_module{BuildShader(device, cached[0]->spirv)};
+    device.SaveShader(cached[0]->spirv);
+    Common::ThreadWorker* const thread_worker{build_in_parallel ? &workers : nullptr};
+    return std::make_unique<ComputePipeline>(
+        device, scheduler, vulkan_pipeline_cache, descriptor_pool, guest_descriptor_queue,
+        thread_worker, statistics, &shader_notify, cached[0]->info, std::move(spv_module),
+        key.unique_hash);
 }
 
 void PipelineCache::SerializeVulkanPipelineCache(const std::filesystem::path& filename,

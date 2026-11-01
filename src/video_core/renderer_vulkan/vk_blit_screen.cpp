@@ -92,9 +92,11 @@ void BlitScreen::DrawToFrame(const Device& device, RasterizerVulkan& rasterizer,
                              VkFormat current_swapchain_view_format) {
     bool resource_update_required = false;
     bool presentation_recreate_required = false;
+    bool render_pass_recreate_required = false;
 
     if (!window_adapt || scaling_filter != filters.get_scaling_filter()) {
         resource_update_required = true;
+        render_pass_recreate_required = true;
     }
 
     if (image_count != current_swapchain_image_count) {
@@ -106,6 +108,7 @@ void BlitScreen::DrawToFrame(const Device& device, RasterizerVulkan& rasterizer,
         layout.width != frame->width || layout.height != frame->height) {
         resource_update_required = true;
         presentation_recreate_required = true;
+        render_pass_recreate_required = true;
         swapchain_view_format = current_swapchain_view_format;
     }
 
@@ -113,9 +116,17 @@ void BlitScreen::DrawToFrame(const Device& device, RasterizerVulkan& rasterizer,
         WaitIdle(device);
         SetWindowAdaptPass(device);
 
-        if (presentation_recreate_required) {
-            present_manager.RecreateFrame(frame, layout.width, layout.height, swapchain_view_format,
-                                          window_adapt->GetRenderPass());
+        if (presentation_recreate_required ||
+            (frame->direct_present && render_pass_recreate_required)) {
+            // The render pass must match the frame, not the PresentManager's global mode.
+            // Capture/applet frames are ordinary intermediate images even when the display
+            // path is zero-copy; they must keep ending in GENERAL so the download barrier is
+            // valid. Use the returned pointer so the caller never keeps a stale frame address.
+            const bool direct_frame = frame->direct_present;
+            frame = present_manager.RecreateFrame(
+                frame, layout.width, layout.height, swapchain_view_format,
+                direct_frame ? window_adapt->GetPresentRenderPass()
+                             : window_adapt->GetRenderPass());
         }
 
         image_index = 0;

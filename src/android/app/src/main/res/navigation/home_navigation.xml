@@ -12,10 +12,10 @@
         <action
             android:id="@+id/action_gamesFragment_to_homeSettingsFragment"
             app:destination="@id/homeSettingsFragment"
-            app:enterAnim="@anim/nav_default_enter_anim"
-            app:exitAnim="@anim/nav_default_exit_anim"
-            app:popEnterAnim="@anim/nav_default_pop_enter_anim"
-            app:popExitAnim="@anim/nav_default_pop_exit_anim" />
+            app:enterAnim="@anim/sakura_push_in_left"
+            app:exitAnim="@anim/sakura_push_out_right"
+            app:popEnterAnim="@anim/sakura_push_in_left"
+            app:popExitAnim="@anim/sakura_push_out_right" />
 
     <fragment
         android:id="@+id/homeSettingsFragment"
@@ -128,7 +128,11 @@
     <fragment
         android:id="@+id/perGamePropertiesFragment"
         android:name="org.yuzu.yuzu_emu.fragments.GamePropertiesFragment"
-        android:label="PerGamePropertiesFragment" >
+        android:label="PerGamePropertiesFragment"
+        app:enterAnim="@anim/sakura_slide_in_right"
+        app:exitAnim="@anim/sakura_slide_out_left"
+        app:popEnterAnim="@anim/sakura_slide_in_left"
+        app:popExitAnim="@anim/sakura_slide_out_right">
         <argument
             android:name="game"
             app:argType="org.yuzu.yuzu_emu.model.Game" />

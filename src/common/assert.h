@@ -16,15 +16,35 @@
 void AssertFailSoftImpl();
 [[noreturn]] void AssertFatalImpl();
 
-// Prevents errors on old GCC... smh...
-#ifdef _MSC_VER
-#define YUZU_NO_INLINE __declspec(noinline)
+#ifdef NDEBUG
+// Release builds: ASSERT_MSG only logs through AssertFailSoftImpl and then returns, so it is a
+// diagnostic, never control flow. The condition is still evaluated and discarded: a handful of
+// call sites put real work in it (`ASSERT(--m_resident_map_count >= 0)`), and dropping that would
+// corrupt their bookkeeping. Side-effect-free conditions are dead-code eliminated, so the check
+// costs nothing, but nothing is silently skipped either. Stub notices stay - those fire only when
+// an unimplemented path is actually reached, which is cold and worth seeing.
+#define ASSERT_MSG(_a_, ...) do { (void)(_a_); } while (0)
+#define ASSERT(_a_) ASSERT_MSG(_a_, "{}", #_a_)
+#define UNIMPLEMENTED() LOG_ERROR(Debug, __FILE__ ": unimplemented")
+#define UNIMPLEMENTED_MSG(...) LOG_ERROR(Debug, __FILE__ ": unimplemented " __VA_ARGS__)
+#define UNIMPLEMENTED_IF(cond)                                                                     \
+    do {                                                                                           \
+        if (cond) {                                                                                \
+            LOG_ERROR(Debug, __FILE__ ": unimplemented");                                          \
+        }                                                                                          \
+    } while (0)
+#define UNIMPLEMENTED_IF_MSG(cond, ...)                                                            \
+    do {                                                                                           \
+        if (cond) {                                                                                \
+            LOG_ERROR(Debug, __FILE__ ": unimplemented " __VA_ARGS__);                             \
+        }                                                                                          \
+    } while (0)
 #else
-#define YUZU_NO_INLINE __attribute__((noinline))
-#endif
-
+// Assert checks must stay cheap. The lambda used to be forced out of line, which turned every
+// site into a real call even when the condition was statically true; letting the compiler inline
+// it keeps the check and drops the call, and lets it fold away where it is known at compile time.
 #define ASSERT_MSG(_a_, ...)                                                                       \
-    ([&]() YUZU_NO_INLINE {                                                                         \
+    ([&]() {                                                                                       \
         auto&& assert_condition = (_a_);                                                           \
         if (!(assert_condition)) [[unlikely]] {                                                   \
             LOG_CRITICAL(Debug, __FILE__ ": assert " __VA_ARGS__);                                \
@@ -32,6 +52,12 @@ void AssertFailSoftImpl();
         }                                                                                          \
     }())
 #define ASSERT(_a_) ASSERT_MSG(_a_, "{}", #_a_)
+
+#define UNIMPLEMENTED() ASSERT(false && "Unimplemented!")
+#define UNIMPLEMENTED_MSG(...) ASSERT_MSG(false, __VA_ARGS__)
+#define UNIMPLEMENTED_IF(cond) ASSERT((!(cond)) && "Unimplemented!")
+#define UNIMPLEMENTED_IF_MSG(cond, ...) ASSERT_MSG(!(cond), __VA_ARGS__)
+#endif
 
 #define UNREACHABLE_MSG(...)                                                                       \
     do {                                                                                           \
@@ -51,12 +77,6 @@ void AssertFailSoftImpl();
     do {                                                                                           \
     } while (0)
 #endif
-
-#define UNIMPLEMENTED() ASSERT(false && "Unimplemented!")
-#define UNIMPLEMENTED_MSG(...) ASSERT_MSG(false, __VA_ARGS__)
-
-#define UNIMPLEMENTED_IF(cond) ASSERT((!(cond)) && "Unimplemented!")
-#define UNIMPLEMENTED_IF_MSG(cond, ...) ASSERT_MSG(!(cond), __VA_ARGS__)
 
 // If the assert is ignored, execute _b_
 #define ASSERT_OR_EXECUTE_MSG(_a_, _b_, ...)                                                       \

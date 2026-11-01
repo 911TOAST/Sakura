@@ -7,6 +7,9 @@
 package org.yuzu.yuzu_emu.adapters
 
 import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.HapticFeedbackConstants
+import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.res.ResourcesCompat
 import androidx.lifecycle.LifecycleOwner
@@ -20,6 +23,7 @@ import org.yuzu.yuzu_emu.model.SubmenuProperty
 import org.yuzu.yuzu_emu.utils.ViewUtils.marquee
 import org.yuzu.yuzu_emu.utils.ViewUtils.setVisible
 import org.yuzu.yuzu_emu.utils.collect
+import org.yuzu.yuzu_emu.utils.SuyuMotion
 import org.yuzu.yuzu_emu.viewholder.AbstractViewHolder
 
 class GamePropertiesAdapter(
@@ -52,6 +56,31 @@ class GamePropertiesAdapter(
         }
     }
 
+    private var entranceRemaining = 12
+
+    override fun onBindViewHolder(
+        holder: AbstractViewHolder<GameProperty>,
+        position: Int
+    ) {
+        super.onBindViewHolder(holder, position)
+        // Raw M3 entrance: the property list settles in with a short stagger.
+        if (entranceRemaining > 0) {
+            entranceRemaining--
+            val itemView = holder.itemView
+            val context = itemView.context
+            itemView.alpha = 0f
+            itemView.translationY =
+                itemView.resources.getDimensionPixelSize(R.dimen.spacing_medlarge).toFloat()
+            itemView.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay(position.coerceAtMost(12) * 24L)
+                .setDuration(SuyuMotion.durationMedium2(context))
+                .setInterpolator(SuyuMotion.emphasizedDecelerate(context))
+                .start()
+        }
+    }
+
     override fun getItemViewType(position: Int): Int {
         return when (properties[position]) {
             is SubmenuProperty -> PropertyType.Submenu.ordinal
@@ -66,6 +95,16 @@ class GamePropertiesAdapter(
 
             binding.root.setOnClickListener {
                 submenuProperty.action.invoke()
+            }
+            binding.root.setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                        SuyuMotion.pressDown(view)
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> SuyuMotion.pressUp(view)
+                }
+                false
             }
 
             binding.title.setText(submenuProperty.titleId)

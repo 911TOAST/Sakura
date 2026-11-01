@@ -29,6 +29,7 @@
 #if defined(__ANDROID__) && defined(ARCHITECTURE_arm64)
 #include <adrenotools/bcenabler.h>
 #include <android/api-level.h>
+#include <unistd.h>
 #endif
 
 namespace Vulkan {
@@ -453,6 +454,16 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
     const bool is_mvk = driver_id == VK_DRIVER_ID_MOLTENVK;
     const bool is_qualcomm = driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY;
     const bool is_turnip = driver_id == VK_DRIVER_ID_MESA_TURNIP;
+    const bool is_mali = driver_id == VK_DRIVER_ID_ARM_PROPRIETARY ||
+                         properties.properties.vendorID == 0x13B5;
+    // Native GPU mode opts Mali into the same throughput-first device profile as Malikan:
+    // larger descriptor pools, dynamic vertex input, immediate presentation, extra swapchain
+    // images, draw batching and AFRC. The setting should not be a no-op outside the Malikan
+    // backend.
+    malikan_mode =
+        is_mali &&
+        (Settings::values.renderer_backend.GetValue() == Settings::RendererBackend::Malikan ||
+         Settings::values.native_gpu_mode.GetValue());
 
     if (!is_suitable)
         LOG_WARNING(Render_Vulkan, "Unsuitable driver - continuing anyways");
@@ -598,7 +609,9 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
         }
     }
 
-    sets_per_pool = 64;
+    // Malikan churns through descriptor sets quickly (one per pipeline variant per draw batch).
+    // A larger pool keeps allocation on the fast path and avoids descriptor-pool exhaustion.
+    sets_per_pool = malikan_mode ? 256 : (is_mali ? 128 : 64);
     if (is_amd_driver) {
         // AMD drivers need a higher amount of Sets per Pool in certain circumstances like in XC2.
         sets_per_pool = 96;
@@ -674,7 +687,22 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
         properties.properties.limits.maxVertexInputBindings = 32;
     }
 
-    const auto dyna_state = Settings::values.dyna_state.GetValue();
+    auto dyna_state = Settings::values.dyna_state.GetValue();
+    // ARM's proprietary Vulkan driver had broken dynamic vertex-buffer bindings - which are part
+    // of VK_EXT_extended_dynamic_state, the exact extension this switch controls - before the r42
+    // series. ARM packs its major version into bits 22+, so VK_MAKE_VERSION compares correctly
+    // against its driverVersion. Below that floor the user's level is honoured only down to
+    // Disabled, otherwise enabling extended dynamic state would mis-bind vertices on older
+    // Mali parts (the reason upstream keeps Android pinned off).
+    if (driver_id == VK_DRIVER_ID_ARM_PROPRIETARY &&
+        properties.properties.driverVersion < VK_MAKE_VERSION(42, 0, 0) &&
+        dyna_state != Settings::ExtendedDynamicState::Disabled) {
+        LOG_WARNING(Render_Vulkan,
+                    "Mali driver version {} predates r42: forcing extended dynamic state off to "
+                    "avoid broken dynamic vertex bindings",
+                    properties.properties.driverVersion);
+        dyna_state = Settings::ExtendedDynamicState::Disabled;
+    }
     switch (dyna_state) {
     case Settings::ExtendedDynamicState::Disabled:
         // Level 0: Disable all extended dynamic state extensions
@@ -710,7 +738,14 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
     }
 
     // VK_EXT_vertex_input_dynamic_state
-    if (!Settings::values.vertex_input_dynamic_state.GetValue()) {
+    // Malikan opts into dynamic vertex input unconditionally: it removes a large fraction of the
+    // vertex-layout pipeline variants that otherwise have to be compiled and bound on Mali.
+    const bool old_arm_driver =
+        driver_id == VK_DRIVER_ID_ARM_PROPRIETARY &&
+        properties.properties.driverVersion < VK_MAKE_VERSION(42, 0, 0);
+    const bool use_dynamic_vertex_input =
+        Settings::values.vertex_input_dynamic_state.GetValue() || (malikan_mode && !old_arm_driver);
+    if (!use_dynamic_vertex_input) {
         RemoveExtensionFeature(extensions.vertex_input_dynamic_state, features.vertex_input_dynamic_state, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     }
 
@@ -821,14 +856,15 @@ bool Device::ComputeIsOptimalAstcSupported() const {
     if (!features.features.textureCompressionASTC_LDR) {
         return false;
     }
+    // Compressed textures in Switch emulation are sampled by shaders and copied into by transfers;
+    // blit-source is not a requirement for sampling ASTC textures and is often unsupported on Mali drivers.
     const auto format_feature_usage{VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-                                    VK_FORMAT_FEATURE_BLIT_SRC_BIT |
-                                    VK_FORMAT_FEATURE_BLIT_DST_BIT |
-                                    VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
                                     VK_FORMAT_FEATURE_TRANSFER_DST_BIT};
     for (const auto format : astc_formats) {
         const auto physical_format_properties{physical.GetFormatProperties(format)};
-        if ((physical_format_properties.optimalTilingFeatures & format_feature_usage) == 0) {
+        if ((physical_format_properties.optimalTilingFeatures & format_feature_usage) !=
+            format_feature_usage) {
             return false;
         }
     }
@@ -855,6 +891,72 @@ bool Device::IsFormatSupported(VkFormat wanted_format, VkFormatFeatureFlags want
     return (supported_usage & wanted_usage) == wanted_usage;
 }
 
+VkImageCompressionFixedRateFlagsEXT Device::GetFixedRateCompressionFlags(
+    const VkImageCreateInfo& image_info) const {
+    // The caller decides whether compression is wanted (mali_afrc / native GPU / Malikan); this
+    // helper only answers which rates the Mali driver accepts for the final image parameters.
+    if (!IsMali() || !HasImageCompressionControl()) {
+        return 0;
+    }
+
+    const std::array<u32, 5> key{
+        static_cast<u32>(image_info.format), static_cast<u32>(image_info.imageType),
+        static_cast<u32>(image_info.tiling), image_info.usage, image_info.flags};
+    std::scoped_lock lock{image_compression_mutex};
+    auto it = image_compression_cache.find(key);
+    if (it == image_compression_cache.end()) {
+        // Probe with FIXED_RATE_EXPLICIT and the full rate mask. Mali r44 reports the supported
+        // fixed rates only for an explicit request; with FIXED_RATE_DEFAULT it echoes an empty
+        // mask, which used to make this gate reject every image (and silently disabled AFRC).
+        VkImageCompressionFixedRateFlagsEXT all_fixed_rates[1] = {0xFFFFFF};
+        VkImageCompressionControlEXT compression_control{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT,
+            .pNext = nullptr,
+            .flags = VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT,
+            .compressionControlPlaneCount = 1,
+            .pFixedRateFlags = all_fixed_rates,
+        };
+        VkPhysicalDeviceImageFormatInfo2 format_info{
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+            .pNext = &compression_control,
+            .format = image_info.format,
+            .type = image_info.imageType,
+            .tiling = image_info.tiling,
+            .usage = image_info.usage,
+            .flags = image_info.flags,
+        };
+        VkImageCompressionPropertiesEXT compression_properties{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT,
+            .pNext = nullptr,
+            .imageCompressionFlags = 0,
+            .imageCompressionFixedRateFlags = 0,
+        };
+        VkImageFormatProperties2 format_properties{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
+            .pNext = &compression_properties,
+            .imageFormatProperties = {},
+        };
+        ImageCompressionSupport support{};
+        const VkResult result = physical.GetImageFormatProperties2(format_info, format_properties);
+        support.valid = result == VK_SUCCESS;
+        if (support.valid) {
+            support.limits = format_properties.imageFormatProperties;
+            support.rates = compression_properties.imageCompressionFixedRateFlags;
+        }
+        it = image_compression_cache.emplace(key, support).first;
+    }
+
+    const auto& support = it->second;
+    const bool compatible = support.valid && support.rates != 0 &&
+                            (support.limits.sampleCounts & image_info.samples) != 0 &&
+                            image_info.extent.width <= support.limits.maxExtent.width &&
+                            image_info.extent.height <= support.limits.maxExtent.height &&
+                            image_info.extent.depth <= support.limits.maxExtent.depth &&
+                            image_info.mipLevels <= support.limits.maxMipLevels &&
+                            image_info.arrayLayers <= support.limits.maxArrayLayers;
+    return compatible ? support.rates : 0;
+}
+
 std::string Device::GetDriverName() const {
     return vk::GetDriverName(properties.driver);
 }
@@ -870,7 +972,8 @@ bool Device::ShouldBoostClocks() const {
         driver_id == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS ||
         driver_id == VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA ||
         driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY || driver_id == VK_DRIVER_ID_MESA_TURNIP ||
-        driver_id == VK_DRIVER_ID_SAMSUNG_PROPRIETARY;
+        driver_id == VK_DRIVER_ID_SAMSUNG_PROPRIETARY ||
+        driver_id == VK_DRIVER_ID_ARM_PROPRIETARY || vendor_id == 0x13B5;
 
     const bool is_steam_deck = (vendor_id == 0x1002 && device_id == 0x163F) ||
                                (vendor_id == 0x1002 && device_id == 0x1435);
@@ -1490,8 +1593,26 @@ void Device::CollectPhysicalMemoryInfo() {
     }
     if (is_integrated) {
         const s64 available_memory = static_cast<s64>(device_access_memory - device_initial_usage);
+#if defined(__ANDROID__)
+        // Mali's DDK does not expose VK_EXT_memory_budget, so at this point device_access_memory
+        // is the size of the shared system heap, not free video memory. Clamping that to 6 GiB
+        // lets the texture cache plan for ~2.4 GiB of expected and ~5.5 GiB of critical use on
+        // top of the guest's 4 GiB of DRAM. The process then lives far above what the platform
+        // keeps resident, and the resulting reclaim and LMK activity surfaces as stutter. Size
+        // the caches off real system RAM instead, leaving the bulk of it to the guest and OS.
+        u64 memory_size = 2'500_MiB;
+        const long phys_pages = sysconf(_SC_PHYS_PAGES);
+        const long page_size = sysconf(_SC_PAGE_SIZE);
+        if (phys_pages > 0 && page_size > 0) {
+            const u64 system_ram =
+                static_cast<u64>(phys_pages) * static_cast<u64>(page_size);
+            memory_size = std::clamp<u64>(system_ram / 5, 2_GiB, 3_GiB);
+        }
+#else
         const u64 memory_size = Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive ? 6_GiB : 4_GiB;
-        device_access_memory = static_cast<u64>(std::max<s64>(std::min<s64>(available_memory - 8_GiB, memory_size), std::min<s64>(local_memory, memory_size)));
+#endif
+        const s64 budget = available_memory > 0 ? (available_memory * 3 / 4) : static_cast<s64>(local_memory);
+        device_access_memory = static_cast<u64>(std::clamp<s64>(budget, 1_GiB, static_cast<s64>(memory_size)));
     } else {
         const u64 reserve_memory = std::min<u64>(device_access_memory / 8, 1_GiB);
         device_access_memory -= reserve_memory;
@@ -1562,6 +1683,8 @@ void Device::InitializeGPULogging() {
         detected_driver = GPU::Logging::DriverType::Turnip;
     } else if (driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY) {
         detected_driver = GPU::Logging::DriverType::Qualcomm;
+    } else if (driver_id == VK_DRIVER_ID_ARM_PROPRIETARY) {
+        detected_driver = GPU::Logging::DriverType::Mali;
     }
 
     // Initialize GPU logger

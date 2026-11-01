@@ -357,6 +357,7 @@ int main(int argc, char** argv) {
         break;
 #endif
     case Settings::RendererBackend::Vulkan:
+    case Settings::RendererBackend::Malikan:
         emu_window = std::make_unique<EmuWindow_SDL3_VK>(&input_subsystem, system, fullscreen);
         break;
     case Settings::RendererBackend::Null:

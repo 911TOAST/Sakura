@@ -17,15 +17,30 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal">
 
-        <ImageView
-            android:id="@+id/icon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="24dp"
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/icon_container"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="20dp"
             android:layout_gravity="center_vertical"
             android:visibility="gone"
-            app:tint="?attr/colorOnSurface" />
+            app:cardBackgroundColor="?attr/colorPrimaryContainer"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp"
+            tools:visibility="visible">
+
+            <ImageView
+                android:id="@+id/icon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                app:tint="?attr/colorOnPrimaryContainer"
+                tools:src="@drawable/ic_m3_tune" />
+
+        </com.google.android.material.card.MaterialCardView>
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -34,31 +49,33 @@
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/text_setting_name"
-                style="@style/TextAppearance.Material3.HeadlineMedium"
+                style="@style/TextAppearance.Suyu.TitleMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textAlignment="viewStart"
-                android:textSize="17sp"
+                android:textSize="16sp"
+                android:textColor="?attr/colorOnSurface"
                 app:lineHeight="22dp"
                 tools:text="Setting Name" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/text_setting_description"
-                style="@style/TextAppearance.Material3.BodySmall"
+                style="@style/TextAppearance.Suyu.BodySmall"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_small"
+                android:layout_marginTop="4dp"
                 android:textAlignment="viewStart"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 tools:text="@string/app_disclaimer" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/text_setting_value"
-                style="@style/TextAppearance.Material3.LabelMedium"
+                style="@style/TextAppearance.Suyu.LabelMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_small"
+                android:layout_marginTop="4dp"
                 android:textAlignment="viewStart"
-                android:textStyle="bold"
+                android:textColor="?attr/colorPrimary"
                 android:textSize="13sp"
                 tools:text="1x" />
 

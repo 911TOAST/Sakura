@@ -7,7 +7,7 @@
         <item name="android:layout_height">48dp</item>
         <item name="android:textColor">@android:color/black</item>
         <item name="android:textSize">16sp</item>
-        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:fontFamily">@font/google_sans_medium</item>
         <item name="android:gravity">center_vertical|left</item>
         <item name="android:paddingLeft">32dp</item>
         <item name="android:paddingRight">32dp</item>
@@ -173,23 +173,43 @@
     </style>
 
     <style name="SuyuMaterialDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
-        <item name="colorPrimary">@color/neon_primary</item>
-        <item name="colorSurface">@color/neon_card_background</item>
-        <item name="colorSurfaceContainerHigh">@color/neon_card_background</item>
-        <item name="colorOnSurface">@color/neon_on_surface</item>
-        <item name="colorOnSurfaceVariant">@color/neon_on_surface</item>
-        <item name="colorSecondary">@color/neon_secondary</item>
-        <item name="android:textColorPrimary">@color/neon_on_surface</item>
-        <item name="android:textColorSecondary">@color/neon_on_surface</item>
-        <item name="android:colorBackground">@color/neon_card_background</item>
-        <item name="buttonBarPositiveButtonStyle">@style/SuyuButton.Dialog</item>
-        <item name="buttonBarNegativeButtonStyle">@style/SuyuButton.Dialog</item>
-        <item name="buttonBarNeutralButtonStyle">@style/SuyuButton.Dialog</item>
+        <item name="colorPrimary">?attr/colorPrimary</item>
+        <item name="colorSurface">?attr/colorSurfaceContainerHigh</item>
+        <item name="colorOnSurface">?attr/colorOnSurface</item>
+        <item name="colorOnSurfaceVariant">?attr/colorOnSurfaceVariant</item>
+        <item name="colorSecondary">?attr/colorSecondary</item>
+        <item name="android:textColorPrimary">?attr/colorOnSurface</item>
+        <item name="android:textColorSecondary">?attr/colorOnSurfaceVariant</item>
+        <item name="android:colorBackground">?attr/colorSurfaceContainerHigh</item>
+        <item name="buttonBarPositiveButtonStyle">@style/YuzuButton.Dialog.Sakura</item>
+        <item name="buttonBarNegativeButtonStyle">@style/YuzuButton.Dialog.Sakura</item>
+        <item name="buttonBarNeutralButtonStyle">@style/YuzuButton.Dialog.Sakura</item>
     </style>
 
+    <style name="YuzuMaterialDialog.Sakura" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorPrimary">?attr/colorPrimary</item>
+        <item name="colorSurface">?attr/colorSurfaceContainerHigh</item>
+        <item name="colorOnSurface">?attr/colorOnSurface</item>
+        <item name="colorOnSurfaceVariant">?attr/colorOnSurfaceVariant</item>
+        <item name="colorSecondary">?attr/colorSecondary</item>
+        <item name="android:textColorPrimary">?attr/colorOnSurface</item>
+        <item name="android:textColorSecondary">?attr/colorOnSurfaceVariant</item>
+        <item name="android:colorBackground">?attr/colorSurfaceContainerHigh</item>
+        <item name="buttonBarPositiveButtonStyle">@style/YuzuButton.Dialog.Sakura</item>
+        <item name="buttonBarNegativeButtonStyle">@style/YuzuButton.Dialog.Sakura</item>
+        <item name="buttonBarNeutralButtonStyle">@style/YuzuButton.Dialog.Sakura</item>
+    </style>
+
+    <style name="YuzuButton.Dialog.Sakura" parent="Widget.Material3.Button.TextButton.Dialog">
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="rippleColor">?attr/colorPrimaryContainer</item>
+    </style>
+
+    <style name="SuyuButton.Dialog.Sakura" parent="YuzuButton.Dialog.Sakura" />
+
     <style name="SuyuButton.Dialog" parent="Widget.Material3.Button.TextButton.Dialog">
-        <item name="android:textColor">@color/neon_primary</item>
-        <item name="rippleColor">@color/neon_glow_pink</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="rippleColor">?attr/colorPrimaryContainer</item>
     </style>
 
     <style name="Widget.suyu.TransparentTopAppBarLayout" parent="">
@@ -215,21 +235,24 @@
     </style>
 
     <style name="SuyuButton.Primary" parent="Widget.Material3.Button">
-        <item name="android:textColor">@color/neon_on_primary</item>
+        <item name="android:textColor">?attr/colorOnPrimary</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.05</item>
-        <item name="backgroundTint">@color/neon_primary</item>
+        <item name="android:fontFamily">@font/google_sans_medium</item>
+        <item name="android:letterSpacing">0.01</item>
+        <!-- M3 Expressive: 28dp = full-pill feel on standard button height -->
+        <item name="cornerRadius">28dp</item>
+        <item name="backgroundTint">?attr/colorPrimary</item>
     </style>
 
     <style name="SuyuButton.Secondary" parent="Widget.Material3.Button.OutlinedButton">
-        <item name="strokeColor">@color/neon_secondary</item>
-        <item name="strokeWidth">2dp</item>
-        <item name="android:textColor">@color/neon_secondary</item>
+        <item name="strokeColor">?attr/colorOutline</item>
+        <item name="strokeWidth">0dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
         <item name="android:textAllCaps">false</item>
-        <item name="cornerRadius">12dp</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.05</item>
+        <item name="android:fontFamily">@font/google_sans_medium</item>
+        <!-- M3 Expressive: match primary pill radius -->
+        <item name="cornerRadius">28dp</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
     <style name="SuyuCard" parent="">
@@ -242,6 +265,8 @@
         <item name="cardElevation">0dp</item>
         <item name="cardBackgroundColor">?attr/colorSurface</item>
         <item name="strokeWidth">0dp</item>
+        <!-- M3 Expressive: 28dp game-card corner (was 20dp) -->
+        <item name="cardCornerRadius">28dp</item>
         <item name="android:focusable">true</item>
         <item name="android:clickable">true</item>
         <item name="android:stateListAnimator">@null</item>
@@ -252,57 +277,89 @@
         <item name="android:elevation">0dp</item>
         <item name="android:padding">16dp</item>
     </style>
-    <!-- Synthwave Text Styles -->
-    <style name="SynthwaveText.Title" parent="TextAppearance.Material3.DisplayLarge">
-        <item name="android:textColor">@color/neon_on_background</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.1</item>
-        <item name="android:fontFamily">monospace</item>
-        <item name="android:shadowColor">@color/neon_glow_pink</item>
-        <item name="android:shadowDx">0</item>
-        <item name="android:shadowDy">0</item>
-        <item name="android:shadowRadius">8</item>
+
+    <!-- Clean typography styles for cards and legacy surfaces. -->
+    <style name="SynthwaveText.Title" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:textColor">?attr/colorOnBackground</item>
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:shadowRadius">0</item>
     </style>
-    <style name="SynthwaveText.Header" parent="TextAppearance.Material3.DisplaySmall">
-        <item name="android:textColor">@color/neon_primary</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.05</item>
-        <item name="android:fontFamily">monospace</item>
-        <item name="android:shadowColor">@color/neon_glow_pink</item>
-        <item name="android:shadowDx">0</item>
-        <item name="android:shadowDy">0</item>
-        <item name="android:shadowRadius">6</item>
+    <style name="SynthwaveText.Header" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.004</item>
+        <item name="android:shadowRadius">0</item>
     </style>
-    <style name="SynthwaveText.Body" parent="TextAppearance.Material3.BodyLarge">
-        <item name="android:textColor">@color/neon_on_background</item>
-        <item name="android:fontFamily">monospace</item>
-        <item name="android:letterSpacing">0.02</item>
+    <style name="SynthwaveText.Body" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.008</item>
     </style>
-    <style name="SynthwaveText.Secondary" parent="TextAppearance.Material3.BodyMedium">
-        <item name="android:textColor">@color/neon_secondary</item>
-        <item name="android:fontFamily">monospace</item>
-        <item name="android:shadowColor">@color/neon_glow_cyan</item>
-        <item name="android:shadowDx">0</item>
-        <item name="android:shadowDy">0</item>
-        <item name="android:shadowRadius">4</item>
+    <style name="SynthwaveText.Secondary" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.012</item>
+        <item name="android:shadowRadius">0</item>
     </style>
     <style name="SynthwaveText.Accent" parent="TextAppearance.Material3.LabelLarge">
-        <item name="android:textColor">@color/neon_accent_orange</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:fontFamily">monospace</item>
-        <item name="android:letterSpacing">0.1</item>
-        <item name="android:shadowColor">@color/neon_glow_orange</item>
-        <item name="android:shadowDx">0</item>
-        <item name="android:shadowDy">0</item>
-        <item name="android:shadowRadius">4</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="android:shadowRadius">0</item>
     </style>
     <!-- Shape appearance for carousel images -->
     <style name="ShapeAppearance.suyu.CarouselImage" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSizeTopLeft">8dp</item>
-        <item name="cornerSizeTopRight">8dp</item>
-        <item name="cornerSizeBottomLeft">0dp</item>
-        <item name="cornerSizeBottomRight">0dp</item>
+        <item name="cornerSizeTopLeft">16dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomLeft">16dp</item>
+        <item name="cornerSizeBottomRight">16dp</item>
+    </style>
+
+    <!-- Uniform artwork mask: every cover shares the same soft-large radius so
+         the library grid reads as one calm, consistent M3 Expressive surface. -->
+    <style name="ShapeAppearance.sakura.GameArtwork" parent="">
+        <item name="cornerFamily">rounded</item>
+        <!-- 24dp: matches medium card shape in M3 Expressive -->
+        <item name="cornerSizeTopLeft">24dp</item>
+        <item name="cornerSizeTopRight">24dp</item>
+        <item name="cornerSizeBottomLeft">24dp</item>
+        <item name="cornerSizeBottomRight">24dp</item>
+    </style>
+    <style name="ShapeAppearance.sakura.CarouselArtwork" parent="">
+        <item name="cornerFamily">rounded</item>
+        <!-- 32dp: matches large surface container shape in M3 Expressive -->
+        <item name="cornerSizeTopLeft">32dp</item>
+        <item name="cornerSizeTopRight">32dp</item>
+        <item name="cornerSizeBottomLeft">32dp</item>
+        <item name="cornerSizeBottomRight">32dp</item>
+    </style>
+
+    <!-- M3 Expressive filter chip: fully rounded, vivid tonal background. -->
+    <style name="SuyuFilterChip" parent="Widget.Material3.Chip.Filter">
+        <!-- 50% = pill — M3 Expressive uses fully-rounded chips -->
+        <item name="chipCornerRadius">50dp</item>
+        <item name="chipStrokeWidth">0dp</item>
+        <item name="chipBackgroundColor">@color/suyu_chip_background</item>
+        <item name="android:textColor">@color/suyu_chip_text</item>
+        <item name="checkedIcon">@drawable/ic_m3_check</item>
+        <item name="checkedIconTint">?attr/colorOnSecondaryContainer</item>
+        <item name="android:textAppearance">@style/TextAppearance.Suyu.LabelLarge</item>
+        <!-- M3E: min chip height 32dp for comfortable tap target -->
+        <item name="android:minHeight">32dp</item>
+    </style>
+    <!-- M3 Expressive nav active indicator: pill-shaped, primaryContainer fill. -->
+    <style name="Widget.Suyu.NavActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:color">?attr/colorPrimaryContainer</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Suyu.NavActiveIndicator</item>
+        <!-- M3E: wider pill indicator (64dp) for expressive visibility -->
+        <item name="android:width">64dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Suyu.NavActiveIndicator" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
     </style>
 
 </resources>

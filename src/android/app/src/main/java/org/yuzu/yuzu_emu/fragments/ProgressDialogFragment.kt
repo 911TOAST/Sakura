@@ -99,10 +99,10 @@ class ProgressDialogFragment : DialogFragment() {
             if (it != 0.0) {
                 binding.progressBar.apply {
                     isIndeterminate = false
-                    progress = (
+                    setProgressCompat((
                         (it / taskViewModel.maxProgress.value) *
                             PROGRESS_BAR_RESOLUTION
-                        ).toInt()
+                        ).toInt(), true)
                     min = 0
                     max = PROGRESS_BAR_RESOLUTION
                 }

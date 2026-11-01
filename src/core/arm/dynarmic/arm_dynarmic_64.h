@@ -23,7 +23,7 @@ class Memory;
 
 namespace Kernel {
 enum class DebugWatchpointType : u8;
-class KPRocess;
+class KProcess;
 }
 
 namespace Core {

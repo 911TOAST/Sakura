@@ -27,31 +27,22 @@ struct Fiber::FiberImpl {
 
     u32 canary_1 = CANARY_VALUE;
     std::array<u8, DEFAULT_STACK_SIZE> stack{};
-    std::array<u8, DEFAULT_STACK_SIZE> rewind_stack{};
     u32 canary_2 = CANARY_VALUE;
 
     boost::context::detail::fcontext_t context{};
-    boost::context::detail::fcontext_t rewind_context{};
 
     std::mutex guard;
     std::function<void()> entry_point;
-    std::function<void()> rewind_point;
     std::shared_ptr<Fiber> previous_fiber;
 
     u8* stack_limit = nullptr;
-    u8* rewind_stack_limit = nullptr;
     bool is_thread_fiber = false;
     bool released = false;
 };
 
-void Fiber::SetRewindPoint(std::function<void()>&& rewind_func) {
-    impl->rewind_point = std::move(rewind_func);
-}
-
 Fiber::Fiber(std::function<void()>&& entry_point_func) : impl{std::make_unique<FiberImpl>()} {
     impl->entry_point = std::move(entry_point_func);
     impl->stack_limit = impl->stack.data();
-    impl->rewind_stack_limit = impl->rewind_stack.data();
     u8* stack_base = impl->stack_limit + DEFAULT_STACK_SIZE;
     impl->context = boost::context::detail::make_fcontext(stack_base, impl->stack.size(), [](boost::context::detail::transfer_t transfer) -> void {
         auto* fiber = static_cast<Fiber*>(transfer.data);

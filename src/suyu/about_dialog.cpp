@@ -14,7 +14,7 @@ AboutDialog::AboutDialog(QWidget* parent)
     const auto description = std::string(Common::g_scm_desc);
     const auto build_id = std::string(Common::g_build_id);
 
-    const auto suyu_build = fmt::format("suyu Development Build | {}-{}", branch_name, description);
+    const auto suyu_build = fmt::format("Sakura Development Build | {}-{}", branch_name, description);
     const auto override_build =
         fmt::format(fmt::runtime(std::string(Common::g_title_bar_format_idle)), build_id);
     const auto suyu_build_version = !build_fullname.empty() ? build_fullname

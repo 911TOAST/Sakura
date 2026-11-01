@@ -390,7 +390,10 @@ u32 BufferCacheRuntime::GetStorageBufferAlignment() const {
 
 void BufferCacheRuntime::TickFrame(Common::SlotVector<Buffer>& slot_buffers) noexcept {
     for (auto it = slot_buffers.begin(); it != slot_buffers.end(); it++) {
-        if (scheduler.IsFree(it->LastUsageTick())) {
+        // Only buffers that were written since their last reset still carry tracking bits. Every
+        // other buffer used to have its whole bitmap memset again on every frame, because
+        // last_usage_tick stays behind the GPU tick once the buffer goes idle.
+        if (it->HasUsageTracking() && scheduler.IsFree(it->LastUsageTick())) {
             it->ResetUsageTracking();
         }
     }
@@ -447,10 +450,12 @@ void BufferCacheRuntime::CopyBuffer(VkBuffer dst_buffer, VkBuffer src_buffer,
     boost::container::small_vector<VkBufferCopy, 8> vk_copies(copies.size());
     std::ranges::transform(copies, vk_copies.begin(), MakeBufferCopy);
     if (src_buffer == staging_pool.StreamBuf() && can_reorder_upload) {
-        scheduler.RecordWithUploadBuffer([src_buffer, dst_buffer, vk_copies](
-                                             vk::CommandBuffer, vk::CommandBuffer upload_cmdbuf) {
-            upload_cmdbuf.CopyBuffer(src_buffer, dst_buffer, VideoCommon::FixSmallVectorADL(vk_copies));
-        });
+        scheduler.RecordUploadBuffer(
+            dst_buffer, [src_buffer, dst_buffer, vk_copies](
+                            vk::CommandBuffer, vk::CommandBuffer upload_cmdbuf) {
+                upload_cmdbuf.CopyBuffer(src_buffer, dst_buffer,
+                                         VideoCommon::FixSmallVectorADL(vk_copies));
+            });
         return;
     }
 

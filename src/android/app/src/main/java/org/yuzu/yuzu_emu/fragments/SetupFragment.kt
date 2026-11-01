@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.content.res.ColorStateList
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
@@ -25,7 +26,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.navigation.findNavController
 import androidx.preference.PreferenceManager
 import androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback
-import com.google.android.material.transition.MaterialFadeThrough
+import androidx.recyclerview.widget.RecyclerView
 import org.yuzu.yuzu_emu.NativeLibrary
 import java.io.File
 import org.yuzu.yuzu_emu.R
@@ -42,9 +43,9 @@ import org.yuzu.yuzu_emu.model.SetupPage
 import org.yuzu.yuzu_emu.model.PageState
 import org.yuzu.yuzu_emu.ui.main.MainActivity
 import org.yuzu.yuzu_emu.utils.DirectoryInitialization
+import org.yuzu.yuzu_emu.utils.IconHelper
 import org.yuzu.yuzu_emu.utils.NativeConfig
-import org.yuzu.yuzu_emu.utils.ViewUtils
-import org.yuzu.yuzu_emu.utils.ViewUtils.setVisible
+import org.yuzu.yuzu_emu.utils.SuyuMotion
 import org.yuzu.yuzu_emu.utils.collect
 
 class SetupFragment : Fragment() {
@@ -68,10 +69,7 @@ class SetupFragment : Fragment() {
         const val KEY_HAS_BEEN_WARNED = "HasBeenWarned"
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        exitTransition = MaterialFadeThrough()
-    }
+    override fun onCreate(savedInstanceState: Bundle?) = super.onCreate(savedInstanceState)
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -277,84 +275,37 @@ class SetupFragment : Fragment() {
         binding.viewPager2.apply {
             adapter = SetupAdapter(requireActivity() as AppCompatActivity, pages)
             offscreenPageLimit = 2
-            isUserInputEnabled = false
+            isUserInputEnabled = true
         }
 
         binding.viewPager2.registerOnPageChangeCallback(object : OnPageChangeCallback() {
-            var previousPosition: Int = 0
+            var previousPosition: Int = binding.viewPager2.currentItem
 
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
 
-                val isFirstPage = position == 0
+                if (position > previousPosition && !canLeavePage(previousPosition)) {
+                    binding.viewPager2.setCurrentItem(previousPosition, false)
+                    return
+                }
+
                 val isLastPage = position == pages.size - 1
 
-                if (isFirstPage) {
-                    ViewUtils.hideView(binding.buttonBack)
-                } else {
-                    ViewUtils.showView(binding.buttonBack)
-                }
-
-                if (isLastPage) {
-                    ViewUtils.hideView(binding.buttonNext)
-                } else {
-                    ViewUtils.showView(binding.buttonNext)
-                }
-
+                binding.buttonBack.visibility = View.GONE
+                setNavigationButton(binding.buttonNext, visible = !isLastPage)
+                binding.constraintButtons.visibility = if (isLastPage) View.GONE else View.VISIBLE
+                updateSetupProgress(position)
+                if (position != previousPosition) animatePageEntry(position, position > previousPosition)
                 previousPosition = position
             }
         })
 
+        updateSetupProgress(binding.viewPager2.currentItem)
+
         binding.buttonNext.setOnClickListener {
             val index = binding.viewPager2.currentItem
-            val currentPage = pages[index]
-
-            val warningMessages =
-                mutableListOf<Triple<Int, Int, Int>>() // title, description, helpLink
-
-            currentPage.pageButtons?.forEach { button ->
-                if (button.hasWarning || button.isUnskippable) {
-                    val buttonState = button.buttonState()
-                    if (buttonState == ButtonState.BUTTON_ACTION_COMPLETE) {
-                        return@forEach
-                    }
-
-                    if (button.isUnskippable) {
-                        MessageDialogFragment.newInstance(
-                            activity = requireActivity(),
-                            titleId = button.warningTitleId,
-                            descriptionId = button.warningDescriptionId,
-                            helpLinkId = button.warningHelpLinkId
-                        ).show(childFragmentManager, MessageDialogFragment.TAG)
-                        return@setOnClickListener
-                    }
-
-                    if (!hasBeenWarned[index]) {
-                        warningMessages.add(
-                            Triple(
-                                button.warningTitleId,
-                                button.warningDescriptionId,
-                                button.warningHelpLinkId
-                            )
-                        )
-                    }
-                }
-            }
-
-            if (warningMessages.isNotEmpty()) {
-                SetupWarningDialogFragment.newInstance(
-                    warningMessages.map { it.first }.toIntArray(),
-                    warningMessages.map { it.second }.toIntArray(),
-                    warningMessages.map { it.third }.toIntArray(),
-                    index
-                ).show(childFragmentManager, SetupWarningDialogFragment.TAG)
-                return@setOnClickListener
-            }
-            pageForward()
+            if (canLeavePage(index)) pageForward()
         }
-        binding.buttonBack.setOnClickListener { pageBackward() }
-
-
         if (savedInstanceState != null) {
             val nextIsVisible = savedInstanceState.getBoolean(KEY_NEXT_VISIBILITY)
             val backIsVisible = savedInstanceState.getBoolean(KEY_BACK_VISIBILITY)
@@ -369,6 +320,9 @@ class SetupFragment : Fragment() {
         } else {
             hasBeenWarned = BooleanArray(pages.size)
         }
+        binding.buttonBack.visibility = View.GONE
+        binding.constraintButtons.visibility =
+            if (binding.viewPager2.currentItem == pages.lastIndex) View.GONE else View.VISIBLE
 
         setInsets()
     }
@@ -466,14 +420,61 @@ class SetupFragment : Fragment() {
 
     fun pageForward() {
         if (_binding != null) {
-            binding.viewPager2.currentItem += 1
+            binding.viewPager2.setCurrentItem(
+                (binding.viewPager2.currentItem + 1).coerceAtMost(pages.lastIndex),
+                false
+            )
         }
     }
 
     fun pageBackward() {
         if (_binding != null) {
-            binding.viewPager2.currentItem -= 1
+            binding.viewPager2.setCurrentItem(
+                (binding.viewPager2.currentItem - 1).coerceAtLeast(0),
+                false
+            )
         }
+    }
+
+    private fun canLeavePage(index: Int): Boolean {
+        val warningMessages = mutableListOf<Triple<Int, Int, Int>>()
+
+        pages[index].pageButtons?.forEach { button ->
+            if (!button.hasWarning && !button.isUnskippable) return@forEach
+            if (button.buttonState() == ButtonState.BUTTON_ACTION_COMPLETE) return@forEach
+
+            if (button.isUnskippable) {
+                MessageDialogFragment.newInstance(
+                    activity = requireActivity(),
+                    titleId = button.warningTitleId,
+                    descriptionId = button.warningDescriptionId,
+                    helpLinkId = button.warningHelpLinkId
+                ).show(childFragmentManager, MessageDialogFragment.TAG)
+                return false
+            }
+
+            if (!hasBeenWarned[index]) {
+                warningMessages.add(
+                    Triple(
+                        button.warningTitleId,
+                        button.warningDescriptionId,
+                        button.warningHelpLinkId
+                    )
+                )
+            }
+        }
+
+        if (warningMessages.isNotEmpty()) {
+            SetupWarningDialogFragment.newInstance(
+                warningMessages.map { it.first }.toIntArray(),
+                warningMessages.map { it.second }.toIntArray(),
+                warningMessages.map { it.third }.toIntArray(),
+                index
+            ).show(childFragmentManager, SetupWarningDialogFragment.TAG)
+            return false
+        }
+
+        return true
     }
 
     fun setPageWarned(page: Int) {
@@ -498,9 +499,9 @@ class SetupFragment : Fragment() {
                 binding.viewPager2
                     .updatePadding(
                         left = leftPadding,
-                        top = topPadding,
                         right = rightPadding
                     )
+                binding.setupHeader.updatePadding(top = topPadding)
                 binding.constraintButtons
                     .updatePadding(
                         left = leftPadding,
@@ -509,9 +510,11 @@ class SetupFragment : Fragment() {
                     )
             } else {
                 binding.viewPager2.updatePadding(
-                    top = topPadding,
+                    left = leftPadding,
+                    right = rightPadding,
                     bottom = bottomPadding
                 )
+                binding.setupHeader.updatePadding(top = topPadding)
                 binding.constraintButtons
                     .updatePadding(
                         left = leftPadding,
@@ -521,4 +524,96 @@ class SetupFragment : Fragment() {
             }
             windowInsets
         }
+
+    private fun updateSetupProgress(position: Int) {
+        val label = getString(R.string.setup_step_counter, position + 1, pages.size)
+        if (binding.setupStepLabel.text.toString() != label) {
+            binding.setupStepLabel.text = label
+            // Raw M3 accent: settle-in fade when the step counter advances.
+            binding.setupStepLabel.animate().cancel()
+            binding.setupStepLabel.alpha = 0.35f
+            binding.setupStepLabel.animate()
+                .alpha(1f)
+                .setDuration(SuyuMotion.durationShort4(requireContext()))
+                .setInterpolator(SuyuMotion.emphasizedDecelerate(requireContext()))
+                .start()
+        }
+        val segments = listOf(
+            binding.setupProgressStep1,
+            binding.setupProgressStep2,
+            binding.setupProgressStep3
+        )
+        segments.forEachIndexed { index, segment ->
+            val active = index <= position
+            val color = if (active) R.color.neon_primary else R.color.sakura_track
+            segment.backgroundTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(requireContext(), color)
+            )
+            val growing = index == position
+            segment.animate()
+                .scaleY(if (growing) 1.18f else 1f)
+                .setDuration(SuyuMotion.durationShort4(requireContext()))
+                .setInterpolator(
+                    if (growing) {
+                        SuyuMotion.emphasizedDecelerate(requireContext())
+                    } else {
+                        SuyuMotion.emphasizedAccelerate(requireContext())
+                    }
+                )
+                .start()
+        }
+    }
+
+    private fun animatePageEntry(position: Int, movingForward: Boolean) {
+        val recycler = binding.viewPager2.getChildAt(0) as? RecyclerView ?: return
+        recycler.post {
+            val page = recycler.findViewHolderForAdapterPosition(position)?.itemView ?: return@post
+            // Raw M3 shared-axis slide: emphasized easing, token duration.
+            page.translationX = if (movingForward) 32f else -32f
+            page.alpha = 0f
+            page.animate()
+                .translationX(0f)
+                .alpha(1f)
+                .setDuration(SuyuMotion.durationMedium2(requireContext()))
+                .setInterpolator(SuyuMotion.emphasized(requireContext()))
+                .start()
+        }
+    }
+
+    private fun setNavigationButton(button: View, visible: Boolean) {
+        if (visible) {
+            if (button.visibility == View.VISIBLE) return
+            button.visibility = View.VISIBLE
+            button.alpha = 0f
+            button.translationY =
+                resources.getDimensionPixelSize(R.dimen.spacing_med).toFloat()
+            button.scaleX = 0.95f
+            button.scaleY = 0.95f
+            button.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(SuyuMotion.durationMedium2(requireContext()))
+                .setInterpolator(SuyuMotion.emphasizedDecelerate(requireContext()))
+                .start()
+        } else if (button.visibility == View.VISIBLE) {
+            button.isEnabled = false
+            // Raw M3 exit: emphasize accelerate, then hide.
+            button.animate()
+                .alpha(0f)
+                .scaleX(0.95f)
+                .scaleY(0.95f)
+                .setDuration(SuyuMotion.durationShort4(requireContext()))
+                .setInterpolator(SuyuMotion.emphasizedAccelerate(requireContext()))
+                .withEndAction {
+                    button.visibility = View.INVISIBLE
+                    button.alpha = 1f
+                    button.scaleX = 1f
+                    button.scaleY = 1f
+                    button.isEnabled = true
+                }
+                .start()
+        }
+    }
 }

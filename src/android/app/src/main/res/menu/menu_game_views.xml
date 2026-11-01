@@ -3,16 +3,19 @@
     <group android:checkableBehavior="single">
         <item
             android:id="@+id/view_grid"
-            android:title="@string/view_grid"/>
+            android:icon="@drawable/ic_m3_grid_view"
+            android:title="@string/view_grid" />
         <item
             android:id="@+id/view_grid_compact"
-            android:title="@string/view_grid_compact"/>
+            android:icon="@drawable/ic_m3_view_module"
+            android:title="@string/view_grid_compact" />
         <item
             android:id="@+id/view_list"
-            android:title="@string/view_list"
-            android:checked="true"/>
+            android:icon="@drawable/ic_m3_view_agenda"
+            android:title="@string/view_list" />
         <item
             android:id="@+id/view_carousel"
+            android:icon="@drawable/ic_m3_view_carousel"
             android:title="@string/view_carousel" />
     </group>
 </menu>

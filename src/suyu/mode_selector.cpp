@@ -134,14 +134,14 @@ ModeSelector::ModeSelector(QWidget* parent) : QDialog(parent) {
     if (!logo_px.isNull()) {
         brand_logo->setPixmap(logo_px);
     } else {
-        brand_logo->setText(QStringLiteral("suyu"));
+        brand_logo->setText(QStringLiteral("Sakura"));
         brand_logo->setStyleSheet(QStringLiteral("font-size:42pt; font-weight:800; color:#ffffff;"));
     }
     brand_layout->addWidget(brand_logo);
 
     auto* title = new QLabel(
         QStringLiteral("<div style='text-align:center;'>"
-                       "<span style='font-size:12pt; color:#dcdbde;'>Welcome to suyu</span><br>"
+                       "<span style='font-size:12pt; color:#dcdbde;'>Welcome to Sakura</span><br>"
                        "<span style='font-size:18pt; font-weight:600; color:#ffffff;'>Choose Your Layout Profile</span>"
                        "</div>"),
         this);

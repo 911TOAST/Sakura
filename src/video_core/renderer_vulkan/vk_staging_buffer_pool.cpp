@@ -41,7 +41,10 @@ constexpr VkDeviceSize MAX_STREAM_BUFFER_SIZE = 128_MiB;
 
 size_t GetStreamBufferSize(const Device& device) {
     if (!device.HasDebuggingToolAttached()) {
-        return MAX_STREAM_BUFFER_SIZE;
+        // The stream buffer is host-visible memory, i.e. system RAM on every Mali device, and it
+        // is committed up front. A ring drained every frame does not need the desktop 256 MiB;
+        // 128 MiB has never needed more headroom and leaves the rest to the guest.
+        return device.IsMali() ? 128_MiB : MAX_STREAM_BUFFER_SIZE;
     }
 
     VkDeviceSize size{0};

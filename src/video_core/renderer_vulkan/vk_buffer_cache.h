@@ -49,6 +49,11 @@ public:
         tracker.Reset();
     }
 
+    /// False when the tracker already holds no ranges, i.e. there is nothing left to reset.
+    [[nodiscard]] bool HasUsageTracking() const noexcept {
+        return tracker.HasDirtyPages();
+    }
+
     [[nodiscard]] u64 LastUsageTick() const noexcept {
         return last_usage_tick;
     }

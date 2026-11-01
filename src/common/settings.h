@@ -330,7 +330,9 @@ struct Values {
 
     // Renderer
     SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
-#if defined(__sun__) || defined(__managarm__)
+#if defined(__ANDROID__) && defined(SAKURA_OPTIMIZED)
+        RendererBackend::Malikan,
+#elif defined(__sun__) || defined(__managarm__)
         RendererBackend::OpenGL_GLSL,
 #else
         RendererBackend::Vulkan,
@@ -389,12 +391,20 @@ struct Values {
                                                   true};
 
     SwitchableSetting<bool> use_asynchronous_gpu_emulation{linkage,
-#ifdef __ANDROID__
-        false,
-#else
         true,
-#endif
         "use_asynchronous_gpu_emulation", Category::Renderer};
+    // Prefer host Vulkan execution paths and CPU/GPU overlap where the device supports them.
+    SwitchableSetting<bool> native_gpu_mode{linkage,
+#ifdef __ANDROID__
+                                            true,
+#else
+                                            false,
+#endif
+                                            "native_gpu_mode",
+                                            Category::Renderer};
+    // Experimental: skip the NVIDIA Maxwell shader workaround pass. This does not bypass
+    // Maxwell shader translation; Switch shaders are still translated to SPIR-V.
+    SwitchableSetting<bool> no_well{linkage, false, "no_well", Category::RendererDebug};
     // *nix platforms may have issues with the borderless windowed fullscreen mode.
     // Default to exclusive fullscreen on these platforms for now.
     SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
@@ -484,6 +494,27 @@ struct Values {
                                                                   "astc_recompression",
                                                                   Category::RendererAdvanced};
 
+    // Requests AFBC/AFRC on safe colour render targets via VK_EXT_image_compression_control.
+    // Experimental: an image that opts in gets an opaque layout, so it may never be copied or
+    // reinterpreted; the gate in the texture cache enforces that. The optimized Android build
+    // enables this by default, while device capability checks keep unsupported drivers on the
+    // normal image path.
+    SwitchableSetting<bool> mali_afrc{linkage,
+#if defined(__ANDROID__)
+                                      true,
+#else
+                                      false,
+#endif
+                                      "mali_afrc", Category::RendererAdvanced};
+
+    // Vulkan instance layers requested by name, separated by ':' or ','. Android only discovers
+    // layers bundled in the application's native library directory or provided by the GPU driver.
+    // Layers the loader does not report are dropped by RemoveUnavailableLayers.
+    Setting<std::string> vulkan_instance_layers{linkage,
+                                                std::string(),
+                                                "vulkan_instance_layers",
+                                                Category::RendererAdvanced};
+
 
     SwitchableSetting<bool> sync_memory_operations{linkage,
                                                    false,
@@ -493,7 +524,13 @@ struct Values {
                                                    true,
                                                    true};
 
-    SwitchableSetting<bool> renderer_force_max_clock{linkage, false, "force_max_clock",
+    SwitchableSetting<bool> renderer_force_max_clock{linkage,
+#ifdef __ANDROID__
+                                                     true,
+#else
+                                                     false,
+#endif
+                                                     "force_max_clock",
                                                      Category::RendererAdvanced};
 
     SwitchableSetting<bool> use_disk_shader_cache{linkage, true, "use_disk_shader_cache",
@@ -531,7 +568,11 @@ struct Values {
 
 #ifdef __ANDROID__
     SwitchableSetting<bool> use_optimized_vertex_buffers{linkage,
+#if defined(SAKURA_OPTIMIZED)
+                                                 true,
+#else
                                                  false,
+#endif
                                                  "use_optimized_vertex_buffers",
                                                  Category::RendererAdvanced,
                                                  Specialization::Default,
@@ -592,7 +633,13 @@ struct Values {
                                                        true,
                                                        true};
 
-    SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
+    SwitchableSetting<bool> use_asynchronous_shaders{linkage,
+#if defined(__ANDROID__)
+                                                     true,
+#else
+                                                     false,
+#endif
+                                                     "use_asynchronous_shaders",
                                                      Category::RendererHacks};
 
     SwitchableSetting<GpuUnswizzleSize> gpu_unswizzle_texture_size{linkage,
@@ -617,9 +664,13 @@ struct Values {
                                                   Category::RendererHacks};
 
     SwitchableSetting<ExtendedDynamicState> dyna_state{linkage,
-#if defined(__ANDROID__)
-                                           ExtendedDynamicState::Disabled,
-#elif defined(__APPLE__)
+#if defined(__ANDROID__) && defined(SAKURA_OPTIMIZED)
+                                           // Keep more guest raster state out of Mali's pipeline
+                                           // keys to reduce graphics-pipeline variants. Device
+                                           // setup still disables EDS on old ARM drivers with
+                                           // broken dynamic vertex-buffer binding.
+                                           ExtendedDynamicState::EDS2,
+#elif defined(__ANDROID__) || defined(__APPLE__)
                                            ExtendedDynamicState::Disabled,
 #else
                                            ExtendedDynamicState::EDS2,
@@ -862,6 +913,8 @@ struct Values {
     Setting<std::string> log_filter{linkage, "*:Info", "log_filter", Category::Miscellaneous};
     Setting<bool> log_flush_line{linkage, false, "flush_line", Category::Miscellaneous, Specialization::Default, true, true};
     Setting<bool> censor_username{linkage, true, "censor_username", Category::Miscellaneous};
+    // Persisted marker for "the Android Mali performance profile has been applied as defaults".
+    // It is written once by ApplyPerformanceProfile() so later launches keep the user's choices.
     Setting<bool> first_launch{linkage, true, "first_launch", Category::Miscellaneous};
 
     // Network
@@ -909,6 +962,8 @@ bool IsGPUFenceBehaviorAccurate();
 bool IsGPUFenceBehaviorStrict();
 
 bool IsFastmemEnabled();
+// Applies the forced performance profile. Must run before the renderer is constructed.
+void ApplyPerformanceProfile();
 void SetNceEnabled(bool is_64bit);
 bool IsNceEnabled();
 

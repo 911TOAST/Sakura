@@ -302,6 +302,7 @@ bool Load(VkInstance instance, InstanceDispatch& dld) noexcept {
     X(vkDestroySurfaceKHR);
     X(vkGetPhysicalDeviceFeatures2);
     X(vkGetPhysicalDeviceFormatProperties2);
+    X(vkGetPhysicalDeviceImageFormatProperties2);
     X(vkGetPhysicalDeviceProperties2);
     X(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
     X(vkGetPhysicalDeviceSurfaceFormatsKHR);
@@ -932,6 +933,13 @@ VkFormatProperties3 PhysicalDevice::GetFormatProperties3(VkFormat format) const 
     };
     dld->vkGetPhysicalDeviceFormatProperties2(physical_device, format, &properties2);
     return properties3;
+}
+
+VkResult PhysicalDevice::GetImageFormatProperties2(
+    const VkPhysicalDeviceImageFormatInfo2& format_info,
+    VkImageFormatProperties2& properties) const noexcept {
+    return dld->vkGetPhysicalDeviceImageFormatProperties2(physical_device, &format_info,
+                                                          &properties);
 }
 
 std::vector<VkExtensionProperties> PhysicalDevice::EnumerateDeviceExtensionProperties() const {

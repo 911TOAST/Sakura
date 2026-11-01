@@ -77,14 +77,20 @@ void SyncpointManager::Increment(std::atomic<u32>& syncpoint, std::condition_var
                                  std::list<RegisteredAction>& action_storage) {
     auto new_value{syncpoint.fetch_add(1, std::memory_order_acq_rel) + 1};
 
-    std::scoped_lock lk(guard);
-    auto it = action_storage.begin();
-    while (it != action_storage.end()) {
-        if (it->expected_value > new_value) {
-            break;
+    // Splice the ready actions out under the lock, then run them unlocked. One of these actions
+    // reaches the renderer's present path, which waits for the display; running it while holding
+    // the single manager-wide mutex makes every guest thread waiting on any syncpoint - and every
+    // other increment - queue behind a whole display period.
+    std::list<RegisteredAction> ready;
+    {
+        std::scoped_lock lk(guard);
+        auto it = action_storage.begin();
+        while (it != action_storage.end() && it->expected_value <= new_value) {
+            ready.splice(ready.end(), action_storage, it++);
         }
-        it->action();
-        it = action_storage.erase(it);
+    }
+    for (auto& action : ready) {
+        action.action();
     }
     wait_cv.notify_all();
 }

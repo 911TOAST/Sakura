@@ -225,6 +225,8 @@ class Image : public VideoCommon::ImageBase {
 public:
     explicit Image(TextureCacheRuntime&, const VideoCommon::ImageInfo& info, GPUVAddr gpu_addr,
                    VAddr cpu_addr);
+    explicit Image(TextureCacheRuntime&, const VideoCommon::ImageInfo& info, GPUVAddr gpu_addr,
+                   VAddr cpu_addr, vk::Image existing_image);
     explicit Image(const VideoCommon::NullImageParams&);
 
     ~Image();

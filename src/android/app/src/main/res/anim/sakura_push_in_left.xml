@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Incoming screen pushes in from the left while the old one is pushed out. -->
+<translate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="340"
+    android:fromXDelta="-100%p"
+    android:interpolator="@android:interpolator/decelerate_cubic"
+    android:toXDelta="0" />

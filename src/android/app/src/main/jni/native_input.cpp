@@ -217,12 +217,14 @@ void Java_org_yuzu_yuzu_1emu_features_input_NativeInput_onGamePadMotionEvent(
 void Java_org_yuzu_yuzu_1emu_features_input_NativeInput_onReadNfcTag(JNIEnv* env, jobject j_obj,
                                                                      jbyteArray j_data) {
     jboolean isCopy{false};
-    std::span<u8> data(reinterpret_cast<u8*>(env->GetByteArrayElements(j_data, &isCopy)),
+    jbyte* data_ptr = env->GetByteArrayElements(j_data, &isCopy);
+    std::span<u8> data(reinterpret_cast<u8*>(data_ptr),
                        static_cast<size_t>(env->GetArrayLength(j_data)));
 
     if (EmulationSession::GetInstance().IsRunning()) {
         EmulationSession::GetInstance().GetInputSubsystem().GetVirtualAmiibo()->LoadAmiibo(data);
     }
+    env->ReleaseByteArrayElements(j_data, data_ptr, JNI_ABORT);
 }
 
 void Java_org_yuzu_yuzu_1emu_features_input_NativeInput_onRemoveNfcTag(JNIEnv* env, jobject j_obj) {
@@ -628,6 +630,7 @@ void Java_org_yuzu_yuzu_1emu_features_input_NativeInput_connectControllersImpl(
     for (int i = 0; i < j_connected_array_size; ++i) {
         ConnectController(i, j_connected_array[i]);
     }
+    env->ReleaseBooleanArrayElements(j_connected, j_connected_array, JNI_ABORT);
 }
 
 void Java_org_yuzu_yuzu_1emu_features_input_NativeInput_resetControllerMappings(

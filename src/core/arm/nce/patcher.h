@@ -16,24 +16,6 @@
 #include "core/hle/kernel/k_typed_address.h"
 #include <utility>
 using ModuleID = std::array<u8, 32>;  // NSO build ID
-struct PatchCacheKey {
-    ModuleID module_id;
-    uintptr_t offset;
-    bool operator==(const PatchCacheKey&) const = default;
-};
-
-template <>
-struct std::hash<PatchCacheKey> {
-    size_t operator()(const PatchCacheKey& key) const {
-        // Simple XOR hash of first few bytes
-        size_t hash_ = 0;
-        for (size_t i = 0; i < key.module_id.size(); ++i) {
-            hash_ ^= static_cast<size_t>(key.module_id[i]) << ((i % sizeof(size_t)) * 8);
-        }
-        return hash_ ^ std::hash<uintptr_t>{}(key.offset);
-    }
-};
-
 namespace Core::NCE {
 
 enum class PatchMode : u32 {

@@ -113,8 +113,12 @@ private:
         return result;
     }
 
-    std::atomic<TransformAddress> current{};
-    std::mutex guard;
+    // `current` is hammered by every guest thread via Collect() while the GPU
+    // thread takes `guard` in Gather(). Pin both to their own 64-byte cache
+    // lines (ARM L1 line size) to stop the big.LITTLE clusters from bouncing
+    // one line back and forth through the coherency interconnect.
+    alignas(64) std::atomic<TransformAddress> current{};
+    alignas(64) std::mutex guard;
     std::vector<TransformAddress> back_buffer;
     std::vector<TransformAddress> front_buffer;
 };

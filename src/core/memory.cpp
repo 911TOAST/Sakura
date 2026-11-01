@@ -36,11 +36,6 @@
 
 namespace Core::Memory {
 
-static inline bool AddressSpaceContains(const Common::PageTable& table, const Common::ProcessAddress addr, const std::size_t size) {
-    const Common::ProcessAddress max_addr = 1ULL << table.GetAddressSpaceBits();
-    return addr + size >= addr && addr + size <= max_addr;
-}
-
 // Implementation class used to keep the specifics of the memory subsystem hidden
 // from outside classes. This also allows modification to the internals of the memory
 // subsystem without needing to rebuild all files that make use of the memory interface.
@@ -48,7 +43,9 @@ struct Memory::Impl {
     explicit Impl(Core::System& system_) : system{system_} {}
 
     void SetCurrentPageTable(Kernel::KProcess& process) {
-        current_page_table = &process.GetPageTable().GetImpl();
+        auto& page_table = process.GetPageTable().GetImpl();
+        current_page_table = &page_table;
+        address_space_max = 1ULL << page_table.GetAddressSpaceBits();
 
         if (process.IsApplication() && Settings::IsFastmemEnabled()) {
             current_page_table->fastmem_arena = system.DeviceMemory().buffer.VirtualBasePointer();
@@ -62,6 +59,10 @@ struct Memory::Impl {
 #else
         host_buffer = std::addressof(system.DeviceMemory().buffer);
 #endif
+    }
+
+    bool AddressSpaceContains(const Common::ProcessAddress addr, const std::size_t size) const {
+        return addr + size >= addr && addr + size <= address_space_max;
     }
 
     void MapMemoryRegion(Common::PageTable& page_table, Common::ProcessAddress base, u64 size,
@@ -235,7 +236,7 @@ struct Memory::Impl {
     template<typename F1, typename F2, typename F3>
     inline bool WalkBlock(const Common::ProcessAddress addr, const std::size_t size, F1&& on_unmapped, F2&& on_memory, F3&& on_rasterizer) {
         std::size_t offset = 0;
-        if (!AddressSpaceContains(*current_page_table, addr, size)) {
+        if (!AddressSpaceContains(addr, size)) {
             on_unmapped(offset, size, addr);
             return false;
         }
@@ -279,7 +280,61 @@ struct Memory::Impl {
         return user_accessible;
     }
 
+    /**
+     * Returns a host pointer for a guest range iff every page in the range is
+     * regular, directly-mapped memory belonging to the same guest block.
+     *
+     * The page type check is deliberately done for every page. A range may
+     * share a block with a rasterizer-cached page after the page type has been
+     * changed, in which case bypassing the invalidation path would be wrong.
+     */
+    [[nodiscard]] inline bool TryGetContiguousMemory(const VAddr addr, const std::size_t size,
+                                                     u8** out_ptr) const noexcept {
+        if (size == 0) {
+            return false;
+        }
+
+        const u64 end = addr + (size - 1);
+        if (end < addr) {
+            return false;
+        }
+
+        const std::size_t first_page = addr >> YUZU_PAGEBITS;
+        const std::size_t last_page = end >> YUZU_PAGEBITS;
+        const auto& entries = current_page_table->entries;
+        if (last_page >= entries.size()) {
+            return false;
+        }
+
+        const auto& first_entry = entries[first_page];
+        const uintptr_t first_raw = first_entry.ptr.Raw();
+        const uintptr_t base_pointer = Common::PageTable::PageInfo::ExtractPointer(first_raw);
+        if (base_pointer == 0 ||
+            Common::PageTable::PageInfo::ExtractType(first_raw) != Common::PageType::Memory) {
+            return false;
+        }
+
+        for (std::size_t page = first_page + 1; page <= last_page; ++page) {
+            const auto& entry = entries[page];
+            const uintptr_t raw_pointer = entry.ptr.Raw();
+            if (entry.block != first_entry.block ||
+                Common::PageTable::PageInfo::ExtractPointer(raw_pointer) == 0 ||
+                Common::PageTable::PageInfo::ExtractType(raw_pointer) !=
+                    Common::PageType::Memory) {
+                return false;
+            }
+        }
+
+        *out_ptr = reinterpret_cast<u8*>(base_pointer + addr);
+        return true;
+    }
+
     bool ReadBlockImpl(const Common::ProcessAddress addr, void* buffer, const std::size_t size, bool unsafe) {
+        if (u8* span = nullptr; TryGetContiguousMemory(GetInteger(addr), size, &span)) {
+            std::memcpy(buffer, span, size);
+            return true;
+        }
+
         return WalkBlock(addr, size,
         [addr, size, &buffer](const std::size_t offset, const std::size_t copy_amount, const Common::ProcessAddress current_vaddr) {
             LOG_ERROR(HW_Memory, "Unmapped @ {:#016X} (start address = {:#016X}, size = {})", GetInteger(current_vaddr), GetInteger(addr), size);
@@ -297,13 +352,55 @@ struct Memory::Impl {
     }
 
     [[nodiscard]] inline const u8* GetSpan(const VAddr addr, const std::size_t size) const noexcept {
-        return (current_page_table->entries[addr >> YUZU_PAGEBITS].block == current_page_table->entries[(addr + size) >> YUZU_PAGEBITS].block) ? GetPointerSilent(addr) : nullptr;
+        if (u8* span = nullptr; TryGetContiguousMemory(addr, size, &span)) {
+            return span;
+        }
+
+        // Preserve the legacy fallback for special page types (for example,
+        // rasterizer-cached memory). The range check uses the last byte of the
+        // range, not the first byte after it.
+        if (size == 0) {
+            return nullptr;
+        }
+        const u64 end = addr + (size - 1);
+        if (end < addr) {
+            return nullptr;
+        }
+        const std::size_t first_page = addr >> YUZU_PAGEBITS;
+        const std::size_t last_page = end >> YUZU_PAGEBITS;
+        const auto& entries = current_page_table->entries;
+        if (last_page >= entries.size() || entries[first_page].block != entries[last_page].block) {
+            return nullptr;
+        }
+        return GetPointerSilent(addr);
     }
     [[nodiscard]] inline u8* GetSpan(const VAddr addr, const std::size_t size) noexcept {
-        return (current_page_table->entries[addr >> YUZU_PAGEBITS].block == current_page_table->entries[(addr + size) >> YUZU_PAGEBITS].block) ? GetPointerSilent(addr) : nullptr;
+        if (u8* span = nullptr; TryGetContiguousMemory(addr, size, &span)) {
+            return span;
+        }
+
+        if (size == 0) {
+            return nullptr;
+        }
+        const u64 end = addr + (size - 1);
+        if (end < addr) {
+            return nullptr;
+        }
+        const std::size_t first_page = addr >> YUZU_PAGEBITS;
+        const std::size_t last_page = end >> YUZU_PAGEBITS;
+        const auto& entries = current_page_table->entries;
+        if (last_page >= entries.size() || entries[first_page].block != entries[last_page].block) {
+            return nullptr;
+        }
+        return GetPointerSilent(addr);
     }
 
     bool WriteBlockImpl(const Common::ProcessAddress addr, const void* buffer, const std::size_t size, bool unsafe) {
+        if (u8* span = nullptr; TryGetContiguousMemory(GetInteger(addr), size, &span)) {
+            std::memcpy(span, buffer, size);
+            return true;
+        }
+
         return WalkBlock(addr, size,
         [addr, size](const std::size_t offset, const std::size_t copy_amount, const Common::ProcessAddress current_vaddr) {
             LOG_ERROR(HW_Memory, "Unmapped @ 0x{:016X} (start address = 0x{:016X}, size = {})", GetInteger(current_vaddr), GetInteger(addr), size);
@@ -320,6 +417,11 @@ struct Memory::Impl {
     }
 
     bool ZeroBlock(const Common::ProcessAddress addr, const std::size_t size) {
+        if (u8* span = nullptr; TryGetContiguousMemory(GetInteger(addr), size, &span)) {
+            std::memset(span, 0, size);
+            return true;
+        }
+
         return WalkBlock(addr, size,
         [addr, size](const std::size_t offset, const std::size_t copy_amount, const Common::ProcessAddress current_vaddr) {
             LOG_ERROR(HW_Memory, "Unmapped @ {:#016X} (start address = {:#016X}, size = {})", GetInteger(current_vaddr), GetInteger(addr), size);
@@ -334,7 +436,14 @@ struct Memory::Impl {
     }
 
     bool CopyBlock(Common::ProcessAddress dest_addr, Common::ProcessAddress src_addr, const std::size_t size) {
-        return WalkBlock(dest_addr, size,
+        if (u8* dest_span = nullptr, *src_span = nullptr;
+            TryGetContiguousMemory(GetInteger(dest_addr), size, &dest_span) &&
+            TryGetContiguousMemory(GetInteger(src_addr), size, &src_span)) {
+            std::memmove(dest_span, src_span, size);
+            return true;
+        }
+
+        return WalkBlock(src_addr, size,
         [&](const std::size_t offset, const std::size_t copy_amount, const Common::ProcessAddress current_vaddr) {
             LOG_ERROR(HW_Memory, "Unmapped @ {:#016X} (start address = {:#016X}, size = {})", GetInteger(current_vaddr), GetInteger(src_addr), size);
             ZeroBlock(dest_addr + offset, copy_amount);
@@ -390,7 +499,7 @@ struct Memory::Impl {
     }
 
     void MarkRegionDebug(u64 vaddr, u64 size, bool debug) {
-        if (vaddr == 0 || !AddressSpaceContains(*current_page_table, vaddr, size)) {
+        if (vaddr == 0 || !AddressSpaceContains(vaddr, size)) {
             return;
         }
 
@@ -445,7 +554,7 @@ struct Memory::Impl {
     }
 
     void RasterizerMarkRegionCached(u64 vaddr, u64 size, bool cached) {
-        if (vaddr == 0 || !AddressSpaceContains(*current_page_table, vaddr, size)) {
+        if (vaddr == 0 || !AddressSpaceContains(vaddr, size)) {
             return;
         }
 
@@ -567,7 +676,7 @@ struct Memory::Impl {
     [[nodiscard]] u8* GetPointerImpl(u64 vaddr, F&& on_unmapped, G&& on_rasterizer) const {
         // AARCH64 masks the upper 16 bit of all memory accesses
         vaddr &= 0xffffffffffffULL;
-        if (AddressSpaceContains(*current_page_table, vaddr, 1)) [[likely]] {
+        if (AddressSpaceContains(vaddr, 1)) [[likely]] {
             // Avoid adding any extra logic to this fast-path block
             const uintptr_t raw_pointer = current_page_table->entries[vaddr >> YUZU_PAGEBITS].ptr.Raw();
             if (const uintptr_t pointer = Common::PageTable::PageInfo::ExtractPointer(raw_pointer)) [[likely]] {
@@ -761,6 +870,7 @@ struct Memory::Impl {
     Core::System& system;
     Tegra::MaxwellDeviceMemoryManager* gpu_device_memory{};
     Common::PageTable* current_page_table = nullptr;
+    u64 address_space_max{};
 
     std::array<VideoCore::RasterizerDownloadArea, Core::Hardware::NUM_CPU_CORES> rasterizer_read_areas{};
     std::array<GPUDirtyState, Core::Hardware::NUM_CPU_CORES> rasterizer_write_areas{};
@@ -834,11 +944,35 @@ bool Memory::IsValidVirtualAddress(const Common::ProcessAddress vaddr) const {
 }
 
 bool Memory::IsValidVirtualAddressRange(Common::ProcessAddress base, u64 size) const {
-    Common::ProcessAddress end = base + size;
-    Common::ProcessAddress page = Common::AlignDown(GetInteger(base), YUZU_PAGESIZE);
+    const u64 start = GetInteger(base);
+    const u64 end = start + size;
+    if (end < start) {
+        // The range wraps around the address space.
+        return false;
+    }
 
-    for (; page < end; page += YUZU_PAGESIZE) {
-        if (!IsValidVirtualAddress(page)) {
+    // Match the old loop condition exactly, including its handling of a
+    // zero-sized unaligned range, but avoid a function call and a second page
+    // table lookup for every page.
+    if (end == 0) {
+        return true;
+    }
+
+    const std::size_t first_page = start >> YUZU_PAGEBITS;
+    const std::size_t last_page = (end - 1) >> YUZU_PAGEBITS;
+    if (last_page < first_page) {
+        return true;
+    }
+
+    const auto& page_table = *impl->current_page_table;
+    if (last_page >= page_table.entries.size()) {
+        return false;
+    }
+
+    for (std::size_t page = first_page; page <= last_page; ++page) {
+        const auto [pointer, type] = page_table.entries[page].ptr.PointerType();
+        if (pointer == 0 && type != Common::PageType::RasterizerCachedMemory &&
+            type != Common::PageType::DebugMemory) {
             return false;
         }
     }

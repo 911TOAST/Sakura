@@ -9,13 +9,11 @@ SPDX-License-Identifier: CC0-1.0
 <component type="desktop-application">
   <id>dev.suyu_emu.suyu</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <name>suyu</name>
+  <name>Sakura</name>
   <summary>Nintendo Switch emulator</summary>
   <description>
-    <p>suyu is the world's most popular, open-source, Nintendo Switch emulator — started by the creators of Citra.</p>
-    <p>The emulator is capable of running most commercial games at full speed, provided you meet the necessary hardware requirements.</p>
-    <p>For a full list of games suyu support, please visit our Compatibility page.</p>
-    <p>Check out our website for the latest news on exciting features, monthly progress reports, and more!</p>
+    <p>Sakura is a community continuation of the Suyu emulator codebase.</p>
+    <p>Sakura does not include games, firmware, or encryption keys.</p>
   </description>
   <categories>
     <category>Game</category>

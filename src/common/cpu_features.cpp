@@ -365,13 +365,12 @@ s64 WallClock::GetGPUTick() const {
 }
 
 s64 WallClock::GetUptime() const {
+    // CNTVCT_EL0 is a globally coherent counter. The DSBs that used to surround
+    // this read only serialized the host pipeline and are not required for
+    // correctness; this function is called on every guest tick read and context
+    // switch, so keeping the read barrier-free matters.
     s64 cntvct_el0 = 0;
-    asm volatile(
-        "dsb ish\n\t"
-        "mrs %[cntvct_el0], cntvct_el0\n\t"
-        "dsb ish\n\t"
-        : [cntvct_el0] "=r"(cntvct_el0)
-    );
+    asm volatile("mrs %[cntvct_el0], cntvct_el0" : [cntvct_el0] "=r"(cntvct_el0));
     return cntvct_el0;
 }
 

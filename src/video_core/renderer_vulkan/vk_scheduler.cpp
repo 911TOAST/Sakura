@@ -4,6 +4,7 @@
 // SPDX-FileCopyrightText: Copyright 2019 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -178,6 +179,9 @@ bool Scheduler::UpdateRescaling(bool is_rescaling) {
 
 void Scheduler::WorkerThread(std::stop_token stop_token) {
     Common::SetCurrentThreadName("VulkanWorker");
+#ifdef __ANDROID__
+    Common::SetCurrentThreadPriority(Common::ThreadPriority::Critical);
+#endif
 
     const auto TryPopQueue{[this](auto& work) -> bool {
         if (work_queue.empty()) {
@@ -246,6 +250,12 @@ void Scheduler::AllocateWorkerCommandBuffer() {
     });
 }
 
+void Scheduler::RegisterUploadBuffer(VkBuffer buffer) {
+    if (std::ranges::find(pending_upload_buffers, buffer) == pending_upload_buffers.end()) {
+        pending_upload_buffers.push_back(buffer);
+    }
+}
+
 u64 Scheduler::SubmitExecution(VkSemaphore signal_semaphore, VkSemaphore wait_semaphore) {
     EndPendingOperations();
     InvalidateState();
@@ -253,13 +263,46 @@ u64 Scheduler::SubmitExecution(VkSemaphore signal_semaphore, VkSemaphore wait_se
     const u64 signal_value = master_semaphore->NextTick();
     RecordWithUploadBuffer([signal_semaphore, wait_semaphore, signal_value,
                             this](vk::CommandBuffer cmdbuf, vk::CommandBuffer upload_cmdbuf) {
-        static constexpr VkMemoryBarrier WRITE_BARRIER{
-            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-            .pNext = nullptr,
-            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-        };
-        upload_cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
+        if (!pending_upload_buffers.empty()) {
+            if (device.IsMali() && pending_upload_buffers.size() <= 8) {
+                pending_upload_barriers.clear();
+                for (const VkBuffer buffer : pending_upload_buffers) {
+                    pending_upload_barriers.push_back(VkBufferMemoryBarrier{
+                        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                        .pNext = nullptr,
+                        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .buffer = buffer,
+                        .offset = 0,
+                        .size = VK_WHOLE_SIZE,
+                    });
+                }
+                upload_cmdbuf.PipelineBarrier(
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER |
+                        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+                    0, vk::Span<VkMemoryBarrier>{},
+                    vk::Span<VkBufferMemoryBarrier>{pending_upload_barriers},
+                    vk::Span<VkImageMemoryBarrier>{});
+                pending_upload_barriers.clear();
+            } else {
+                static constexpr VkMemoryBarrier WRITE_BARRIER{
+                    .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+                    .pNext = nullptr,
+                    .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                    .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                };
+                upload_cmdbuf.PipelineBarrier(
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    device.IsMali() ? (vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER |
+                                       VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT)
+                                    : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                    0, WRITE_BARRIER);
+            }
+            pending_upload_buffers.clear();
+        }
         upload_cmdbuf.End();
         cmdbuf.End();
 

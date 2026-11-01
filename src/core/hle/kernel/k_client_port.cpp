@@ -30,7 +30,7 @@ void KClientPort::OnSessionFinalized(KernelCore& kernel) {
     KScopedSchedulerLock sl{kernel};
 
     if (const auto prev = m_num_sessions--; prev == m_max_sessions) {
-        this->NotifyAvailable(kernel);
+        this->NotifyAvailableLocked(kernel);
     }
 }
 

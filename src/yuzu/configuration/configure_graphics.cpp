@@ -145,8 +145,11 @@ void ConfigureGraphics::PopulateVSyncModeSelection(bool use_setting) {
     const int device{vulkan_device_combobox->currentIndex()}; //< current selected Vulkan device
 
     const auto& present_modes = //< relevant vector of present modes for the selected device or API
-        backend == Settings::RendererBackend::Vulkan && device > -1 ? device_present_modes[device]
-                                                                    : default_present_modes;
+        (backend == Settings::RendererBackend::Vulkan ||
+         backend == Settings::RendererBackend::Malikan) &&
+                device > -1
+            ? device_present_modes[device]
+            : default_present_modes;
 
     vsync_mode_combobox->clear();
     vsync_mode_combobox_enum_map.clear();
@@ -175,7 +178,8 @@ void ConfigureGraphics::PopulateVSyncModeSelection(bool use_setting) {
               backend == Settings::RendererBackend::OpenGL_SPIRV) &&
              (global_vsync_mode == Settings::VSyncMode::Immediate ||
               global_vsync_mode == Settings::VSyncMode::Fifo)) ||
-            backend == Settings::RendererBackend::Vulkan);
+            backend == Settings::RendererBackend::Vulkan ||
+            backend == Settings::RendererBackend::Malikan);
     }
 }
 
@@ -194,7 +198,8 @@ void ConfigureGraphics::UpdateDeviceSelection(int device) {
     if (device == -1) {
         return;
     }
-    if (GetCurrentGraphicsBackend() == Settings::RendererBackend::Vulkan) {
+    if (GetCurrentGraphicsBackend() == Settings::RendererBackend::Vulkan ||
+        GetCurrentGraphicsBackend() == Settings::RendererBackend::Malikan) {
         vulkan_device = device;
     }
 }
@@ -404,6 +409,7 @@ void ConfigureGraphics::ApplyConfiguration() {
                       combobox_translations.at(index)[api_combobox->currentIndex()].first);
         switch (backend) {
         case Settings::RendererBackend::Vulkan:
+        case Settings::RendererBackend::Malikan:
             Settings::values.vulkan_device.SetGlobal(Settings::IsConfiguringGlobal());
             Settings::values.vulkan_device.SetValue(vulkan_device_combobox->currentIndex());
             break;
@@ -445,7 +451,8 @@ void ConfigureGraphics::UpdateAPILayout() {
     vulkan_device_widget->setEnabled(!need_global && runtime_lock);
 
     const auto current_backend = GetCurrentGraphicsBackend();
-    const bool is_vulkan = current_backend == Settings::RendererBackend::Vulkan;
+    const bool is_vulkan = current_backend == Settings::RendererBackend::Vulkan ||
+                           current_backend == Settings::RendererBackend::Malikan;
     vulkan_device_widget->setVisible(is_vulkan);
     if (is_vulkan && int(vulkan_device) < vulkan_device_combobox->count()) {
         vulkan_device_combobox->setCurrentIndex(vulkan_device);
@@ -479,7 +486,8 @@ Settings::RendererBackend ConfigureGraphics::GetCurrentGraphicsBackend() const {
                          combobox_translations.at(index).at(api_combobox->currentIndex()).first);
     }();
 
-    if (selected_backend == Settings::RendererBackend::Vulkan &&
+    if ((selected_backend == Settings::RendererBackend::Vulkan ||
+         selected_backend == Settings::RendererBackend::Malikan) &&
         UISettings::values.has_broken_vulkan)
         return Settings::RendererBackend::OpenGL_GLSL;
     return selected_backend;

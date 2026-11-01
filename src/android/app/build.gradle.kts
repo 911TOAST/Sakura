@@ -43,6 +43,13 @@ android {
 
     buildFeatures {
         viewBinding = true
+        compose = true
+    }
+
+    composeOptions {
+        // Gradle resolves the Kotlin compiler to 1.9.24 here, and the extension version is
+        // checked against it at build time: 1.5.14 is the pair for 1.9.24.
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
 
     compileOptions {
@@ -61,6 +68,9 @@ android {
 
     androidResources {
         generateLocaleConfig = true
+        // Slim build: ship English only. The 23 other translations are a large share of
+        // resources.arsc, which Android stores uncompressed in the APK.
+        localeFilters += listOf("en")
     }
 
     defaultConfig {
@@ -88,7 +98,31 @@ android {
                         "-DBUILD_TESTING=OFF",
                         "-DYUZU_TESTS=OFF",
                         "-DDYNARMIC_TESTS=OFF",
+                        "-DYUZU_CMD=OFF",
+                        "-DENABLE_SDL2=OFF",
+                        "-DCMAKE_BUILD_TYPE=Release",
                         *extraCMakeArgs.toTypedArray()
+                    )
+                )
+
+                providers.environmentVariable("GLSLANGVALIDATOR").orNull?.let {
+                    if (file(it).isFile) {
+                        arguments.add("-DGLSLANGVALIDATOR=$it")
+                    }
+                }
+
+                cppFlags.addAll(
+                    listOf(
+                        "-O3",
+                        "-flto=thin",
+                        "-fvisibility=hidden",
+                        "-fvisibility-inlines-hidden",
+                        "-fomit-frame-pointer",
+                        "-fno-math-errno",
+                        "-fstrict-aliasing",
+                        "-funroll-loops",
+                        "-fvectorize",
+                        "-fslp-vectorize"
                     )
                 )
 
@@ -155,7 +189,7 @@ android {
         register("relWithDebInfo") {
             isDefault = true
             signingConfig = signingConfigs.getByName("default")
-            isDebuggable = true
+            isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -165,7 +199,7 @@ android {
 
             versionNameSuffix = "-relWithDebInfo"
             applicationIdSuffix = ".relWithDebInfo"
-            isJniDebuggable = true
+            isJniDebuggable = false
         }
 
         // Signed by debug key disallowing distribution on Play Store.
@@ -189,23 +223,30 @@ android {
             dimension = "version"
             isDefault = true
 
-            manifestPlaceholders += mapOf("appNameBase" to "suyu")
-            resValue("string", "app_name_suffixed", "suyu")
+            manifestPlaceholders += mapOf("appNameBase" to "Sakura")
+            resValue("string", "app_name_suffixed", "Sakura")
 
             ndk {
                 abiFilters += listOf("arm64-v8a")
             }
         }
 
-        create("genshinSpoof") {
+        create("optimized") {
             dimension = "version"
-            manifestPlaceholders += mapOf("appNameBase" to "suyu Optimized")
-            resValue("string", "app_name_suffixed", "suyu Optimized")
-            applicationId = "com.miHoYo.Yuanshen"
+            manifestPlaceholders += mapOf("appNameBase" to "Sakura Optimized")
+            resValue("string", "app_name_suffixed", "Sakura Optimized")
+            applicationId = "org.suyu.suyu_emu.optimized"
 
             externalNativeBuild {
                 cmake {
-                    arguments.add("-DGENSHIN_SPOOF=ON")
+                    arguments.add("-DSAKURA_OPTIMIZED=ON")
+                    // Target the Cortex-A78/A55 cluster used by the MT6878. This is the only
+                    // build that enables LSE atomics and dot-product/FP16 codegen; the default
+                    // NDK armv8-a baseline is left untouched for other flavours.
+                    arguments.add("-DYUZU_BUILD_PRESET=armv8.2")
+                    // Drop stack canaries only in the aggressive flavor. The mainline, legacy
+                    // and debug builds keep the NDK's default stack protector.
+                    cppFlags.add("-fno-stack-protector")
                 }
             }
 
@@ -216,8 +257,8 @@ android {
 
         create("legacy") {
             dimension = "version"
-            manifestPlaceholders += mapOf("appNameBase" to "suyu Legacy")
-            resValue("string", "app_name_suffixed", "suyu Legacy")
+            manifestPlaceholders += mapOf("appNameBase" to "Sakura Legacy")
+            resValue("string", "app_name_suffixed", "Sakura Legacy")
             applicationId = "org.suyu.suyu_legacy"
 
             externalNativeBuild {
@@ -236,22 +277,6 @@ android {
                 abiFilters += listOf("arm64-v8a")
             }
         }
-
-        create("chromeOS") {
-            dimension = "version"
-            manifestPlaceholders += mapOf("appNameBase" to "suyu ChromeOS")
-            resValue("string", "app_name_suffixed", "suyu ChromeOS")
-
-            ndk {
-                abiFilters += listOf("x86_64")
-            }
-
-            externalNativeBuild {
-                cmake {
-                    abiFilters("x86_64")
-                }
-            }
-        }
     }
 
     externalNativeBuild {
@@ -267,7 +292,7 @@ android {
 
         // apply nightly suffix I/A
         resValue("string", "app_name_suffixed", "$currentName$suffix")
-        resValue("string", "app_name", "suyu$suffix")
+        resValue("string", "app_name", "$currentName$suffix")
     }
 }
 
@@ -322,6 +347,7 @@ play {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.dynamicanimation:dynamicanimation:1.0.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
@@ -341,8 +367,15 @@ dependencies {
     implementation("androidx.navigation:navigation-ui-ktx:2.8.9")
     implementation("info.debatty:java-string-similarity:2.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-    implementation("androidx.compose.ui:ui-graphics-android:1.7.8")
-    implementation("androidx.compose.ui:ui-text-android:1.7.8")
+    implementation(platform("androidx.compose:compose-bom:2024.02.02"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-text")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.runtime:runtime")
+    implementation("androidx.activity:activity-compose:1.8.2")
+    debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("net.swiftzer.semver:semver:2.0.0")
 }
 
@@ -401,8 +434,12 @@ afterEvaluate {
             group = "publishing"
             description = "Copy APK and AAB for $variantName to $artifactsDir"
 
-            from(apkFile)
-            from(aabFile)
+            from(apkFile) {
+                rename { "Sakura-$flavor-$type.apk" }
+            }
+            from(aabFile) {
+                rename { "Sakura-$flavor-$type.aab" }
+            }
             into(artifactsDir)
 
             dependsOn("assemble${variantTask}")

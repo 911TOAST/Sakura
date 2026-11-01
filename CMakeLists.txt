@@ -69,8 +69,8 @@ if (YUZU_STATIC_ROOM)
     set(fmt_FORCE_BUNDLED ON)
 endif()
 
-# qt stuff
-option(ENABLE_QT "Enable the Qt frontend" ON)
+# qt stuff (disabled: dedicated to Android)
+option(ENABLE_QT "Enable the Qt frontend" OFF)
 option(ENABLE_QT_TRANSLATION "Enable translations for the Qt frontend" OFF)
 option(ENABLE_UPDATE_CHECKER "Enable update checker (for Qt and Android)" OFF)
 cmake_dependent_option(YUZU_USE_QT_MULTIMEDIA "Use QtMultimedia for Camera"  OFF "NOT YUZU_USE_BUNDLED_QT" OFF)
@@ -247,10 +247,10 @@ option(YUZU_LEGACY "Apply patches that improve compatibility with older GPUs (e.
 
 option(NIGHTLY_BUILD "Use Nightly qualifiers in the update checker and build metadata" OFF)
 
-cmake_dependent_option(YUZU_ROOM "Enable dedicated room functionality" ON "NOT ANDROID" OFF)
-cmake_dependent_option(YUZU_ROOM_STANDALONE "Enable standalone room executable" ON "YUZU_ROOM" OFF)
+cmake_dependent_option(YUZU_ROOM "Enable dedicated room functionality" OFF "NOT ANDROID" OFF)
+cmake_dependent_option(YUZU_ROOM_STANDALONE "Enable standalone room executable" OFF "YUZU_ROOM" OFF)
 
-cmake_dependent_option(YUZU_CMD "Compile the suyu-cli executable" ON "NOT ANDROID" OFF)
+cmake_dependent_option(YUZU_CMD "Compile the suyu-cli executable" OFF "NOT ANDROID" OFF)
 
 cmake_dependent_option(YUZU_CRASH_DUMPS "Compile crash dump (Minidump) support" OFF "WIN32 OR PLATFORM_LINUX" OFF)
 
@@ -329,11 +329,16 @@ if (CXX_GCC OR CXX_CLANG)
         endif()
     elseif(ARCHITECTURE_arm64)
         # See https://gcc.gnu.org/onlinedocs/gcc/AArch64-Options.html
-        set(YUZU_BUILD_PRESET "custom" CACHE STRING "Build preset to use. One of: custom, generic, armv9, native")
+        set(YUZU_BUILD_PRESET "custom" CACHE STRING "Build preset to use. One of: custom, generic, armv8.2, armv9, native")
         set(mtune generic)
 
         if (${YUZU_BUILD_PRESET} STREQUAL "generic")
             set(march armv8-a)
+        elseif (${YUZU_BUILD_PRESET} STREQUAL "armv8.2")
+            # Cortex-A55/A78 class cores: LSE atomics (removes the out-of-line LL/SC helpers and
+            # their runtime dispatch), dot-product, and full FP16 arithmetic.
+            set(march armv8.2-a+dotprod+fp16+lse)
+            set(mtune cortex-a78)
         elseif (${YUZU_BUILD_PRESET} STREQUAL "armv9")
             set(march armv9-a)
         endif()
@@ -729,8 +734,9 @@ endif()
 if(ENABLE_QT AND UNIX AND NOT APPLE)
     install(FILES "dist/dev.suyu_emu.suyu.desktop"
         DESTINATION "share/applications")
-    install(FILES "dist/suyu.svg"
-        DESTINATION "share/icons/hicolor/scalable/apps")
+    install(FILES "dist/sakura.svg"
+        DESTINATION "share/icons/hicolor/scalable/apps"
+        RENAME "dev.suyu_emu.suyu.svg")
 
     install(FILES "dist/dev.suyu_emu.suyu.xml"
         DESTINATION "share/mime/packages")

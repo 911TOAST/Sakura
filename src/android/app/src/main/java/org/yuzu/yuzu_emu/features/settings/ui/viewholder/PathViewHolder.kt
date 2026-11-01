@@ -20,7 +20,7 @@ class PathViewHolder(val binding: ListItemSettingBinding, adapter: SettingsAdapt
 
     override fun bind(item: SettingsItem) {
         setting = item as PathSetting
-        binding.icon.setVisible(setting.iconId != 0)
+        binding.iconContainer.setVisible(setting.iconId != 0)
         if (setting.iconId != 0) {
             binding.icon.setImageDrawable(
                 ResourcesCompat.getDrawable(

@@ -23,7 +23,7 @@ class InputProfileViewHolder(val binding: ListItemSettingBinding, adapter: Setti
 
         binding.textSettingDescription.setVisible(false)
         binding.buttonClear.setVisible(false)
-        binding.icon.setVisible(false)
+        binding.iconContainer.setVisible(false)
         binding.buttonClear.setVisible(false)
     }
 

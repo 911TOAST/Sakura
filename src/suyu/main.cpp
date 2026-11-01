@@ -456,7 +456,7 @@ GMainWindow::GMainWindow(std::unique_ptr<QtConfig> config_, bool has_broken_vulk
     const auto description = std::string(Common::g_scm_desc);
     const auto build_id = std::string(Common::g_build_id);
 
-    const auto suyu_build = fmt::format("suyu Development Build | {}-{}", branch_name, description);
+    const auto suyu_build = fmt::format("Sakura Development Build | {}-{}", branch_name, description);
     const auto override_build =
         fmt::format(fmt::runtime(std::string(Common::g_title_bar_format_idle)), build_id);
     const auto suyu_build_version = override_build.empty() ? suyu_build : override_build;
@@ -1439,8 +1439,9 @@ void GMainWindow::InitializeWidgets() {
     connect(renderer_status_button, &QPushButton::clicked, this, &GMainWindow::OnToggleGraphicsAPI);
     UpdateAPIText();
     renderer_status_button->setCheckable(true);
-    renderer_status_button->setChecked(Settings::values.renderer_backend.GetValue() ==
-                                       Settings::RendererBackend::Vulkan);
+    const auto backend = Settings::values.renderer_backend.GetValue();
+    renderer_status_button->setChecked(backend == Settings::RendererBackend::Vulkan ||
+                                       backend == Settings::RendererBackend::Malikan);
     renderer_status_button->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(renderer_status_button, &QPushButton::customContextMenuRequested,
             [this](const QPoint& menu_location) {
@@ -2253,7 +2254,8 @@ void GMainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletP
     // behavior of asking.
     user_flag_cmd_line = false;
 
-    if (Settings::values.renderer_backend.GetValue() == Settings::RendererBackend::Vulkan) {
+    if (Settings::values.renderer_backend.GetValue() == Settings::RendererBackend::Vulkan ||
+        Settings::values.renderer_backend.GetValue() == Settings::RendererBackend::Malikan) {
         const auto vulkan_device_index =
             static_cast<std::size_t>(Settings::values.vulkan_device.GetValue());
         if (vulkan_device_index < vk_device_records.size() &&
@@ -4449,7 +4451,8 @@ void GMainWindow::OnToggleGraphicsAPI() {
 #endif
     }
     Settings::values.renderer_backend.SetValue(api);
-    renderer_status_button->setChecked(api == Settings::RendererBackend::Vulkan);
+    renderer_status_button->setChecked(api == Settings::RendererBackend::Vulkan ||
+                                       api == Settings::RendererBackend::Malikan);
     UpdateAPIText();
 }
 
@@ -6351,7 +6354,7 @@ void GMainWindow::RunFirstRunSetupIfNeeded() {
     settings.setValue(QStringLiteral("first_run_done"), true);
 
     QDialog dialog(this);
-    dialog.setWindowTitle(tr("Welcome to suyu"));
+    dialog.setWindowTitle(tr("Welcome to Sakura"));
     auto* layout = new QVBoxLayout(&dialog);
 
     auto* heading = new QLabel(tr("<h2>Let's get you set up</h2>"), &dialog);
@@ -7497,8 +7500,9 @@ void GMainWindow::UpdateVolumeUI() {
 }
 
 void GMainWindow::UpdateStatusButtons() {
-    renderer_status_button->setChecked(Settings::values.renderer_backend.GetValue() ==
-                                       Settings::RendererBackend::Vulkan);
+    const auto backend = Settings::values.renderer_backend.GetValue();
+    renderer_status_button->setChecked(backend == Settings::RendererBackend::Vulkan ||
+                                       backend == Settings::RendererBackend::Malikan);
     UpdateAPIText();
     UpdateGPUAccuracyButton();
     UpdateDockedButton();
@@ -7674,7 +7678,7 @@ bool GMainWindow::ConfirmClose() {
         return true;
     }
     const auto text = tr("Are you sure you want to close suyu?");
-    return question(this, tr("suyu"), text);
+    return question(this, tr("Sakura"), text);
 }
 
 void GMainWindow::closeEvent(QCloseEvent* event) {
@@ -7754,7 +7758,7 @@ bool GMainWindow::ConfirmChangeGame() {
 
     // Use custom question to link controller navigation
     return question(
-        this, tr("suyu"),
+        this, tr("Sakura"),
         tr("Are you sure you want to stop the emulation? Any unsaved progress will be lost."),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
 }
@@ -7766,7 +7770,7 @@ bool GMainWindow::ConfirmForceLockedExit() {
     const auto text = tr("The currently running application has requested suyu to not exit.\n\n"
                          "Would you like to bypass this and exit anyway?");
 
-    return question(this, tr("suyu"), text);
+    return question(this, tr("Sakura"), text);
 }
 
 void GMainWindow::RequestGameExit() {

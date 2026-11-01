@@ -38,6 +38,7 @@ enum class DriverType : u8 {
     Unknown,
     Turnip,   // Mesa Turnip driver
     Qualcomm, // Qualcomm proprietary driver
+    Mali,     // ARM proprietary driver (MediaTek Dimensity, Exynos, Kirin)
 };
 
 // Ring buffer entry for tracking Vulkan API calls

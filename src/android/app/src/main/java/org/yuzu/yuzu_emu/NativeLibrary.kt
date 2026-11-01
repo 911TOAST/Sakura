@@ -151,6 +151,10 @@ object NativeLibrary {
         fileRedirectDir: String?
     )
 
+    external fun setVulkanLayers(layers: String)
+
+    external fun getAvailableVulkanLayers(): Array<String>
+
     external fun reloadKeys(): Boolean
 
     external fun initializeSystem(reload: Boolean)
@@ -198,6 +202,17 @@ object NativeLibrary {
      * Returns the performance stats for the current game
      */
     external fun getPerfStats(): DoubleArray
+
+    /**
+     * Frametime mean in ms, the emulation speed ratio, and shaders still building.
+     * Does not reset the counters, unlike [getPerfStats].
+     */
+    external fun peekPerfStats(): DoubleArray
+
+    /**
+     * Most recent frametimes in milliseconds, oldest first.
+     */
+    external fun getFrametimeHistory(limit: Int): DoubleArray
 
     /**
      * Returns the number of shaders being built

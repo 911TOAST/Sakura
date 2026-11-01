@@ -27,8 +27,11 @@ void DownloadColorImage(vk::CommandBuffer& cmdbuf, VkImage image, VkBuffer buffe
 void ClearColorImage(vk::CommandBuffer& cmdbuf, VkImage image);
 
 vk::ImageView CreateWrappedImageView(const Device& device, vk::Image& image, VkFormat format);
-vk::RenderPass CreateWrappedRenderPass(const Device& device, VkFormat format,
-                                       VkImageLayout initial_layout = VK_IMAGE_LAYOUT_GENERAL);
+vk::RenderPass CreateWrappedRenderPass(
+    const Device& device, VkFormat format,
+    VkImageLayout initial_layout = VK_IMAGE_LAYOUT_GENERAL,
+    VkImageLayout final_layout = VK_IMAGE_LAYOUT_GENERAL,
+    VkImageLayout subpass_layout = VK_IMAGE_LAYOUT_GENERAL);
 vk::Framebuffer CreateWrappedFramebuffer(const Device& device, vk::RenderPass& render_pass,
                                          vk::ImageView& dest_image, VkExtent2D extent);
 vk::Sampler CreateWrappedSampler(const Device& device, VkFilter filter = VK_FILTER_LINEAR);

@@ -288,6 +288,11 @@ struct UserConfig {
     /// to avoid writting certain unnecessary code only needed for cycle timers.
     bool wall_clock_cntpct = false;
 
+    /// Service svcGetSystemTick (SVC #0x1E) inline using GetCNTPCT instead of
+    /// exiting the JIT. This is only valid when GetCNTPCT is known to return the
+    /// same value as the guest's svcGetSystemTick implementation.
+    bool fast_svc_get_system_tick = false;
+
     /// This allows accurately emulating protection fault handlers. If true, we check
     /// for exit after every data memory access by the emulated program.
     bool check_halt_on_memory_access = false;

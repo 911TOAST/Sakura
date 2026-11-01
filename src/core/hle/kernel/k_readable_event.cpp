@@ -43,9 +43,14 @@ void KReadableEvent::Destroy(KernelCore& kernel) {
 
 Result KReadableEvent::Signal(KernelCore& kernel) {
     KScopedSchedulerLock lk{kernel};
+    return SignalLocked(kernel);
+}
+
+Result KReadableEvent::SignalLocked(KernelCore& kernel) {
+    ASSERT(KScheduler::IsSchedulerLockedByCurrentThread(kernel));
     if (!m_is_signaled) {
         m_is_signaled = true;
-        this->NotifyAvailable(kernel);
+        this->NotifyAvailableLocked(kernel);
     }
     R_SUCCEED();
 }
@@ -57,7 +62,11 @@ Result KReadableEvent::Clear(KernelCore& kernel) {
 
 Result KReadableEvent::Reset(KernelCore& kernel) {
     KScopedSchedulerLock lk{kernel};
+    return ResetLocked(kernel);
+}
 
+Result KReadableEvent::ResetLocked(KernelCore& kernel) {
+    ASSERT(KScheduler::IsSchedulerLockedByCurrentThread(kernel));
     R_UNLESS(m_is_signaled, ResultInvalidState);
 
     m_is_signaled = false;

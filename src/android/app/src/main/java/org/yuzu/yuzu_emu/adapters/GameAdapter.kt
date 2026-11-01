@@ -6,10 +6,15 @@ package org.yuzu.yuzu_emu.adapters
 import android.content.DialogInterface
 import android.text.Html
 import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
+import android.view.HapticFeedbackConstants
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityOptionsCompat
+import androidx.navigation.ActivityNavigatorExtras
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.documentfile.provider.DocumentFile
@@ -30,6 +35,7 @@ import org.yuzu.yuzu_emu.databinding.CardGameCarouselBinding
 import org.yuzu.yuzu_emu.model.Game
 import org.yuzu.yuzu_emu.model.GamesViewModel
 import org.yuzu.yuzu_emu.utils.GameIconUtils
+import org.yuzu.yuzu_emu.utils.SuyuMotion
 import org.yuzu.yuzu_emu.utils.ViewUtils.marquee
 import org.yuzu.yuzu_emu.viewholder.AbstractViewHolder
 import androidx.core.net.toUri
@@ -51,6 +57,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
     }
 
     private var viewType = 0
+    private var entranceRemaining = 0
 
     fun setViewType(type: Int) {
         viewType = type
@@ -109,6 +116,30 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 carouselBinding.cardGameCarousel.alpha = 0f
             }
         }
+        // Raw M3 entrance: staggered fade+slide when the library first lays out.
+        if (entranceRemaining > 0) {
+            entranceRemaining--
+            val itemView = holder.itemView
+            itemView.alpha = 0f
+            itemView.translationY =
+                itemView.resources.getDimensionPixelSize(R.dimen.spacing_large).toFloat()
+            itemView.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay(position.coerceAtMost(16) * 24L)
+                .setDuration(SuyuMotion.durationMedium2(itemView.context))
+                .setInterpolator(SuyuMotion.emphasizedDecelerate(itemView.context))
+                .start()
+        }
+    }
+
+    /**
+     * Queue staggered M3 entrances for the next binds (used on first library load
+     * and whenever the view mode changes).
+     */
+    fun playEntranceAnimation(tileCount: Int = 24) {
+        // Cap to roughly two screens so later scroll binds never re-animate.
+        entranceRemaining = tileCount.coerceAtMost(24)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): GameViewHolder {
@@ -154,6 +185,24 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 VIEW_TYPE_CAROUSEL -> bindCarouselView(model)
                 VIEW_TYPE_GRID_COMPACT -> bindGridCompactView(model)
             }
+            val card = when (val cardBinding = binding) {
+                is CardGameListBinding -> cardBinding.cardGameList
+                is CardGameGridBinding -> cardBinding.cardGameGrid
+                is CardGameGridCompactBinding -> cardBinding.cardGameGridCompact
+                is CardGameCarouselBinding -> cardBinding.cardGameCarousel
+                else -> null
+            }
+            // M3 press physics: quick emphasized press-in, spring-free release.
+            card?.setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                        SuyuMotion.pressDown(view)
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> SuyuMotion.pressUp(view)
+                }
+                false
+            }
         }
 
         private fun bindListView(model: Game) {
@@ -182,7 +231,6 @@ class GameAdapter(private val activity: AppCompatActivity) :
 
             gridBinding.textGameTitle.text = model.title.replace("[\\t\\n\\r]+".toRegex(), " ")
 
-            gridBinding.textGameTitle.marquee()
             gridBinding.cardGameGrid.setOnClickListener { onClick(model) }
             gridBinding.cardGameGrid.setOnLongClickListener { onLongClick(model) }
 
@@ -199,7 +247,6 @@ class GameAdapter(private val activity: AppCompatActivity) :
 
             gridCompactBinding.textGameTitleCompact.text = model.title.replace("[\\t\\n\\r]+".toRegex(), " ")
 
-            gridCompactBinding.textGameTitleCompact.marquee()
             gridCompactBinding.cardGameGridCompact.setOnClickListener { onClick(model) }
             gridCompactBinding.cardGameGridCompact.setOnLongClickListener { onLongClick(model) }
 
@@ -215,7 +262,6 @@ class GameAdapter(private val activity: AppCompatActivity) :
             GameIconUtils.loadGameIcon(model, carouselBinding.imageGameScreen)
 
             carouselBinding.textGameTitle.text = model.title.replace("[\\t\\n\\r]+".toRegex(), " ")
-            carouselBinding.textGameTitle.marquee()
             carouselBinding.cardGameCarousel.setOnClickListener { onClick(model) }
             carouselBinding.cardGameCarousel.setOnLongClickListener { onLongClick(model) }
 
@@ -293,7 +339,25 @@ class GameAdapter(private val activity: AppCompatActivity) :
 
         fun onLongClick(game: Game): Boolean {
             val action = HomeNavigationDirections.actionGlobalPerGamePropertiesFragment(game)
-            binding.root.findNavController().navigate(action)
+            val artwork = when (val cardBinding = binding) {
+                is CardGameListBinding -> cardBinding.imageGameScreen
+                is CardGameGridBinding -> cardBinding.imageGameScreen
+                is CardGameGridCompactBinding -> cardBinding.imageGameScreenCompact
+                is CardGameCarouselBinding -> cardBinding.imageGameScreen
+                else -> null
+            }
+            if (artwork != null) {
+                val extras = ActivityNavigatorExtras(
+                    ActivityOptionsCompat.makeSceneTransitionAnimation(
+                        activity,
+                        artwork,
+                        "game_artwork"
+                    )
+                )
+                binding.root.findNavController().navigate(action, extras)
+            } else {
+                binding.root.findNavController().navigate(action)
+            }
             return true
         }
     }

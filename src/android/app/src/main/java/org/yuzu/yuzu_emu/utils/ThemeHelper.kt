@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.google.android.material.color.DynamicColors
 import kotlin.math.roundToInt
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
@@ -37,6 +38,9 @@ object ThemeHelper {
             Theme.MaterialYou -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     activity.setTheme(R.style.Theme_Yuzu_Main_MaterialYou)
+                    // Apply the real wallpaper-derived Material You palette on top of
+                    // the static Sakura theme so colors follow the system, day/night aware.
+                    DynamicColors.applyIfAvailable(activity)
                 } else {
                     activity.setTheme(getSelectedStaticThemeColor())
                 }

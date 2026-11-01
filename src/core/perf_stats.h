@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstddef>
 #include <mutex>
+#include <vector>
 #include "common/common_types.h"
 
 namespace Core {
@@ -40,10 +41,17 @@ public:
 
     PerfStatsResults GetAndResetStats(std::chrono::microseconds current_system_time_us);
 
+    /// Same speed ratio as GetAndResetStats without clearing the counters, so a second reader
+    /// (live dashboard) can poll while the in-game overlay keeps its own window.
+    double PeekEmulationSpeed(std::chrono::microseconds current_system_time_us) const;
+
     /**
      * Returns the arithmetic mean of all frametime values stored in the performance history.
      */
     double GetMeanFrametime() const;
+
+    /// Rolling window of the most recent frametimes (ms), oldest first.
+    std::vector<double> GetRecentFrametimes(std::size_t count) const;
 
     /**
      * Gets the ratio between walltime and the emulated time of the previous system frame. This is
@@ -61,6 +69,12 @@ private:
     /// Stores an hour of historical frametime data useful for processing and tracking performance
     /// regressions with code changes.
     std::array<double, 216000> perf_history{};
+
+    /// perf_history stops at its capacity, so a live graph needs a window that keeps rolling.
+    static constexpr std::size_t RecentWindow = 240;
+    std::array<double, RecentWindow> recent_frametimes{};
+    std::size_t recent_count{0};
+    std::size_t recent_index{0};
 
     /// Point when the cumulative counters were reset
     Clock::time_point reset_point = Clock::now();

@@ -1,37 +1,78 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <color name="suyu_primary">#990E00</color>
+    <!-- =====================================================================
+         Sakura Rosé — Material 3 Expressive palette (light)
+         Key changes: primary chroma ↑ (richer rose), tertiary pivoted to
+         warm amber-gold for bold contrast pop, all containers boosted.
+         Mirrors SuyuM3.kt on the Compose side. Keep both in sync.
+         ===================================================================== -->
+    <!-- Primary — vivid rose (M3 Expressive: max chroma on key colour) -->
+    <color name="suyu_primary">#C2185B</color>
     <color name="suyu_onPrimary">#FFFFFF</color>
-    <color name="suyu_primaryContainer">#EEDEDD</color>
-    <color name="suyu_onPrimaryContainer">#400200</color>
-    <color name="suyu_secondary">#775650</color>
+    <color name="suyu_primaryContainer">#FFD6E4</color>
+    <color name="suyu_onPrimaryContainer">#3E0020</color>
+    <!-- Secondary — muted mauve tonal partner -->
+    <color name="suyu_secondary">#8C4A5D</color>
     <color name="suyu_onSecondary">#FFFFFF</color>
-    <color name="suyu_secondaryContainer">#FFDAD4</color>
-    <color name="suyu_onSecondaryContainer">#2C1511</color>
-    <color name="suyu_tertiary">#6F5C2E</color>
+    <color name="suyu_secondaryContainer">#FFD8E6</color>
+    <color name="suyu_onSecondaryContainer">#3A0722</color>
+    <!-- Tertiary — warm amber-gold (expressive contrast, harmonious with rose) -->
+    <color name="suyu_tertiary">#9C6B00</color>
     <color name="suyu_onTertiary">#FFFFFF</color>
-    <color name="suyu_tertiaryContainer">#FAE0A6</color>
-    <color name="suyu_onTertiaryContainer">#251A00</color>
+    <color name="suyu_tertiaryContainer">#FFDEA0</color>
+    <color name="suyu_onTertiaryContainer">#301E00</color>
     <color name="suyu_error">#BA1A1A</color>
     <color name="suyu_errorContainer">#FFDAD6</color>
     <color name="suyu_onError">#FFFFFF</color>
     <color name="suyu_onErrorContainer">#410002</color>
-    <color name="suyu_background">#FFFBFF</color>
-    <color name="suyu_onBackground">#201A19</color>
-    <color name="suyu_surface">#FFFBFF</color>
-    <color name="suyu_onSurface">#201A19</color>
-    <color name="suyu_surfaceVariant">#F5DDD9</color>
-    <color name="suyu_onSurfaceVariant">#534340</color>
-    <color name="suyu_outline">#857370</color>
-    <color name="suyu_inverseOnSurface">#FBEEEB</color>
-    <color name="suyu_inverseSurface">#362F2D</color>
-    <color name="suyu_inversePrimary">#FFB4A6</color>
-    <color name="suyu_shadow">#000000</color>
-    <color name="suyu_surfaceTint">#B52612</color>
-    <color name="suyu_outlineVariant">#D8C2BE</color>
+    <color name="suyu_background">#FFF8F8</color>
+    <color name="suyu_onBackground">#22191A</color>
+    <color name="suyu_surface">#FFF8F8</color>
+    <color name="suyu_onSurface">#22191A</color>
+    <color name="suyu_surfaceVariant">#F2DCE0</color>
+    <color name="suyu_onSurfaceVariant">#514348</color>
+    <color name="suyu_surfaceDim">#E8D5D9</color>
+    <color name="suyu_surfaceBright">#FFF8F8</color>
+    <color name="suyu_surfaceContainerLowest">#FFFFFF</color>
+    <color name="suyu_surfaceContainerLow">#FFF1F3</color>
+    <color name="suyu_surfaceContainer">#FCEBEE</color>
+    <color name="suyu_surfaceContainerHigh">#F6E3E7</color>
+    <color name="suyu_surfaceContainerHighest">#F0DDE1</color>
+    <color name="suyu_outline">#85737A</color>
+    <color name="suyu_inverseOnSurface">#FFEDEE</color>
+    <color name="suyu_inverseSurface">#382E2F</color>
+    <color name="suyu_inversePrimary">#FFB1C5</color>
+    <color name="suyu_shadow">#1A000000</color>
+    <color name="suyu_surfaceTint">#C2185B</color>
+    <color name="suyu_outlineVariant">#D5C2C6</color>
 
-    <color name="suyu_ea_background_start">#99FFE1</color>
-    <color name="suyu_ea_background_end">#76C5FF</color>
+    <!-- Sakura decorative tokens -->
+    <color name="sakura_petal">#EC93AA</color>
+    <color name="sakura_center">#DDA87C</color>
+    <color name="sakura_wash">#F9ECF0</color>
+    <color name="sakura_outline">#EDD2D9</color>
+    <color name="sakura_track">#F0DDE2</color>
+
+    <!-- ================================================================
+         Pill / Chip tokens - M3 Expressive: boosted container chroma
+         ================================================================ -->
+    <color name="pill_lavender_bg">#EDE7FF</color>
+    <color name="pill_lavender_text">#21005D</color>
+    <color name="pill_blush_bg">#FFD6E4</color>
+    <color name="pill_blush_text">#3E0020</color>
+    <color name="pill_lime_bg">#E8F6C0</color>
+    <color name="pill_lime_text">#1C3000</color>
+    <color name="pill_mint_bg">#C8F5E4</color>
+    <color name="pill_mint_text">#00382A</color>
+    <!-- Amber pill - warm-accent chip for M3 Expressive variety -->
+    <color name="pill_amber_bg">#FFDEA0</color>
+    <color name="pill_amber_text">#301E00</color>
+
+    <!-- suyu_chip_background and suyu_chip_text are state-list colours in res/color/. -->
+
+    <!-- Early-access gradient - more vibrant in M3 Expressive -->
+    <color name="suyu_ea_background_start">#F3D8FF</color>
+    <color name="suyu_ea_background_end">#D6B4FF</color>
 
 </resources>

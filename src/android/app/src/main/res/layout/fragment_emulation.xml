@@ -98,6 +98,8 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
                             android:indeterminate="true"
+                            android:contentDescription="@string/loading"
+                            app:trackThickness="6dp"
                             app:trackCornerRadius="8dp" />
 
                     </LinearLayout>

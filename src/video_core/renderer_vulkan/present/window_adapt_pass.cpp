@@ -4,6 +4,8 @@
 // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <boost/container/small_vector.hpp>
+
 #include "core/frontend/framebuffer_layout.h"
 #include "video_core/framebuffer_config.h"
 #include "video_core/host_shaders/vulkan_present_vert_spv.h"
@@ -36,8 +38,9 @@ void WindowAdaptPass::Draw(const Device& device, RasterizerVulkan& rasterizer, S
                            std::span<const Tegra::FramebufferConfig> configs,
                            const Layout::FramebufferLayout& layout, Frame* dst) {
 
+    const bool direct_present = dst->direct_present;
     const VkFramebuffer host_framebuffer{*dst->framebuffer};
-    const VkRenderPass renderpass{*render_pass};
+    const VkRenderPass renderpass{direct_present ? *present_render_pass : *render_pass};
     const VkPipelineLayout graphics_pipeline_layout{*pipeline_layout};
     const VkExtent2D render_area{
         .width = dst->width,
@@ -45,22 +48,39 @@ void WindowAdaptPass::Draw(const Device& device, RasterizerVulkan& rasterizer, S
     };
 
     const size_t layer_count = configs.size();
-    std::vector<PresentPushConstants> push_constants(layer_count);
-    std::vector<VkDescriptorSet> descriptor_sets(layer_count);
-    std::vector<VkPipeline> graphics_pipelines(layer_count);
+    // Up to four layers stay on the stack: the old std::vector triple allocated on every frame,
+    // and the [=] capture below then allocated three more times to copy them into the command.
+    boost::container::small_vector<PresentPushConstants, 4> push_constants(layer_count);
+    boost::container::small_vector<VkDescriptorSet, 4> descriptor_sets(layer_count);
+    boost::container::small_vector<VkPipeline, 4> graphics_pipelines(layer_count);
+
+    // A single opaque quad covering the whole target defines every pixel, so the background clear
+    // that precedes it is pure fill-rate. Letterboxed and blended layouts still need it.
+    const bool needs_background_clear = [&] {
+        if (layer_count != 1 || configs[0].blending != Tegra::BlendMode::Opaque) {
+            return true;
+        }
+        const auto& screen = layout.screen;
+        return screen.left != 0 || screen.top != 0 ||
+               static_cast<u32>(screen.GetWidth()) != dst->width ||
+               static_cast<u32>(screen.GetHeight()) != dst->height;
+    }();
 
     auto layer_it = layers.begin();
     for (size_t i = 0; i < layer_count; i++) {
         switch (configs[i].blending) {
         case Tegra::BlendMode::Opaque:
         default:
-            graphics_pipelines[i] = *opaque_pipeline;
+            graphics_pipelines[i] =
+                direct_present ? *present_opaque_pipeline : *opaque_pipeline;
             break;
         case Tegra::BlendMode::Premultiplied:
-            graphics_pipelines[i] = *premultiplied_pipeline;
+            graphics_pipelines[i] =
+                direct_present ? *present_premultiplied_pipeline : *premultiplied_pipeline;
             break;
         case Tegra::BlendMode::Coverage:
-            graphics_pipelines[i] = *coverage_pipeline;
+            graphics_pipelines[i] =
+                direct_present ? *present_coverage_pipeline : *coverage_pipeline;
             break;
         }
 
@@ -92,7 +112,9 @@ void WindowAdaptPass::Draw(const Device& device, RasterizerVulkan& rasterizer, S
         };
 
         BeginRenderPass(cmdbuf, renderpass, host_framebuffer, render_area);
-        cmdbuf.ClearAttachments({clear_attachment}, {clear_rect});
+        if (needs_background_clear) {
+            cmdbuf.ClearAttachments({clear_attachment}, {clear_rect});
+        }
 
         for (size_t i = 0; i < layer_count; i++) {
             cmdbuf.BindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipelines[i]);
@@ -113,6 +135,10 @@ VkDescriptorSetLayout WindowAdaptPass::GetDescriptorSetLayout() {
 
 VkRenderPass WindowAdaptPass::GetRenderPass() {
     return *render_pass;
+}
+
+VkRenderPass WindowAdaptPass::GetPresentRenderPass() {
+    return *present_render_pass;
 }
 
 void WindowAdaptPass::CreateDescriptorSetLayout(const Device& device) {
@@ -144,6 +170,15 @@ void WindowAdaptPass::CreateVertexShader(const Device& device) {
 
 void WindowAdaptPass::CreateRenderPass(const Device& device, VkFormat frame_format) {
     render_pass = CreateWrappedRenderPass(device, frame_format, VK_IMAGE_LAYOUT_UNDEFINED);
+    // Direct present renders into an acquired swapchain image. Ending the pass in PRESENT_SRC_KHR
+    // folds the layout transition and the presentation ownership hand-off into the same render
+    // pass, so there is no intermediate image, no copy and no second barrier set per frame.
+    // COLOR_ATTACHMENT_OPTIMAL is the important part on Mali: GENERAL disables AFBC and
+    // transaction elimination for the whole composition pass. The pass still ends directly in
+    // PRESENT_SRC_KHR.
+    present_render_pass = CreateWrappedRenderPass(
+        device, frame_format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 }
 
 void WindowAdaptPass::CreatePipelines(const Device& device) {
@@ -153,6 +188,12 @@ void WindowAdaptPass::CreatePipelines(const Device& device) {
         device, render_pass, pipeline_layout, std::tie(vertex_shader, fragment_shader));
     coverage_pipeline = CreateWrappedCoverageBlendingPipeline(
         device, render_pass, pipeline_layout, std::tie(vertex_shader, fragment_shader));
+    present_opaque_pipeline = CreateWrappedPipeline(
+        device, present_render_pass, pipeline_layout, std::tie(vertex_shader, fragment_shader));
+    present_premultiplied_pipeline = CreateWrappedPremultipliedBlendingPipeline(
+        device, present_render_pass, pipeline_layout, std::tie(vertex_shader, fragment_shader));
+    present_coverage_pipeline = CreateWrappedCoverageBlendingPipeline(
+        device, present_render_pass, pipeline_layout, std::tie(vertex_shader, fragment_shader));
 }
 
 } // namespace Vulkan

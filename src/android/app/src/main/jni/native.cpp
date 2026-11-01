@@ -10,6 +10,7 @@
 #include <codecvt>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <locale>
 #include <map>
 #include <set>
@@ -25,6 +26,7 @@
 #include <iostream>
 #ifdef ARCHITECTURE_arm64
 #include <adrenotools/driver.h>
+#include <vulkan/vulkan.h>
 #endif
 
 #include <android/api-level.h>
@@ -35,6 +37,58 @@
 #include <core/loader/nro.h>
 #include <frontend_common/content_manager.h>
 #include <jni.h>
+
+namespace {
+std::string g_custom_driver_dir;
+std::string g_custom_driver_name;
+
+// Driver-info calls (getGpuModel etc.) open libvulkan without the custom-driver flag, and the
+// hook keeps the last parameters it was given; caching the installed driver here and passing it
+// on every open keeps the redirect armed.
+int g_custom_feature_flags() {
+    return g_custom_driver_name.empty() ? 0 : ADRENOTOOLS_DRIVER_CUSTOM;
+}
+
+// Empty strings would be passed as non-null pointers, which adrenotools rejects without the
+// CUSTOM flag; the driver-info calls must pass real nulls when no driver is installed.
+const char* g_custom_driver_dir_ptr() {
+    return g_custom_driver_dir.empty() ? nullptr : g_custom_driver_dir.c_str();
+}
+
+const char* g_custom_driver_name_ptr() {
+    return g_custom_driver_name.empty() ? nullptr : g_custom_driver_name.c_str();
+}
+
+void LogMappedVulkanDrivers() {
+    std::ifstream maps("/proc/self/maps");
+    if (!maps) {
+        return;
+    }
+    std::set<std::string> libs;
+    std::string line;
+    while (std::getline(maps, line)) {
+        const std::size_t pos = line.find('/');
+        if (pos == std::string::npos) {
+            continue;
+        }
+        std::string path = line.substr(pos);
+        while (!path.empty() && (path.back() == ' ' || path.back() == '\r')) {
+            path.pop_back();
+        }
+        if (path.find("vulkan") != std::string::npos ||
+            path.find("panfrost") != std::string::npos || path.find("mali") != std::string::npos) {
+            libs.insert(path);
+        }
+    }
+    if (libs.empty()) {
+        LOG_INFO(Frontend, "[Driver] no vulkan/mali libraries mapped yet");
+        return;
+    }
+    for (const std::string& lib : libs) {
+        LOG_INFO(Frontend, "[Driver] mapped: {}", lib);
+    }
+}
+} // namespace
 
 extern "C" {
 #include <libavcodec/jni.h>
@@ -164,6 +218,9 @@ void EmulationSession::InitializeGpuDriver(const std::string& hook_lib_dir,
     const char* file_redirect_dir_{};
     int featureFlags{};
 
+    g_custom_driver_dir = custom_driver_name.empty() ? std::string{} : custom_driver_dir;
+    g_custom_driver_name = custom_driver_name;
+
     // Enable driver file redirection when renderer debugging is enabled.
     if (Settings::values.renderer_debug && file_redirect_dir.size()) {
         featureFlags |= ADRENOTOOLS_DRIVER_FILE_REDIRECT;
@@ -175,6 +232,26 @@ void EmulationSession::InitializeGpuDriver(const std::string& hook_lib_dir,
         handle = adrenotools_open_libvulkan(
             RTLD_NOW, featureFlags | ADRENOTOOLS_DRIVER_CUSTOM, nullptr, hook_lib_dir.c_str(),
             custom_driver_dir.c_str(), custom_driver_name.c_str(), file_redirect_dir_, nullptr);
+
+        if (handle) {
+            LOG_INFO(Frontend, "[Driver] custom driver '{}' requested from '{}'",
+                     custom_driver_name, custom_driver_dir);
+        } else {
+            const char* reason = dlerror();
+            LOG_ERROR(Frontend, "[Driver] custom driver '{}' did not load: {}", custom_driver_name,
+                      reason ? reason : "no loader error reported");
+
+            // The loader swallows its own reason, so open the file directly to surface it: a
+            // missing symbol, a wrong ABI or a denied /dev node all show up here.
+            void* probe = dlopen((custom_driver_dir + custom_driver_name).c_str(), RTLD_NOW);
+            const char* probe_reason = dlerror();
+            LOG_ERROR(Frontend, "[Driver] direct dlopen('{}{}') -> {} ({})", custom_driver_dir,
+                      custom_driver_name, probe ? "ok" : "failed",
+                      probe_reason ? probe_reason : "-");
+            if (probe) {
+                dlclose(probe);
+            }
+        }
     }
 
     // Try to load the system driver.
@@ -184,9 +261,9 @@ void EmulationSession::InitializeGpuDriver(const std::string& hook_lib_dir,
     }
 
     m_vulkan_library = std::make_shared<Common::DynamicLibrary>(handle);
+    LogMappedVulkanDrivers();
 #endif
 }
-
 bool EmulationSession::IsRunning() const {
     return m_is_running;
 }
@@ -431,6 +508,7 @@ void EmulationSession::LoadDiskCacheProgress(VideoCore::LoadCallbackStage stage,
 }
 
 void EmulationSession::OnEmulationStarted() {
+    LogMappedVulkanDrivers();
     JNIEnv* env = Common::Android::GetEnvForThread();
     env->CallStaticVoidMethod(Common::Android::GetNativeLibraryClass(),
                               Common::Android::GetOnEmulationStarted());
@@ -693,6 +771,11 @@ extern "C" {
 
 void Java_org_yuzu_yuzu_1emu_NativeLibrary_surfaceChanged(JNIEnv* env, jobject instance,
                                                           [[maybe_unused]] jobject surf) {
+    // Deliberately does not release the window it replaces. There is no surfaceCreated handler, so
+    // this is the only acquirer, and EmuWindow_Android/SurfaceChanged hand the pointer to the render
+    // thread asynchronously: dropping the ref here can free the BufferQueue under a live Vulkan
+    // surface, which shows up as repeated swapchain-loss churn and a large frame-rate drop. The
+    // extra reference is the lesser evil until the render thread stops using it.
     EmulationSession::GetInstance().SetNativeWindow(ANativeWindow_fromSurface(env, surf));
     EmulationSession::GetInstance().SurfaceChanged();
 }
@@ -801,10 +884,11 @@ jobjectArray Java_org_yuzu_yuzu_1emu_utils_GpuDriverHelper_getSystemDriverInfo(
     JNIEnv* env, jobject j_obj, jobject j_surf, jstring j_hook_lib_dir) {
 #ifdef ARCHITECTURE_arm64
     const char* file_redirect_dir_{};
-    int featureFlags{};
     std::string hook_lib_dir = Common::Android::GetJString(env, j_hook_lib_dir);
-    auto handle = adrenotools_open_libvulkan(RTLD_NOW, featureFlags, nullptr, hook_lib_dir.c_str(),
-                                             nullptr, nullptr, file_redirect_dir_, nullptr);
+    auto handle = adrenotools_open_libvulkan(RTLD_NOW, g_custom_feature_flags(), nullptr,
+                                             hook_lib_dir.c_str(), g_custom_driver_dir_ptr(),
+                                             g_custom_driver_name_ptr(), file_redirect_dir_,
+                                             nullptr);
     auto driver_library = std::make_shared<Common::DynamicLibrary>(handle);
     InputCommon::InputSubsystem input_subsystem;
     auto window =
@@ -836,10 +920,11 @@ jobjectArray Java_org_yuzu_yuzu_1emu_utils_GpuDriverHelper_getSystemDriverInfo(
 jstring Java_org_yuzu_yuzu_1emu_utils_GpuDriverHelper_getGpuModel(JNIEnv *env, jobject j_obj, jobject j_surf, jstring j_hook_lib_dir) {
 #ifdef ARCHITECTURE_arm64
     const char* file_redirect_dir_{};
-    int featureFlags{};
     std::string hook_lib_dir = Common::Android::GetJString(env, j_hook_lib_dir);
-    auto handle = adrenotools_open_libvulkan(RTLD_NOW, featureFlags, nullptr, hook_lib_dir.c_str(),
-                                             nullptr, nullptr, file_redirect_dir_, nullptr);
+    auto handle = adrenotools_open_libvulkan(RTLD_NOW, g_custom_feature_flags(), nullptr,
+                                             hook_lib_dir.c_str(), g_custom_driver_dir_ptr(),
+                                             g_custom_driver_name_ptr(), file_redirect_dir_,
+                                             nullptr);
     auto driver_library = std::make_shared<Common::DynamicLibrary>(handle);
     InputCommon::InputSubsystem input_subsystem;
     auto window =
@@ -947,8 +1032,86 @@ jdoubleArray Java_org_yuzu_yuzu_1emu_NativeLibrary_getPerfStats(JNIEnv* env, jcl
     return j_stats;
 }
 
+// Non-destructive: getPerfStats() resets its window, so a second reader would starve the
+// in-game overlay. These read the rolling frametime ring and the last frame's counters instead.
+jdoubleArray Java_org_yuzu_yuzu_1emu_NativeLibrary_peekPerfStats(JNIEnv* env, jclass clazz) {
+    jdoubleArray j_stats = env->NewDoubleArray(3);
+    if (!j_stats) {
+        return nullptr;
+    }
+
+    double stats[3] = {};
+    if (EmulationSession::GetInstance().IsRunning()) {
+        const auto& perf = EmulationSession::GetInstance().System().GetPerfStats();
+        stats[0] = perf.GetMeanFrametime();
+        stats[1] = EmulationSession::GetInstance().System().PeekEmulationSpeed();
+        stats[2] = EmulationSession::GetInstance().ShadersBuilding();
+    }
+
+    env->SetDoubleArrayRegion(j_stats, 0, 3, stats);
+    return j_stats;
+}
+
+jdoubleArray Java_org_yuzu_yuzu_1emu_NativeLibrary_getFrametimeHistory(JNIEnv* env, jclass clazz,
+                                                                        jint limit) {
+    std::vector<double> history;
+    if (EmulationSession::GetInstance().IsRunning() && limit > 0) {
+        history = EmulationSession::GetInstance().System().GetPerfStats().GetRecentFrametimes(
+            static_cast<std::size_t>(limit));
+    }
+
+    jdoubleArray j_history = env->NewDoubleArray(static_cast<jsize>(history.size()));
+    if (!j_history || history.empty()) {
+        return j_history;
+    }
+
+    env->SetDoubleArrayRegion(j_history, 0, static_cast<jsize>(history.size()), history.data());
+    return j_history;
+}
+
+// Requests Vulkan layers exposed by Android's app-scoped loader for the next VkInstance.
+// Android discovers layers bundled in the APK's native library directory; arbitrary manifests or
+// shared libraries copied into app storage are not a supported layer source.
+void Java_org_yuzu_yuzu_1emu_NativeLibrary_setVulkanLayers(JNIEnv* env, jclass clazz,
+                                                           jstring j_layers) {
+    const std::string layers = Common::Android::GetJString(env, j_layers);
+    Settings::values.vulkan_instance_layers.SetValue(layers);
+}
+
+jobjectArray Java_org_yuzu_yuzu_1emu_NativeLibrary_getAvailableVulkanLayers(JNIEnv* env,
+                                                                           jclass clazz) {
+    std::vector<std::string> names;
+
+    const auto& library = EmulationSession::GetInstance().DriverLibrary();
+    PFN_vkGetInstanceProcAddr get_instance_proc_addr{};
+    if (library && library->IsOpen() &&
+        library->GetSymbol("vkGetInstanceProcAddr", &get_instance_proc_addr)) {
+        const auto enumerate = reinterpret_cast<PFN_vkEnumerateInstanceLayerProperties>(
+            get_instance_proc_addr(VK_NULL_HANDLE, "vkEnumerateInstanceLayerProperties"));
+        u32 count = 0;
+        if (enumerate && enumerate(&count, nullptr) == VK_SUCCESS && count > 0) {
+            std::vector<VkLayerProperties> properties(count);
+            if (enumerate(&count, properties.data()) == VK_SUCCESS) {
+                for (const VkLayerProperties& property : properties) {
+                    names.emplace_back(property.layerName);
+                }
+            }
+        }
+    }
+
+    jclass string_class = env->FindClass("java/lang/String");
+    jobjectArray result = env->NewObjectArray(
+        static_cast<jsize>(names.size()), string_class, env->NewStringUTF(""));
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        env->SetObjectArrayElement(result, static_cast<jsize>(i),
+                                   env->NewStringUTF(names[i].c_str()));
+    }
+    return result;
+}
+
 jint Java_org_yuzu_yuzu_1emu_NativeLibrary_getShadersBuilding(JNIEnv* env, jclass clazz) {
     jint j_shaders = 0;
+
 
     if (EmulationSession::GetInstance().IsRunning()) {
         j_shaders = EmulationSession::GetInstance().ShadersBuilding();

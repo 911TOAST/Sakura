@@ -19,6 +19,17 @@ add_library(yuzu-android SHARED
     native_input.cpp
 )
 
+# The Android JNI lookup uses exported Java_* symbols. Keep them visible even
+# when the release build enables hidden visibility for the rest of the library.
+set_source_files_properties(
+    native.cpp
+    native_config.cpp
+    game_metadata.cpp
+    native_log.cpp
+    native_input.cpp
+    PROPERTIES COMPILE_OPTIONS "-fvisibility=default"
+)
+
 set_property(TARGET yuzu-android PROPERTY IMPORTED_LOCATION ${FFmpeg_LIBRARY_DIR})
 
 target_link_libraries(yuzu-android PRIVATE audio_core common core input_common frontend_common video_core)

@@ -66,6 +66,11 @@ u32 OpusDecoder::Receive(Direction dir, std::stop_token stop_token) {
 
 void OpusDecoder::Init(std::stop_token stop_token) {
     Common::SetCurrentThreadName("DSP_OpusDecoder_Init");
+    // Thread priorities only started taking effect once SetCurrentThreadPriority was fixed to use
+    // nice on Linux/Android. The core and GPU threads are Critical and the ADSP renderer is High,
+    // so these decode threads were left at nice 0 and are now relatively starved - and opus decode
+    // sits on the guest's synchronous decode path, so starving it stalls audio submission.
+    Common::SetCurrentThreadPriority(Common::ThreadPriority::High);
 
     if (Receive(Direction::DSP, stop_token) != Message::Start) {
         LOG_ERROR(Service_Audio,
@@ -79,6 +84,7 @@ void OpusDecoder::Init(std::stop_token stop_token) {
 
 void OpusDecoder::Main(std::stop_token stop_token) {
     Common::SetCurrentThreadName("DSP_OpusDecoder_Main");
+    Common::SetCurrentThreadPriority(Common::ThreadPriority::High);
 
     while (!stop_token.stop_requested()) {
         auto msg = Receive(Direction::DSP, stop_token);

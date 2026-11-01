@@ -219,11 +219,59 @@ object GpuDriverHelper {
     ): String?
 
     fun isAdrenoGpu(): Boolean {
+        // The adrenotools hook loads an ICD on any 64-bit device, so "supports custom driver
+        // loading" is true on Mali too and used to show the Adreno/Freedreno surfaces there.
+        // The kernel GPU nodes identify the actual vendor.
+        if (File("/sys/class/kgsl/kgsl-3d0").exists()) {
+            return true
+        }
+        if (File("/sys/class/misc/mali0").exists()) {
+            return false
+        }
         return try {
             supportsCustomDriverLoading()
         } catch (e: Exception) {
             false
         }
+    }
+
+    /**
+     * Custom drivers load through the adrenotools dlopen hook, which is generic: the Adreno-only
+     * part is the GSL/kernel patching, not the driver swap itself. Any 64-bit device can therefore
+     * run a replacement ICD, Mali included.
+     */
+    fun supportsCustomDriver(): Boolean = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()
+
+    /** The PanVK package sitting in driver storage, if the user imported one. */
+    fun findPanVkZip(): File? =
+        File(driverStoragePath).listFiles()?.firstOrNull {
+            it.name.startsWith("PanVK", ignoreCase = true) && it.name.endsWith(".zip")
+        }
+
+    fun isPanVkInstalled(): Boolean =
+        installedCustomDriverData.name?.contains("PanVK", ignoreCase = true) == true
+
+    /**
+     * Installs (or removes) the PanVK ICD as the active custom driver. Copies to a temp file
+     * first: installCustomDriver deletes the file it is handed when validation fails, and we do
+     * not want to eat the user's stored package.
+     */
+    fun setPanVkEnabled(enabled: Boolean): Boolean {
+        if (!enabled) {
+            installDefaultDriver()
+            StringSetting.DRIVER_PATH.setString("")
+            NativeConfig.saveGlobalConfig()
+            return true
+        }
+        val stored = findPanVkZip() ?: return false
+        val staging = File(YuzuApplication.appContext.cacheDir, stored.name)
+        stored.copyTo(staging, overwrite = true)
+        if (!installCustomDriver(staging)) {
+            return false
+        }
+        StringSetting.DRIVER_PATH.setString(stored.path)
+        NativeConfig.saveGlobalConfig()
+        return true
     }
 
     // Parse the custom driver metadata to retrieve the name.

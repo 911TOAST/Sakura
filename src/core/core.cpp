@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "game_settings.h"
@@ -133,7 +134,8 @@ struct System::Impl {
         // Create default implementations of applets if one is not provided.
         frontend_applets.SetDefaultAppletsIfMissing();
 
-        auto const is_async_gpu = Settings::values.use_asynchronous_gpu_emulation.GetValue();
+        auto const is_async_gpu = Settings::values.use_asynchronous_gpu_emulation.GetValue() ||
+                                  Settings::values.native_gpu_mode.GetValue();
 
         kernel.SetMulticore(is_multicore);
         cpu_manager.SetMulticore(is_multicore);
@@ -385,6 +387,8 @@ struct System::Impl {
         }
 
         GameSettings::LoadOverrides(program_id, gpu_core->Renderer());
+        // Per-game overrides must not undo the forced performance profile.
+        Settings::ApplyPerformanceProfile();
         if (auto room_member = Network::GetRoomMember().lock()) {
             Network::GameInfo game_info;
             game_info.name = name;
@@ -454,6 +458,13 @@ struct System::Impl {
 
     PerfStatsResults GetAndResetPerfStats() {
         return perf_stats->GetAndResetStats(core_timing.GetGlobalTimeUs());
+    }
+
+    double PeekEmulationSpeed() {
+        if (!perf_stats) {
+            return 0;
+        }
+        return perf_stats->PeekEmulationSpeed(core_timing.GetGlobalTimeUs());
     }
 
     Timing::CoreTiming core_timing;
@@ -620,6 +631,10 @@ void System::GatherGPUDirtyMemory(std::function<void(PAddr, size_t)>& callback) 
 
 PerfStatsResults System::GetAndResetPerfStats() {
     return impl->GetAndResetPerfStats();
+}
+
+double System::PeekEmulationSpeed() {
+    return impl->PeekEmulationSpeed();
 }
 
 Kernel::PhysicalCore& System::CurrentPhysicalCore() {

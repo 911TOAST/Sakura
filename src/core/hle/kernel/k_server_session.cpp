@@ -1166,7 +1166,7 @@ Result KServerSession::ReceiveRequest(KernelCore& kernel, uintptr_t server_messa
             ASSERT(m_current_request == request);
             m_current_request = nullptr;
             if (!m_request_list.empty()) {
-                this->NotifyAvailable(kernel);
+                this->NotifyAvailableLocked(kernel);
             }
         }
 
@@ -1232,7 +1232,7 @@ Result KServerSession::SendReply(KernelCore& kernel, uintptr_t server_message, u
         // Clear the current request, since we're processing it.
         m_current_request = nullptr;
         if (!m_request_list.empty()) {
-            this->NotifyAvailable(kernel);
+            this->NotifyAvailableLocked(kernel);
         }
     }
 
@@ -1344,7 +1344,7 @@ Result KServerSession::OnRequest(KernelCore& kernel, KSessionRequest* request) {
 
         // If we were empty, signal.
         if (was_empty) {
-            this->NotifyAvailable(kernel);
+            this->NotifyAvailableLocked(kernel);
         }
 
         // If we have a request event, this is asynchronous, and we don't need to wait.
@@ -1533,7 +1533,8 @@ void KServerSession::OnClientClosed(KernelCore& kernel) {
     }
 
     // Notify.
-    this->NotifyAvailable(kernel, ResultSessionClosed);
+    KScopedSchedulerLock sl{kernel};
+    this->NotifyAvailableLocked(kernel, ResultSessionClosed);
 }
 
 } // namespace Kernel

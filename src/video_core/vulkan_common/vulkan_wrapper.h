@@ -181,6 +181,7 @@ struct InstanceDispatch {
     PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2{};
     PFN_vkGetPhysicalDeviceFormatProperties vkGetPhysicalDeviceFormatProperties{};
     PFN_vkGetPhysicalDeviceFormatProperties2 vkGetPhysicalDeviceFormatProperties2{};
+    PFN_vkGetPhysicalDeviceImageFormatProperties2 vkGetPhysicalDeviceImageFormatProperties2{};
     PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties{};
     PFN_vkGetPhysicalDeviceMemoryProperties2 vkGetPhysicalDeviceMemoryProperties2{};
     PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties{};
@@ -1132,6 +1133,9 @@ public:
     VkFormatProperties GetFormatProperties(VkFormat) const noexcept;
 
     VkFormatProperties3 GetFormatProperties3(VkFormat) const noexcept;
+
+    VkResult GetImageFormatProperties2(const VkPhysicalDeviceImageFormatInfo2&,
+                                       VkImageFormatProperties2&) const noexcept;
 
     std::vector<VkExtensionProperties> EnumerateDeviceExtensionProperties() const;
 

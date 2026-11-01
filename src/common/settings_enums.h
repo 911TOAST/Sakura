@@ -139,7 +139,7 @@ ENUM(AstcRecompression, Uncompressed, Bc1, Bc3);
 ENUM(FramePacingMode, Target_Auto, Target_30, Target_60, Target_90, Target_120);
 ENUM(VSyncMode, Immediate, Mailbox, Fifo, FifoRelaxed);
 ENUM(VramUsageMode, Conservative, Aggressive);
-ENUM(RendererBackend, OpenGL_GLSL, Vulkan, Null, OpenGL_GLASM, OpenGL_SPIRV);
+ENUM(RendererBackend, OpenGL_GLSL, Vulkan, Null, OpenGL_GLASM, OpenGL_SPIRV, Malikan);
 ENUM(GpuAccuracy, Low, High);
 ENUM(DmaAccuracy, Default, Unsafe, Safe);
 ENUM(GpuFenceBehavior, Default, Immediate, Balanced, Accurate, Strict);
@@ -157,7 +157,7 @@ ENUM(AspectRatio, R16_9, R4_3, R21_9, R16_10, R32_9, Stretch);
 ENUM(ConsoleMode, Handheld, Docked);
 ENUM(AppletMode, HLE, LLE);
 ENUM(SpirvOptimizeMode, Never, OnLoad, Always);
-ENUM(GpuOverclock, Normal, Medium, High)
+ENUM(GpuOverclock, Normal, Medium, High, VeryHigh, Extreme)
 ENUM(GpuUnswizzleSize, VerySmall, Small, Normal, Large, VeryLarge)
 ENUM(GpuUnswizzle, VeryLow, Low, Normal, Medium, High)
 ENUM(GpuUnswizzleChunk, VeryLow, Low, Normal, Medium, High)

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/dialog_progress_layout"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -15,12 +16,15 @@
         android:textAppearance="?attr/textAppearanceHeadline6"
         android:textColor="?attr/colorPrimary" />
 
-    <ProgressBar
+    <com.google.android.material.progressindicator.CircularProgressIndicator
         android:id="@+id/progress_bar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:indeterminate="true"
+        android:contentDescription="@string/loading"
+        app:indicatorSize="40dp"
+        app:trackThickness="4dp"
         android:layout_marginBottom="8dp" />
 
     <TextView

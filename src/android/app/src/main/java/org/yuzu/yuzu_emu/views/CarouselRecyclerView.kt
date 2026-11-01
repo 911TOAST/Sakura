@@ -81,8 +81,16 @@ class CarouselRecyclerView @JvmOverloads constructor(
             invalidate()
         }
 
+    private val motionBlur = MotionBlur(this)
+
     init {
         setChildrenDrawingOrderEnabled(true)
+        addOnScrollListener(motionBlur)
+    }
+
+    override fun onDetachedFromWindow() {
+        motionBlur.stop()
+        super.onDetachedFromWindow()
     }
 
     override fun setAdapter(adapter: Adapter<*>?) {

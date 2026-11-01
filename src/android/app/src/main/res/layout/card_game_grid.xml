@@ -6,56 +6,54 @@
     android:layout_height="wrap_content"
     android:focusable="false"
     android:focusableInTouchMode="false"
-    android:padding="4dp">
+    android:padding="6dp">
 
-    <org.yuzu.yuzu_emu.views.GradientBorderCardView
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/card_game_grid"
-        app:cardElevation="0dp"
-        app:cardBackgroundColor="@color/neon_card_background"
-        app:strokeWidth="0dp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:layout_margin="4dp"
         android:clickable="true"
         android:clipToPadding="true"
         android:focusable="true"
         android:transitionName="card_game"
-        app:cardCornerRadius="16dp"
-        android:foreground="@color/neon_border_gradient_start">
+        app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp">
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingLeft="4dp"
-            android:paddingRight="4dp"
-            android:paddingBottom="2dp">
+            android:padding="10dp">
 
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/image_game_screen"
-                android:layout_width="150dp"
-                android:layout_height="150dp"
+                android:layout_width="148dp"
+                android:layout_height="148dp"
+                android:scaleType="centerCrop"
+                android:transitionName="game_artwork"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:shapeAppearance="@style/ShapeAppearance.Material3.Corner.Medium"
-                android:scaleType="centerCrop"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.sakura.GameArtwork"
                 tools:src="@drawable/default_icon" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/text_game_title"
-                style="@style/SynthwaveText.Body"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:gravity="center"
-                android:requiresFadingEdge="horizontal"
-                android:textAlignment="center"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:maxLines="1"
+                android:layout_marginTop="10dp"
                 android:ellipsize="end"
+                android:fontFamily="@font/google_sans_medium"
+                android:gravity="center"
+                android:letterSpacing="0.005"
+                android:lineSpacingExtra="1dp"
+                android:maxLines="2"
+                android:minLines="2"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="13sp"
+                app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="@+id/image_game_screen"
                 app:layout_constraintStart_toStartOf="@+id/image_game_screen"
                 app:layout_constraintTop_toBottomOf="@+id/image_game_screen"
@@ -63,6 +61,6 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-    </org.yuzu.yuzu_emu.views.GradientBorderCardView>
+    </com.google.android.material.card.MaterialCardView>
 
 </FrameLayout>

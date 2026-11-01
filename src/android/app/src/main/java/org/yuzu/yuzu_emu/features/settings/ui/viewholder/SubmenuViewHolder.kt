@@ -17,6 +17,7 @@ class SubmenuViewHolder(val binding: ListItemSettingBinding, adapter: SettingsAd
 
     override fun bind(item: SettingsItem) {
         setting = item as SubmenuSetting
+        binding.iconContainer.setVisible(setting.iconId != 0)
         binding.icon.setVisible(setting.iconId != 0)
         if (setting.iconId != 0) {
             binding.icon.setImageDrawable(

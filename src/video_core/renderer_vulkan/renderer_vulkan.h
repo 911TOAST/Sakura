@@ -37,7 +37,7 @@ namespace Vulkan {
 Device CreateDevice(const vk::Instance& instance, const vk::InstanceDispatch& dld,
                     VkSurfaceKHR surface);
 
-class RendererVulkan final : public VideoCore::RendererBase {
+class RendererVulkan : public VideoCore::RendererBase {
 public:
     explicit RendererVulkan(Core::Frontend::EmuWindow& emu_window,
                             Tegra::MaxwellDeviceMemoryManager& device_memory_, Tegra::GPU& gpu_,
@@ -55,6 +55,9 @@ public:
     [[nodiscard]] std::string GetDeviceVendor() const override {
         return device.GetDriverName();
     }
+    [[nodiscard]] std::string GetDeviceModel() const override {
+        return std::string{device.GetModelName()};
+    }
 
     bool IsHeadless() const override { return is_headless; }
     const std::vector<u8>& GetLastRenderedFrame() const override { return headless_frame_data; }
@@ -63,6 +66,9 @@ public:
 
     // Enhanced platform-specific initialization
     void InitializePlatformSpecific();
+
+protected:
+    Device& GetDevice() { return device; }
 
 private:
     void InterpolateFrames(Frame* prev_frame, Frame* curr_frame);

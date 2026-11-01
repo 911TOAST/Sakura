@@ -130,10 +130,6 @@ class DriverManagerFragment : Fragment() {
         }
 
         setInsets()
-
-        if (!GpuDriverHelper.supportsCustomDriverLoading()) {
-            showDriverWarningDialog()
-        }
     }
 
     override fun onDestroy() {

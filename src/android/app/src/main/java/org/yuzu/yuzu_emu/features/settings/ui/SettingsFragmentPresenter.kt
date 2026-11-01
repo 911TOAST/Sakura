@@ -26,10 +26,12 @@ import org.yuzu.yuzu_emu.features.settings.model.Settings.MenuTag
 import org.yuzu.yuzu_emu.features.settings.model.ShortSetting
 import org.yuzu.yuzu_emu.features.settings.model.StringSetting
 import org.yuzu.yuzu_emu.features.settings.model.view.*
+import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.InputHandler
 import org.yuzu.yuzu_emu.utils.NativeConfig
 import org.yuzu.yuzu_emu.utils.DirectoryInitialization
 import org.yuzu.yuzu_emu.utils.FullscreenHelper
+import org.yuzu.yuzu_emu.utils.IconHelper
 import androidx.core.content.edit
 import androidx.fragment.app.FragmentActivity
 import org.yuzu.yuzu_emu.fragments.MessageDialogFragment
@@ -120,6 +122,7 @@ class SettingsFragmentPresenter(
             MenuTag.SECTION_ROOT -> addConfigSettings(sl)
             MenuTag.SECTION_SYSTEM -> addSystemSettings(sl)
             MenuTag.SECTION_RENDERER -> addGraphicsSettings(sl)
+            MenuTag.SECTION_RENDERER_ADVANCED -> addGraphicsAdvancedSettings(sl)
             MenuTag.SECTION_PERFORMANCE_STATS -> addPerformanceOverlaySettings(sl)
             MenuTag.SECTION_SOC_OVERLAY -> addSocOverlaySettings(sl)
             MenuTag.SECTION_INPUT_OVERLAY -> addInputOverlaySettings(sl)
@@ -202,14 +205,6 @@ class SettingsFragmentPresenter(
             )
             add(
                 SubmenuSetting(
-                    titleId = R.string.preferences_debug,
-                    descriptionId = R.string.preferences_debug_description,
-                    iconId = R.drawable.ic_code,
-                    menuKey = MenuTag.SECTION_DEBUG
-                )
-            )
-            add(
-                SubmenuSetting(
                     titleId = R.string.applets_menu,
                     descriptionId = R.string.applets_menu_description,
                     iconId = R.drawable.ic_applet,
@@ -266,10 +261,14 @@ class SettingsFragmentPresenter(
         }
     }
 
-    // TODO(crueter): sub-submenus?
+    // The main graphics list is kept deliberately short: DEAD PERFORMANCE up top, the handful of
+    // settings people actually change, then display. Everything else lives behind
+    // SECTION_RENDERER_ADVANCED, reachable by long-pressing DEAD PERFORMANCE or via the submenu row.
     private fun addGraphicsSettings(sl: ArrayList<SettingsItem>) {
         sl.apply {
             // add(IntSetting.RENDERER_NVDEC_EMULATION.key)
+
+            add(SettingsItem.DEAD_PERFORMANCE_COMBINED)
 
             add(IntSetting.RENDERER_RESOLUTION.key)
             add(IntSetting.RENDERER_VSYNC.key)
@@ -278,20 +277,48 @@ class SettingsFragmentPresenter(
                 add(IntSetting.FSR_SHARPENING_SLIDER.key)
             }
             add(IntSetting.RENDERER_ANTI_ALIASING.key)
+            add(BooleanSetting.RENDERER_USE_DISK_SHADER_CACHE.key)
 
+            add(HeaderSetting(R.string.display))
+
+            add(IntSetting.RENDERER_SCREEN_LAYOUT.key)
+            add(IntSetting.RENDERER_ASPECT_RATIO.key)
+            add(IntSetting.VERTICAL_ALIGNMENT.key)
+            add(BooleanSetting.PICTURE_IN_PICTURE.key)
+
+            add(
+                SubmenuSetting(
+                    titleId = R.string.graphics_advanced,
+                    descriptionId = R.string.graphics_advanced_description,
+                    iconId = R.drawable.ic_graphics,
+                    menuKey = MenuTag.SECTION_RENDERER_ADVANCED
+                )
+            )
+        }
+    }
+
+    private fun addGraphicsAdvancedSettings(sl: ArrayList<SettingsItem>) {
+        sl.apply {
             add(HeaderSetting(R.string.advanced))
 
             add(IntSetting.RENDERER_ACCURACY.key)
             add(IntSetting.DMA_ACCURACY.key)
             add(IntSetting.GPU_FENCE_BEHAVIOR.key)
+            add(IntSetting.FRAME_PACING_MODE.key)
             add(IntSetting.MAX_ANISOTROPY.key)
             add(IntSetting.RENDERER_VRAM_USAGE_MODE.key)
             add(IntSetting.RENDERER_ASTC_DECODE_METHOD.key)
 
             add(BooleanSetting.SYNC_MEMORY_OPERATIONS.key)
-            add(BooleanSetting.RENDERER_USE_DISK_SHADER_CACHE.key)
-            add(BooleanSetting.RENDERER_FORCE_MAX_CLOCK.key)
+            // Force max clock drives TurboMode, whose Android path is adrenotools_set_turbo(),
+            // so the toggle is inert on Mali/PowerVR parts (MediaTek, Exynos, Kirin).
+            if (GpuDriverHelper.isAdrenoGpu()) {
+                add(BooleanSetting.RENDERER_FORCE_MAX_CLOCK.key)
+            }
             add(BooleanSetting.RENDERER_REACTIVE_FLUSHING.key)
+            add(BooleanSetting.MALI_AFRC.key)
+            add(BooleanSetting.NATIVE_GPU_MODE.key)
+            add(BooleanSetting.NO_WELL.key)
             add(BooleanSetting.ENABLE_BUFFER_HISTORY.key)
             add(BooleanSetting.ENABLE_GPU_BUFFER_READBACK.key)
             add(BooleanSetting.USE_OPTIMIZED_VERTEX_BUFFERS.key)
@@ -314,13 +341,6 @@ class SettingsFragmentPresenter(
             add(IntSetting.RENDERER_DYNA_STATE.key)
             add(BooleanSetting.RENDERER_VERTEX_INPUT_DYNAMIC_STATE.key)
             add(IntSetting.RENDERER_SAMPLE_SHADING.key)
-
-            add(HeaderSetting(R.string.display))
-
-            add(IntSetting.RENDERER_SCREEN_LAYOUT.key)
-            add(IntSetting.RENDERER_ASPECT_RATIO.key)
-            add(IntSetting.VERTICAL_ALIGNMENT.key)
-            add(BooleanSetting.PICTURE_IN_PICTURE.key)
         }
     }
 
@@ -1252,6 +1272,29 @@ class SettingsFragmentPresenter(
                 )
             )
 
+            val iconSet: AbstractIntSetting = object : AbstractIntSetting {
+                override fun getInt(needsGlobal: Boolean): Int = IconHelper.getIcon(context)
+                override fun setInt(value: Int) = IconHelper.setIcon(context, value)
+                override val key: String = IconHelper.KEY
+                override val isRuntimeModifiable: Boolean = true
+                override val pairedSettingKey: String = ""
+                override val isSwitchable: Boolean = false
+                override var global: Boolean = true
+                override val isSaveable: Boolean = true
+                override val defaultValue: Int = IconHelper.DEF
+                override fun getValueAsString(needsGlobal: Boolean): String = getInt(needsGlobal).toString()
+                override fun reset() = setInt(defaultValue)
+            }
+            add(
+                SingleChoiceSetting(
+                    iconSet,
+                    titleId = R.string.change_app_icon,
+                    descriptionId = R.string.change_app_icon_description,
+                    choicesId = R.array.appIconEntries,
+                    valuesId = R.array.appIconValues
+                )
+            )
+
             add(HeaderSetting(R.string.buttons))
             add(BooleanSetting.ENABLE_FOLDER_BUTTON.key)
             add(BooleanSetting.ENABLE_QLAUNCH_BUTTON.key)
@@ -1266,14 +1309,11 @@ class SettingsFragmentPresenter(
             add(HeaderSetting(R.string.gpu))
 
             add(IntSetting.RENDERER_BACKEND.key)
-            add(BooleanSetting.RENDERER_DEBUG.key)
-            add(BooleanSetting.RENDERER_PATCH_OLD_QCOM_DRIVERS.key)
             add(BooleanSetting.BUFFER_REORDER_DISABLE.key)
 
             add(HeaderSetting(R.string.cpu))
 
-            add(IntSetting.CPU_BACKEND.key)
-            add(IntSetting.CPU_ACCURACY.key)
+            // CPU backend and accuracy are intentionally not exposed: 64-bit code always uses NCE.
             add(BooleanSetting.USE_AUTO_STUB.key)
             add(SettingsItem.FASTMEM_COMBINED)
             add(BooleanSetting.CPUOPT_UNSAFE_HOST_MMU.key)

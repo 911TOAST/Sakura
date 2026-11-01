@@ -59,10 +59,13 @@ ButtonPoller::ButtonPoller(Core::System& system, WindowSystem& window_system) {
             using namespace std::chrono_literals;
             std::unique_lock lk{m_mutex};
             m_cv.wait_for(lk, 50ms);
-            if (stop_token.stop_requested())
+            if (stop_token.stop_requested()) {
                 break;
+            }
+            // The controller callback takes this mutex to update the same press state. Sleeping
+            // here while still holding it delayed every real button event by the sleep length.
+            lk.unlock();
             OnButtonStateChanged(window_system);
-            std::this_thread::sleep_for(5ms);
         }
     });
 }

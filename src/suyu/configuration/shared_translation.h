@@ -57,6 +57,8 @@ static const std::map<Settings::GpuAccuracy, QString> gpu_accuracy_texts_map = {
 // (OpenGL_GLSL/OpenGL_GLASM/OpenGL_SPIRV/Vulkan/Null) instead of two separate settings.
 static const std::map<Settings::RendererBackend, QString> renderer_backend_texts_map = {
     {Settings::RendererBackend::Vulkan, QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Vulkan"))},
+    {Settings::RendererBackend::Malikan,
+     QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "Malikan (experimental)"))},
     {Settings::RendererBackend::OpenGL_GLSL,
      QStringLiteral(QT_TRANSLATE_NOOP("GMainWindow", "OpenGL"))},
     {Settings::RendererBackend::OpenGL_GLASM,

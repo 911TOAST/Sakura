@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- =====================================================================
+         Material 3 Expressive shape scale
+         Research finding: larger radii are perceived as more modern, energetic
+         and friendly. M3E pushes corners significantly beyond baseline M3:
+           Small  : 16dp  (baseline M3: 12dp) - chips, input fields, snackbars
+           Medium : 24dp  (baseline M3: 18dp) - cards, dialogs, sheets
+           Large  : 32dp  (baseline M3: 24dp) - bottom sheets, nav drawers
+           Full   : 50%   - FABs, pills, badges (unchanged, already spec-max)
+         Kept consistent with SuyuShapes in SuyuM3.kt on the Compose side.
+         ===================================================================== -->
+    <style name="ShapeAppearance.Suyu.Small" parent="ShapeAppearance.Material3.Corner.Small">
+        <item name="cornerSize">16dp</item>
+    </style>
+    <style name="ShapeAppearance.Suyu.Medium" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">24dp</item>
+    </style>
+    <style name="ShapeAppearance.Suyu.Large" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSize">32dp</item>
+    </style>
+    <style name="ShapeAppearance.Suyu.Full" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
+</resources>

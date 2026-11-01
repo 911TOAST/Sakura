@@ -443,6 +443,17 @@ class SettingsAdapter(
     }
 
     fun onLongClick(item: SettingsItem, position: Int): Boolean {
+        // DEAD PERFORMANCE is a bundle of settings, not a single stored value, so long-press
+        // opens the advanced graphics screen instead of offering to reset it.
+        if (item.setting.key == SettingsItem.DEAD_PERFORMANCE_COMBINED) {
+            val action = SettingsNavigationDirections.actionGlobalSettingsFragment(
+                Settings.MenuTag.SECTION_RENDERER_ADVANCED,
+                null
+            )
+            fragment.view?.findNavController()?.navigate(action)
+            return true
+        }
+
         SettingsDialogFragment.newInstance(
             settingsViewModel,
             item,

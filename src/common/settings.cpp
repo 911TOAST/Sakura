@@ -202,18 +202,106 @@ bool IsFastmemEnabled() {
 
 static bool is_nce_enabled = false;
 
+void ApplyPerformanceProfile() {
+    // Applied while the game is being loaded, before the renderer and its pipeline cache are
+    // constructed. Anything set later (for example inside a renderer constructor) is too late for
+    // settings that are read during pipeline cache creation.
+#if defined(__ANDROID__)
+#if defined(SAKURA_OPTIMIZED)
+    // Keep the optimized build on the Mali-tuned Vulkan path regardless of an old config file.
+    values.renderer_backend.SetValue(RendererBackend::Malikan);
+#endif
+    // Everything below is a defaults profile, not a per-launch override. Re-applying it used to
+    // silently reset every graphics/HLE toggle the user changed and every per-game override on
+    // the next launch. first_launch is the persisted "this profile has not run yet" marker.
+    if (!values.first_launch.GetValue()) {
+        return;
+    }
+    values.first_launch.SetValue(false);
+
+    // Grouped, dirty-mask vertex-buffer binding is strictly cheaper than the legacy per-slot path.
+    values.use_optimized_vertex_buffers.SetValue(true);
+    // Heavyweight, throughput-oriented profile. These are deliberately set before the renderer,
+    // device and pipeline cache are constructed so every subsystem picks them up.
+    values.use_asynchronous_shaders.SetValue(true);
+    values.use_vulkan_driver_pipeline_cache.SetValue(true);
+    values.use_disk_shader_cache.SetValue(true);
+    values.native_gpu_mode.SetValue(true);
+    values.use_asynchronous_gpu_emulation.SetValue(true);
+    // Asynchronous presentation is off by default on Android for a reason: the extra present
+    // thread races swapchain recreation. It buys latency, not throughput.
+    values.async_presentation.SetValue(false);
+    values.barrier_feedback_loops.SetValue(true);
+    values.use_fast_gpu_time.SetValue(true);
+    values.fast_gpu_time.SetValue(GpuOverclock::High);
+    values.gpu_accuracy.SetValue(GpuAccuracy::Low);
+    values.current_gpu_accuracy = GpuAccuracy::Low;
+    values.vram_usage_mode.SetValue(VramUsageMode::Aggressive);
+
+    // Mailbox presents the newest frame on each display refresh without FIFO's producer stall or
+    // Immediate's tearing and uneven delivery.
+    values.vsync_mode.SetValue(VSyncMode::Mailbox);
+    values.frame_pacing_mode.SetValue(FramePacingMode::Target_Auto);
+    values.use_video_framerate.SetValue(false);
+
+    // Never inherit a slowed-down emulation clock from a global or per-game override.
+    values.use_speed_limit.SetValue(true);
+    values.speed_limit.SetValue(100);
+    values.current_speed_mode.SetValue(SpeedMode::Standard);
+
+    // Fewer pipeline permutations and less per-draw state churn.
+    values.dyna_state.SetValue(ExtendedDynamicState::EDS2);
+    values.vertex_input_dynamic_state.SetValue(true);
+
+    // Native guest resolution, no supersampling: the profile never pays for extra shaded pixels,
+    // and FSR's extra full-screen taps cost more than the 0.75x fill saving on this GPU.
+    if (values.resolution_setup.GetValue() > ResolutionSetup::Res1X) {
+        values.resolution_setup.SetValue(ResolutionSetup::Res1X);
+    }
+    values.scaling_filter.SetValue(ScalingFilter::Bilinear);
+
+    // Cheap texture paths: no anisotropic filtering, no AA, reactive flushing instead of forced
+    // flushes. CPU-side invalidation stays enabled: it is a correctness barrier, not a luxury.
+    values.anti_aliasing.SetValue(AntiAliasing::None);
+    values.max_anisotropy.SetValue(AnisotropyMode::Default);
+    values.accelerate_astc.SetValue(AstcDecodeMode::Gpu);
+    values.astc_recompression.SetValue(AstcRecompression::Uncompressed);
+    values.use_reactive_flushing.SetValue(true);
+    // Skipping CPU-side invalidation is a coherency gamble: the GPU can write a buffer the guest
+    // still reads from stale cache, which shows up as random guest crashes, not as a visual bug.
+    values.skip_cpu_inner_invalidation.SetValue(false);
+
+    // CPU fallback (when NCE is unavailable) uses the fastest Dynarmic configuration.
+    values.cpu_accuracy.SetValue(CpuAccuracy::Unsafe);
+
+    // Shader-side and diagnostic savings. Loop safety checks stay on: removing them turns a
+    // malformed shader into an unbounded loop, which the OS sees as a frozen, killed app.
+    values.disable_shader_loop_safety_checks.SetValue(false);
+    values.renderer_debug.SetValue(false);
+    values.renderer_shader_feedback.SetValue(false);
+
+    LOG_INFO(Common,
+             "[Malikan] Performance defaults applied once: native 1x + bilinear, mailbox present, "
+             "async GPU, EDS2 + dynamic vertex input, reactive flushing, low GPU accuracy");
+#endif
+}
+
 void SetNceEnabled(bool is_39bit) {
-    const bool is_nce_selected = values.cpu_backend.GetValue() == CpuBackend::Nce;
-    if (is_nce_selected && !IsFastmemEnabled()) {
+    // The JIT/Dynarmic choice was removed from the UI: 64-bit code always prefers native
+    // execution. Dynarmic is still compiled in as the fallback when NCE cannot be used.
+    const bool fastmem_available = IsFastmemEnabled();
+    if (!fastmem_available) {
         LOG_WARNING(Common, "Fastmem is required to natively execute code in a performant manner, "
                             "falling back to Dynarmic");
     }
-    if (is_nce_selected && !is_39bit) {
+    if (!is_39bit) {
         LOG_WARNING(
             Common,
             "Program does not utilize 39-bit address space, unable to natively execute code");
     }
-    is_nce_enabled = IsFastmemEnabled() && is_nce_selected && is_39bit;
+    is_nce_enabled = fastmem_available && is_39bit;
+
+    ApplyPerformanceProfile();
 }
 
 bool IsNceEnabled() {

@@ -32,10 +32,8 @@ if (YUZU_LEGACY)
     add_compile_definitions(YUZU_LEGACY)
 endif()
 
-# Genshin Spoof (android only)
-if (GENSHIN_SPOOF)
-    message(WARNING "Making Genshin spoof build")
-    add_compile_definitions(GENSHIN_SPOOF)
+if (SAKURA_OPTIMIZED)
+    add_compile_definitions(SAKURA_OPTIMIZED)
 endif()
 
 # Build ID (mingw only right now)
@@ -179,6 +177,20 @@ else()
             $<$<COMPILE_LANGUAGE:C,CXX>:-Wno-nullability-completeness>)
     endif()
 
+    if (ANDROID)
+        add_compile_options(
+            $<$<COMPILE_LANGUAGE:C,CXX>:-O3>
+            $<$<COMPILE_LANGUAGE:C,CXX>:-fomit-frame-pointer>
+            $<$<COMPILE_LANGUAGE:C,CXX>:-fvisibility=hidden>
+            $<$<COMPILE_LANGUAGE:CXX>:-fvisibility-inlines-hidden>
+            $<$<COMPILE_LANGUAGE:C,CXX>:-fvectorize>
+            $<$<COMPILE_LANGUAGE:C,CXX>:-fslp-vectorize>
+            $<$<COMPILE_LANGUAGE:C,CXX>:-fno-math-errno>
+            $<$<COMPILE_LANGUAGE:C,CXX>:-fstrict-aliasing>
+            $<$<COMPILE_LANGUAGE:C,CXX>:-funroll-loops>
+        )
+    endif()
+
     if (ARCHITECTURE_x86_64)
         add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-mcx16>)
         if (PLATFORM_LINUX OR PLATFORM_FREEBSD)
@@ -239,17 +251,19 @@ endif()
 add_subdirectory(common)
 add_subdirectory(network)
 
-if (YUZU_ROOM)
-    add_subdirectory(dedicated_room)
-endif()
+if (NOT ANDROID)
+    if (YUZU_ROOM)
+        add_subdirectory(dedicated_room)
+    endif()
 
-if (YUZU_ROOM_STANDALONE)
-    add_subdirectory(yuzu_room_standalone)
-    set_target_properties(yuzu-room PROPERTIES OUTPUT_NAME "suyu-room")
-endif()
+    if (YUZU_ROOM_STANDALONE)
+        add_subdirectory(yuzu_room_standalone)
+        set_target_properties(yuzu-room PROPERTIES OUTPUT_NAME "suyu-room")
+    endif()
 
-if (YUZU_STATIC_ROOM)
-    return()
+    if (YUZU_STATIC_ROOM)
+        return()
+    endif()
 endif()
 
 add_subdirectory(nintendo_library)
@@ -261,21 +275,23 @@ add_subdirectory(input_common)
 add_subdirectory(frontend_common)
 add_subdirectory(shader_recompiler)
 
-if (YUZU_TESTS)
-    add_subdirectory(tests)
-endif()
+if (NOT ANDROID)
+    if (YUZU_TESTS)
+        add_subdirectory(tests)
+    endif()
 
-if (YUZU_CMD)
-    add_subdirectory(suyu_cmd)
-endif()
+    if (YUZU_CMD)
+        add_subdirectory(suyu_cmd)
+    endif()
 
-if (ENABLE_QT)
-    add_subdirectory(qt_common)
-    add_subdirectory(suyu)
-endif()
+    if (ENABLE_QT)
+        add_subdirectory(qt_common)
+        add_subdirectory(suyu)
+    endif()
 
-if (SUYU_BUILD_LIBRETRO_CORE)
-    add_subdirectory(libretro_core)
+    if (SUYU_BUILD_LIBRETRO_CORE)
+        add_subdirectory(libretro_core)
+    endif()
 endif()
 
 if (ENABLE_WEB_SERVICE)

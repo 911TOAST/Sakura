@@ -7,6 +7,9 @@
 #pragma once
 
 #include <common/settings_common.h>
+#ifdef __ANDROID__
+#include <android/api-level.h>
+#endif
 #include "common/common_types.h"
 #include "common/settings_setting.h"
 #include "common/settings_enums.h"
@@ -54,7 +57,16 @@ namespace AndroidSettings {
         Settings::SwitchableSetting<std::string, false> driver_path{linkage, "", "driver_path",
                                                                     Settings::Category::GpuDriver};
 
-        Settings::Setting<s32> theme{linkage, 0, "theme", Settings::Category::Android};
+        // Material You is the Material 3 look the app already ships (values-v31 dynamic roles), but
+        // it used to be off by default even on Android 16. Pre-S devices keep the static palette
+        // because the dynamic system colors do not exist there; the user can still pick either.
+        Settings::Setting<s32> theme{linkage,
+#if defined(__ANDROID__)
+                                     android_get_device_api_level() >= 31 ? 1 : 0,
+#else
+                                     0,
+#endif
+                                     "theme", Settings::Category::Android};
         Settings::Setting<s32> theme_mode{linkage, -1, "theme_mode", Settings::Category::Android};
         Settings::Setting<s32> static_theme_color{linkage, 0, "static_theme_color", Settings::Category::Android};
         Settings::Setting<bool> black_backgrounds{linkage, false, "black_backgrounds",
@@ -147,7 +159,13 @@ namespace AndroidSettings {
                                                       &show_performance_overlay};
 
 
-        Settings::Setting<s32> pipeline_worker_count{linkage, 4, "pipeline_worker_count",
+        // These threads run the driver's shader compiler via vkCreateGraphicsPipelines, which is
+        // the slow path on Mali and the reason async shaders exist. Desktop sizes this pool as
+        // cores-1; Android was pinned to the bottom of its own 4-8 UI range even though MediaTek
+        // SoCs ship eight cores. GetTotalPipelineWorkers() already caps it at hardware_concurrency
+        // - 1, so this cannot oversubscribe a smaller chip - it just uses more of an eight-core one.
+        // Reversible per-user: Graphics -> Hacks -> "Pipeline worker cores".
+        Settings::Setting<s32> pipeline_worker_count{linkage, 8, "pipeline_worker_count",
                                  Settings::Category::Android,
                                  Settings::Specialization::Default,
                                  true,

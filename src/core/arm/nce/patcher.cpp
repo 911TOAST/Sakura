@@ -189,9 +189,11 @@ bool Patcher::RelocateAndCopy(Common::ProcessAddress load_base, const Kernel::Co
     const auto ApplyBranchToPatchRelocation = [&](u32* target, const Relocation& rel) {
         oaknut::CodeGenerator rc{target};
         if (mode == PatchMode::PreText) {
-            rc.B(rel.patch_offset - patch_size - rel.module_offset);
+            rc.B(rel.patch_offset - static_cast<ptrdiff_t>(patch_size) -
+               static_cast<ptrdiff_t>(rel.module_offset));
         } else {
-            rc.B(total_program_size - rel.module_offset + rel.patch_offset);
+            rc.B(static_cast<ptrdiff_t>(total_program_size) -
+               static_cast<ptrdiff_t>(rel.module_offset) + rel.patch_offset);
         }
     };
 
@@ -208,9 +210,11 @@ bool Patcher::RelocateAndCopy(Common::ProcessAddress load_base, const Kernel::Co
     const auto ApplyBranchToModuleRelocation = [&](u32* target, const Relocation& rel) {
         oaknut::CodeGenerator rc{target};
         if (mode == PatchMode::PreText) {
-            rc.B(patch_size - rel.patch_offset + rel.module_offset);
+            rc.B(static_cast<ptrdiff_t>(patch_size) - rel.patch_offset +
+               static_cast<ptrdiff_t>(rel.module_offset));
         } else {
-            rc.B(rel.module_offset - total_program_size - rel.patch_offset);
+            rc.B(static_cast<ptrdiff_t>(rel.module_offset) -
+               static_cast<ptrdiff_t>(total_program_size) - rel.patch_offset);
         }
     };
 
@@ -435,6 +439,20 @@ void Patcher::WriteSaveContext(oaknut::VectorCodeGenerator& cg) {
 }
 
 void Patcher::WriteSvcTrampoline(ModuleDestLabel module_dest, u32 svc_id, oaknut::VectorCodeGenerator& cg, oaknut::Label& save_ctx, oaknut::Label& load_ctx) {
+    // svcGetSystemTick is a pure read of the emulated counter. When the guest
+    // clock is just the scaled host counter (the default timing configuration),
+    // service it directly in guest mode instead of saving the full guest
+    // context, returning to the host and resuming. Tick polling is common in
+    // engine frame loops, so this removes a large amount of SVC round-trip
+    // overhead.
+    if (svc_id == static_cast<u32>(Kernel::Svc::SvcId::GetSystemTick) &&
+        Settings::values.use_multi_core.GetValue() &&
+        Settings::values.fast_cpu_time.GetValue() == Settings::CpuClock::Off &&
+        !Settings::values.sync_core_speed.GetValue()) {
+        WriteCntpctHandler(module_dest, X0, cg);
+        return;
+    }
+
     // Determine if we're writing to the pre-patch buffer
     const bool is_pre = (&cg == &c_pre);
 

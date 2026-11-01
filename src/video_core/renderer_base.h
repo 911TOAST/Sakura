@@ -6,6 +6,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "common/common_funcs.h"
@@ -47,6 +48,7 @@ public:
     [[nodiscard]] virtual RasterizerInterface* ReadRasterizer() = 0;
 
     [[nodiscard]] virtual std::string GetDeviceVendor() const = 0;
+    [[nodiscard]] virtual std::string GetDeviceModel() const { return {}; }
 
     virtual bool IsHeadless() const { return false; }
     virtual const std::vector<u8>& GetLastRenderedFrame() const {

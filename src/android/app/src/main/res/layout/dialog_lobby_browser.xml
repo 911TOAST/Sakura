@@ -52,12 +52,15 @@
                         android:text="@string/refresh"
                         app:icon="@drawable/ic_refresh" />
 
-                    <ProgressBar
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
                         android:id="@+id/progress_bar"
-                        style="?android:attr/progressBarStyleSmall"
                         android:layout_width="24dp"
                         android:layout_height="24dp"
                         android:layout_gravity="center"
+                        android:indeterminate="true"
+                        android:contentDescription="@string/loading"
+                        app:indicatorSize="24dp"
+                        app:trackThickness="3dp"
                         android:visibility="gone" />
                 </FrameLayout>
             </LinearLayout>

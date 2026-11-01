@@ -23,8 +23,8 @@ class KSynchronizationObject : public KAutoObjectWithList {
 
 public:
     struct ThreadListNode {
-        ThreadListNode* next{};
-        KThread* thread{};
+        ThreadListNode* next;
+        KThread* thread;
     };
 
     static Result Wait(KernelCore& kernel, s32* out_index, KSynchronizationObject** objects, const s32 num_objects, s64 timeout);
@@ -76,6 +76,10 @@ protected:
     void NotifyAvailable(KernelCore& kernel, Result result);
     void NotifyAvailable(KernelCore& kernel) {
         return this->NotifyAvailable(kernel, ResultSuccess);
+    }
+    void NotifyAvailableLocked(KernelCore& kernel, Result result);
+    void NotifyAvailableLocked(KernelCore& kernel) {
+        return this->NotifyAvailableLocked(kernel, ResultSuccess);
     }
 
 private:

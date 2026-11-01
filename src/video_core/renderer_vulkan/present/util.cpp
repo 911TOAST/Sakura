@@ -196,7 +196,9 @@ vk::ImageView CreateWrappedImageView(const Device& device, vk::Image& image, VkF
 }
 
 vk::RenderPass CreateWrappedRenderPass(const Device& device, VkFormat format,
-                                       VkImageLayout initial_layout) {
+                                       VkImageLayout initial_layout,
+                                       VkImageLayout final_layout,
+                                       VkImageLayout subpass_layout) {
     const VkAttachmentDescription attachment{
         .flags = VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT,
         .format = format,
@@ -207,12 +209,14 @@ vk::RenderPass CreateWrappedRenderPass(const Device& device, VkFormat format,
         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = initial_layout,
-        .finalLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .finalLayout = final_layout,
     };
 
-    constexpr VkAttachmentReference color_attachment_ref{
+    // A tile-based GPU keeps framebuffer compression and transaction elimination only when the
+    // attachment is in COLOR_ATTACHMENT_OPTIMAL. The compatibility layout remains GENERAL.
+    const VkAttachmentReference color_attachment_ref{
         .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_GENERAL,
+        .layout = subpass_layout,
     };
 
     const VkSubpassDescription subpass_description{

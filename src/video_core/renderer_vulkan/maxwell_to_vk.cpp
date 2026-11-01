@@ -4,6 +4,7 @@
 // SPDX-FileCopyrightText: Copyright 2019 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <atomic>
 #include <iterator>
 
 #include "common/assert.h"
@@ -244,9 +245,40 @@ FormatInfo SurfaceFormat(const Device& device, FormatType format_type, bool with
 #undef SURFACE_FORMAT_LIST
     }
     bool const is_srgb = with_srgb && VideoCore::Surface::IsPixelFormatSRGB(pixel_format);
+    const bool prefer_native_formats =
+        Settings::values.native_gpu_mode.GetValue() || device.IsMalikanMode();
+    const bool native_astc_supported =
+        VideoCore::Surface::IsPixelFormatASTC(pixel_format) &&
+        device.IsFormatSupported(tuple.format,
+                                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                     VK_FORMAT_FEATURE_TRANSFER_DST_BIT,
+                                 format_type);
+    // Native GPU mode can use any individual ASTC permutation the host can actually sample,
+    // instead of requiring the all-or-nothing "optimal ASTC" set. Keep the existing native path
+    // for optimal devices, but verify the specific format first so the Mali shortcut in
+    // IsOptimalAstcSupported() cannot hand back an unsupported ASTC format.
+    const bool native_astc = native_astc_supported &&
+                             (device.IsOptimalAstcSupported() || prefer_native_formats);
     // Transcode on hardware that doesn't support ASTC natively
-    if (!device.IsOptimalAstcSupported() && VideoCore::Surface::IsPixelFormatASTC(pixel_format)) {
-        switch (Settings::values.astc_recompression.GetValue()) {
+    if (VideoCore::Surface::IsPixelFormatASTC(pixel_format) && !native_astc) {
+        auto recompression = Settings::values.astc_recompression.GetValue();
+
+        // BCn recompression requires native BCn texture support. Adreno gains it through the
+        // libadrenotools driver patch, but Mali and PowerVR have no equivalent, so returning a
+        // BC format there would hand back a VkFormat the driver cannot sample.
+        if (recompression != Settings::AstcRecompression::Uncompressed &&
+            !device.IsOptimalBcnSupported()) {
+            static std::atomic<bool> bcn_fallback_warned{false};
+            if (!bcn_fallback_warned.exchange(true)) {
+                LOG_WARNING(Render_Vulkan,
+                            "ASTC recompression to BCn requested but this GPU ({}) has no native "
+                            "BCn support; falling back to uncompressed RGBA8.",
+                            device.GetDriverName());
+            }
+            recompression = Settings::AstcRecompression::Uncompressed;
+        }
+
+        switch (recompression) {
         case Settings::AstcRecompression::Uncompressed:
             if (is_srgb) {
                 tuple.format = VK_FORMAT_A8B8G8R8_SRGB_PACK32;

@@ -534,7 +534,7 @@ void GamerEnvironment::SetupSidebar(QHBoxLayout* root_layout) {
     if (!logo_px.isNull()) {
         logo->setPixmap(logo_px);
     } else {
-        logo->setText(QStringLiteral("suyu"));
+        logo->setText(QStringLiteral("Sakura"));
         QFont f = logo->font();
         f.setPixelSize(26);
         f.setBold(true);

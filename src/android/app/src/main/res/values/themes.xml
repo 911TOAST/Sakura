@@ -2,22 +2,72 @@
 <resources>
 
     <style name="Theme.Yuzu.Splash.Main" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/neon_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_suyu_full</item>
+        <item name="windowSplashScreenBackground">@color/suyu_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/sakura_flower</item>
         <item name="postSplashScreenTheme">@style/Theme.Yuzu.Main</item>
     </style>
 
     <style name="Theme.Yuzu.Main" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorError">@color/yuzu_error</item>
-        <item name="colorErrorContainer">@color/yuzu_errorContainer</item>
-        <item name="colorOnError">@color/yuzu_onError</item>
-        <item name="colorOnErrorContainer">@color/yuzu_onErrorContainer</item>
+        <item name="colorPrimary">@color/suyu_primary</item>
+        <item name="colorOnPrimary">@color/suyu_onPrimary</item>
+        <item name="colorPrimaryContainer">@color/suyu_primaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/suyu_onPrimaryContainer</item>
+        <item name="colorSecondary">@color/suyu_secondary</item>
+        <item name="colorOnSecondary">@color/suyu_onSecondary</item>
+        <item name="colorSecondaryContainer">@color/suyu_secondaryContainer</item>
+        <item name="colorOnSecondaryContainer">@color/suyu_onSecondaryContainer</item>
+        <item name="colorTertiary">@color/suyu_tertiary</item>
+        <item name="colorOnTertiary">@color/suyu_onTertiary</item>
+        <item name="colorTertiaryContainer">@color/suyu_tertiaryContainer</item>
+        <item name="colorOnTertiaryContainer">@color/suyu_onTertiaryContainer</item>
+        <item name="android:colorBackground">@color/suyu_background</item>
+        <item name="colorOnBackground">@color/suyu_onBackground</item>
+        <item name="colorSurface">@color/suyu_surface</item>
+        <item name="colorOnSurface">@color/suyu_onSurface</item>
+        <item name="colorSurfaceVariant">@color/suyu_surfaceVariant</item>
+        <item name="colorOnSurfaceVariant">@color/suyu_onSurfaceVariant</item>
+        <item name="colorSurfaceDim">@color/suyu_surfaceDim</item>
+        <item name="colorSurfaceBright">@color/suyu_surfaceBright</item>
+        <item name="colorSurfaceContainerLowest">@color/suyu_surfaceContainerLowest</item>
+        <item name="colorSurfaceContainerLow">@color/suyu_surfaceContainerLow</item>
+        <item name="colorSurfaceContainer">@color/suyu_surfaceContainer</item>
+        <item name="colorSurfaceContainerHigh">@color/suyu_surfaceContainerHigh</item>
+        <item name="colorSurfaceContainerHighest">@color/suyu_surfaceContainerHighest</item>
+        <item name="colorOutline">@color/suyu_outline</item>
+        <item name="colorOutlineVariant">@color/suyu_outlineVariant</item>
+        <item name="colorError">@color/suyu_error</item>
+        <item name="colorErrorContainer">@color/suyu_errorContainer</item>
+        <item name="colorOnError">@color/suyu_onError</item>
+        <item name="colorOnErrorContainer">@color/suyu_onErrorContainer</item>
         <item name="android:shadowColor">@color/yuzu_shadow</item>
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="fontFamily">@font/google_sans</item>
 
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
 
         <item name="sliderStyle">@style/YuzuSlider</item>
+        <item name="materialAlertDialogTheme">@style/YuzuMaterialDialog.Sakura</item>
+
+        <!-- Material 3 expressive type + shape scale -->
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Suyu.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Suyu.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Suyu.Large</item>
+        <item name="textAppearanceDisplayLarge">@style/TextAppearance.Suyu.DisplayLarge</item>
+        <item name="textAppearanceDisplayMedium">@style/TextAppearance.Suyu.DisplayMedium</item>
+        <item name="textAppearanceDisplaySmall">@style/TextAppearance.Suyu.DisplaySmall</item>
+        <item name="textAppearanceHeadlineLarge">@style/TextAppearance.Suyu.HeadlineLarge</item>
+        <item name="textAppearanceHeadlineMedium">@style/TextAppearance.Suyu.HeadlineMedium</item>
+        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.Suyu.HeadlineSmall</item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.Suyu.TitleLarge</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.Suyu.TitleMedium</item>
+        <item name="textAppearanceTitleSmall">@style/TextAppearance.Suyu.TitleSmall</item>
+        <item name="textAppearanceBodyLarge">@style/TextAppearance.Suyu.BodyLarge</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.Suyu.BodyMedium</item>
+        <item name="textAppearanceBodySmall">@style/TextAppearance.Suyu.BodySmall</item>
+        <item name="textAppearanceLabelLarge">@style/TextAppearance.Suyu.LabelLarge</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.Suyu.LabelMedium</item>
+        <item name="textAppearanceLabelSmall">@style/TextAppearance.Suyu.LabelSmall</item>
 
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
 
@@ -29,42 +79,49 @@
 
     <style name="Theme.suyu.Main" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Primary colors -->
-        <item name="colorPrimary">@color/neon_primary</item>
-        <item name="colorOnPrimary">@color/neon_on_primary</item>
-        <item name="colorPrimaryContainer">@color/neon_primary_variant</item>
-        <item name="colorOnPrimaryContainer">@color/neon_on_primary</item>
+        <item name="colorPrimary">@color/suyu_primary</item>
+        <item name="colorOnPrimary">@color/suyu_onPrimary</item>
+        <item name="colorPrimaryContainer">@color/suyu_primaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/suyu_onPrimaryContainer</item>
         <!-- Secondary colors -->
-        <item name="colorSecondary">@color/neon_secondary</item>
-        <item name="colorOnSecondary">@color/neon_on_secondary</item>
-        <item name="colorSecondaryContainer">@color/neon_secondary_variant</item>
-        <item name="colorOnSecondaryContainer">@color/neon_on_secondary</item>
+        <item name="colorSecondary">@color/suyu_secondary</item>
+        <item name="colorOnSecondary">@color/suyu_onSecondary</item>
+        <item name="colorSecondaryContainer">@color/suyu_secondaryContainer</item>
+        <item name="colorOnSecondaryContainer">@color/suyu_onSecondaryContainer</item>
         <!-- Tertiary colors -->
-        <item name="colorTertiary">@color/neon_accent_purple</item>
-        <item name="colorOnTertiary">@color/neon_on_primary</item>
-        <item name="colorTertiaryContainer">@color/neon_accent_blue</item>
-        <item name="colorOnTertiaryContainer">@color/neon_on_primary</item>
+        <item name="colorTertiary">@color/suyu_tertiary</item>
+        <item name="colorOnTertiary">@color/suyu_onTertiary</item>
+        <item name="colorTertiaryContainer">@color/suyu_tertiaryContainer</item>
+        <item name="colorOnTertiaryContainer">@color/suyu_onTertiaryContainer</item>
         <!-- Background and surface -->
-        <item name="android:colorBackground">@color/neon_background</item>
-        <item name="colorOnBackground">@color/neon_on_background</item>
-        <item name="colorSurface">@color/neon_surface</item>
-        <item name="colorOnSurface">@color/neon_on_surface</item>
-        <item name="colorSurfaceVariant">@color/neon_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/neon_on_surface</item>
+        <item name="android:colorBackground">@color/suyu_background</item>
+        <item name="colorOnBackground">@color/suyu_onBackground</item>
+        <item name="colorSurface">@color/suyu_surface</item>
+        <item name="colorOnSurface">@color/suyu_onSurface</item>
+        <item name="colorSurfaceVariant">@color/suyu_surfaceVariant</item>
+        <item name="colorOnSurfaceVariant">@color/suyu_onSurfaceVariant</item>
+        <item name="colorSurfaceDim">@color/suyu_surfaceDim</item>
+        <item name="colorSurfaceBright">@color/suyu_surfaceBright</item>
+        <item name="colorSurfaceContainerLowest">@color/suyu_surfaceContainerLowest</item>
+        <item name="colorSurfaceContainerLow">@color/suyu_surfaceContainerLow</item>
+        <item name="colorSurfaceContainer">@color/suyu_surfaceContainer</item>
+        <item name="colorSurfaceContainerHigh">@color/suyu_surfaceContainerHigh</item>
+        <item name="colorSurfaceContainerHighest">@color/suyu_surfaceContainerHighest</item>
         <!-- Outline and borders -->
-        <item name="colorOutline">@color/neon_border</item>
-        <item name="colorOutlineVariant">@color/neon_border_light</item>
+        <item name="colorOutline">@color/suyu_outline</item>
+        <item name="colorOutlineVariant">@color/suyu_outlineVariant</item>
         <!-- Error colors -->
-        <item name="colorError">@color/neon_error</item>
-        <item name="colorErrorContainer">@color/neon_error</item>
-        <item name="colorOnError">@color/neon_on_primary</item>
-        <item name="colorOnErrorContainer">@color/neon_on_primary</item>
+        <item name="colorError">@color/suyu_error</item>
+        <item name="colorErrorContainer">@color/suyu_errorContainer</item>
+        <item name="colorOnError">@color/suyu_onError</item>
+        <item name="colorOnErrorContainer">@color/suyu_onErrorContainer</item>
         <!-- System UI -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
         <!-- Other theme attributes -->
-        <item name="android:shadowColor">@color/neon_overlay</item>
+        <item name="android:shadowColor">@color/suyu_shadow</item>
         <item name="sliderStyle">@style/SuyuSlider</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:enforceStatusBarContrast">false</item>
@@ -73,8 +130,29 @@
         <item name="materialAlertDialogTheme">@style/SuyuMaterialDialog</item>
         <!-- Popup menu theme -->
         <item name="popupMenuStyle">@style/SuyuPopupMenu</item>
-        <item name="android:textColorPrimary">@color/neon_on_background</item>
+        <item name="android:textColorPrimary">@color/suyu_onBackground</item>
         <item name="android:itemTextAppearance">@style/TextAppearance.Material3.BodyLarge</item>
+        <!-- Material 3 expressive type + shape scale -->
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Suyu.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Suyu.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Suyu.Large</item>
+        <item name="textAppearanceDisplayLarge">@style/TextAppearance.Suyu.DisplayLarge</item>
+        <item name="textAppearanceDisplayMedium">@style/TextAppearance.Suyu.DisplayMedium</item>
+        <item name="textAppearanceDisplaySmall">@style/TextAppearance.Suyu.DisplaySmall</item>
+        <item name="textAppearanceHeadlineLarge">@style/TextAppearance.Suyu.HeadlineLarge</item>
+        <item name="textAppearanceHeadlineMedium">@style/TextAppearance.Suyu.HeadlineMedium</item>
+        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.Suyu.HeadlineSmall</item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.Suyu.TitleLarge</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.Suyu.TitleMedium</item>
+        <item name="textAppearanceTitleSmall">@style/TextAppearance.Suyu.TitleSmall</item>
+        <item name="textAppearanceBodyLarge">@style/TextAppearance.Suyu.BodyLarge</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.Suyu.BodyMedium</item>
+        <item name="textAppearanceBodySmall">@style/TextAppearance.Suyu.BodySmall</item>
+        <item name="textAppearanceLabelLarge">@style/TextAppearance.Suyu.LabelLarge</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.Suyu.LabelMedium</item>
+        <item name="textAppearanceLabelSmall">@style/TextAppearance.Suyu.LabelSmall</item>
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="fontFamily">@font/google_sans</item>
     </style>
 
     <style name="Theme.Yuzu.Main.Blue" parent="Theme.Yuzu.Main">

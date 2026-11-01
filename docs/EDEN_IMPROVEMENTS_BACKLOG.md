@@ -39,6 +39,7 @@ void LoadOverrides(u64 programId) const {
 
 ### 1. Configurable GPU Timing
 **File:** `src/video_core/gpu.cpp`
+**Status:** ✓ Migrated (2026-10) - `GpuOverclock` exposes Off/256/512/1024/2048
 **Impact:** High - Performance tuning flexibility
 
 **Current Code (Suyu):**

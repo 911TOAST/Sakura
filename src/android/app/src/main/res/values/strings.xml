@@ -2,16 +2,16 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
 
     <!-- General application strings -->
-    <string name="app_name" translatable="false">suyu</string>
-    <string name="app_disclaimer">This software will run games for the Nintendo Switch game console. No game titles or keys are included.&lt;br /&gt;&lt;br /&gt;Before you begin, please locate your <![CDATA[<b> prod.keys </b>]]> file on your device storage.&lt;br /&gt;&lt;br /&gt;<![CDATA[<a href=\"https://suyu.dev/help/quickstart\">Learn more</a>]]></string>
+    <string name="app_name" translatable="false">Sakura</string>
+    <string name="app_disclaimer">This software runs Nintendo Switch software you provide. No game titles, firmware, or keys are included.&lt;br /&gt;&lt;br /&gt;Before you begin, locate your <![CDATA[<b> prod.keys </b>]]> file on your device storage.&lt;br /&gt;&lt;br /&gt;Use software and keys you are authorized to use.</string>
     <string name="notice_notification_channel_name">Notices and errors</string>
     <string name="notice_notification_channel_id" translatable="false">noticesAndErrors</string>
     <string name="notice_notification_channel_description">Shows notifications when something goes wrong.</string>
     <string name="notification_permission_not_granted">Notification permission not granted!</string>
-    <string name="app_notification_channel_name" translatable="false">suyu</string>
+    <string name="app_notification_channel_name" translatable="false">Sakura</string>
     <string name="app_notification_channel_id" translatable="false">suyu</string>
-    <string name="app_notification_channel_description">suyu Switch emulator notifications</string>
-    <string name="app_notification_running">suyu is Running</string>
+    <string name="app_notification_channel_description">Sakura emulator notifications</string>
+    <string name="app_notification_running">Sakura is running</string>
     <string name="seconds">Seconds</string>
 
     <!-- Spinbox strings -->
@@ -208,7 +208,13 @@
 
     <!-- Setup strings -->
     <string name="welcome">Welcome!</string>
-    <string name="welcome_description">Learn how to setup &lt;b>suyu&lt;/b> and jump into emulation.</string>
+    <string name="welcome_description">A quiet little setup, then your library is ready.</string>
+    <string name="welcome_mtk">Welcome to Sakura</string>
+    <string name="welcome_mtk_description">Sakura includes a Vulkan profile for Mali and Dimensity devices. Touch and drag the flower to try the spring animation.</string>
+    <string name="setup_icon_style">Select App Icon</string>
+    <string name="setup_mali_boost">Mali Hyper Profile</string>
+    <string name="setup_brand_subtitle">A FRESH START</string>
+    <string name="setup_step_counter">STEP %1$d OF %2$d</string>
     <string name="get_started">Get started</string>
     <string name="keys">Keys</string>
     <string name="keys_description">Select your &lt;b>prod.keys&lt;/b> file with the button below.</string>
@@ -218,7 +224,7 @@
     <string name="games_description">Select your &lt;b>Games&lt;/b> folder with the button below.</string>
     <string name="done">Done</string>
     <string name="done_description">You\'re all set.\nEnjoy your games!</string>
-    <string name="next">Next</string>
+    <string name="next">Continue</string>
     <string name="back">Back</string>
     <string name="add_games">Add Games</string>
     <string name="step_complete">Complete!</string>
@@ -259,8 +265,27 @@
     <string name="home_search">Search</string>
     <string name="home_settings">Settings</string>
     <string name="empty_gamelist">No files were found or no game directory has been selected yet.</string>
+    <string name="home_library_eyebrow">GAME LIBRARY</string>
+    <string name="home_change_view">Change library view</string>
+    <string name="home_filter_games">Filter games</string>
+    <string name="home_clear_search">Clear search</string>
+    <string name="home_library">Library</string>
+    <string name="home_tagline">Switch emulator</string>
+    <string name="home_games_count">%1$d games</string>
+    <string name="home_games_count_one">%1$d game</string>
+    <string name="home_filter_all">All</string>
+    <string name="home_filter_az">A\u2013Z</string>
+    <string name="home_filter_recent">Recent</string>
+    <string name="home_filter_new">New</string>
+    <string name="empty_state_eyebrow">A LITTLE ROOM TO PLAY</string>
+    <string name="empty_library_title">Your library is waiting</string>
+    <string name="empty_library_message">Choose the folder where you keep your games. Sakura will find the titles for you.</string>
+    <string name="choose_game_folder">Choose game folder</string>
+    <string name="empty_results_title">Nothing found</string>
+    <string name="empty_results_message">Try another title or clear your search and filters.</string>
+    <string name="clear_search_and_filters">Clear search and filters</string>
     <string name="manage_game_folders">Manage game folders</string>
-    <string name="select_games_folder_description">Allows suyu to populate the games list</string>
+    <string name="select_games_folder_description">Allows Sakura to populate the games list</string>
     <string name="add_games_warning">Skip selecting games folder?</string>
     <string name="add_games_warning_description">Games won\'t be displayed in the Games list if a folder isn\'t selected.</string>
     <string name="add_games_warning_help">https://suyu.dev/help/quickstart/#dumping-games</string>
@@ -316,11 +341,11 @@
     <string name="settings_description">Configure emulator settings</string>
     <string name="search_recently_played">Recently played</string>
     <string name="search_recently_added">Recently added</string>
-    <string name="open_user_folder">Open suyu folder</string>
-    <string name="open_user_folder_description">Manage suyu\'s internal files</string>
+    <string name="open_user_folder">Open Sakura folder</string>
+    <string name="open_user_folder_description">Manage Sakura\'s internal files</string>
     <string name="app_settings_description">Modify the behavior and look of the app</string>
     <string name="no_file_manager">No file manager found</string>
-    <string name="notification_no_directory_link">Could not open suyu directory</string>
+    <string name="notification_no_directory_link">Could not open Sakura directory</string>
     <string name="notification_no_directory_link_description">Please locate the user folder with the file manager\'s side panel manually.</string>
     <string name="manage_save_data">Manage save data</string>
     <string name="manage_save_data_description">Save data found. Please select an option below.</string>
@@ -338,10 +363,10 @@
     <string name="firmware_installed_failure_description">Make sure the firmware nca files are at the root of the zip and try again.</string>
     <string name="firmware_uninstalled_failure">Firmware uninstallation failed</string>
     <string name="share_log">Share debug logs</string>
-    <string name="share_log_description">Share suyu\'s log file to debug issues</string>
+    <string name="share_log_description">Share Sakura\'s log file to debug issues</string>
     <string name="share_log_missing">No log file found</string>
     <string name="share_gpu_log">Share GPU logs</string>
-    <string name="share_gpu_log_description">Share suyu\'s GPU log file to debug graphics issues</string>
+    <string name="share_gpu_log_description">Share Sakura\'s GPU log file to debug graphics issues</string>
     <string name="share_gpu_log_missing">No GPU log file found</string>
     <string name="install_game_content">Install game content</string>
     <string name="install_game_content_description">Install game updates or DLC</string>
@@ -356,7 +381,7 @@
     <string name="install_game_content_help_link">https://suyu.dev/help/quickstart/#dumping-installed-updates</string>
     <string name="custom_driver_not_supported">Custom drivers not supported</string>
     <string name="custom_driver_not_supported_description">Custom driver loading isn\'t currently supported for this device.\nCheck this option again in the future to see if support was added!</string>
-    <string name="manage_yuzu_data">Manage suyu data</string>
+    <string name="manage_yuzu_data">Manage Sakura data</string>
     <string name="manage_yuzu_data_description">Import/export firmware, keys, user data, and more!</string>
     <string name="game_folders">Game folders</string>
     <string name="deep_scan">Deep scan</string>
@@ -416,15 +441,15 @@
     <string name="copied_to_clipboard">Copied to clipboard</string>
     <string name="about_app_description">An open-source Switch emulator</string>
     <string name="contributors">Contributors</string>
-    <string name="contributors_description">People who made suyu for Android possible</string>
+    <string name="contributors_description">People who made Sakura for Android possible</string>
     <string name="contributors_link" translatable="false">https://web.archive.org/web/*/https://git.suyu.dev/suyu/suyu/graphs/contributors</string>
-    <string name="licenses_description">Projects that make suyu for Android possible</string>
+    <string name="licenses_description">Projects that make Sakura for Android possible</string>
     <string name="build">Build</string>
     <string name="user_data">User data</string>
     <string name="user_data_description">Import/export all app data.\n\nWhen importing user data, all existing user data will be deleted!\n\nImporting data from Citron may cause issues. It\'s recommended to manually import all needed data.</string>
     <string name="exporting_user_data">Exporting user data…</string>
     <string name="importing_user_data">Importing user data…</string>
-    <string name="invalid_yuzu_backup">Invalid suyu backup</string>
+    <string name="invalid_yuzu_backup">Invalid Sakura backup</string>
     <string name="user_data_export_success">User data exported successfully</string>
     <string name="user_data_import_success">User data imported successfully</string>
     <string name="user_data_export_cancelled">Export cancelled</string>
@@ -495,6 +520,8 @@
     <string name="dma_accuracy_description">Controls the DMA precision accuracy. Safe precision can fix issues in some games, but it can also impact performance in some cases. If unsure, leave this on Default.</string>
     <string name="gpu_fence_behavior">GPU Fence Behavior</string>
     <string name="gpu_fence_behavior_description">Controls the GPU fence synchronization behavior. Immediate is the fastest option, but can introduce some issues. Balanced offers better compatibility and may fix issues in some games. Accurate further improves compatibility at the cost of some performance. Strict is the slowest option, but can fix issues that require stricter synchronization. Default follows the GPU Accuracy setting.</string>
+    <string name="frame_pacing_mode">Frame Pacing Target</string>
+    <string name="frame_pacing_mode_description">Caps the frame rate the GPU renders at, independent of the game\'s own limit. Auto follows the game; a fixed target halves GPU load on high-refresh displays, which reduces heat and throttling.</string>
     <string name="anisotropic_filtering">Anisotropic filtering</string>
     <string name="anisotropic_filtering_description">Improves the quality of textures when viewed at oblique angles</string>
     <string name="vram_usage_mode">VRAM Usage Mode</string>
@@ -508,23 +535,33 @@
     <string name="use_disk_shader_cache_description">Reduces stuttering by locally storing and loading generated shaders.</string>
     <string name="renderer_force_max_clock">Force maximum clocks (Adreno only)</string>
     <string name="renderer_force_max_clock_description">Forces the GPU to run at the maximum possible clocks (thermal constraints will still be applied).</string>
+    <string name="dead_performance">Performance mode</string>
+    <string name="dead_performance_description">Uses asynchronous shader compilation and grouped vertex-buffer binding to reduce CPU stalls. Turn it off if a game shows glitches.</string>
+    <string name="graphics_advanced">Advanced graphics</string>
+    <string name="graphics_advanced_description">Accuracy, hacks and extension overrides</string>
     <string name="renderer_asynchronous_gpu_emulation">GPU async emulation</string>
     <string name="renderer_asynchronous_gpu_emulation_description">This hack can increase performance by running GPU emulation asynchronously at the cost of graphical issues and increased crash rates by timing-related operations.</string>
     <string name="renderer_async_presentation">Asynchronous presentation</string>
     <string name="renderer_async_presentation_description">This hack can increase performance by moving presentation to a separate CPU thread at the cost of graphical issues.</string>
     <string name="renderer_reactive_flushing">Use reactive flushing</string>
     <string name="renderer_reactive_flushing_description">Improves rendering accuracy in some games at the cost of performance.</string>
+    <string name="mali_afrc">Mali AFRC compression (experimental)</string>
+    <string name="mali_afrc_description">Asks Mali for the strongest fixed-rate compression (2:1, 4 bits per component) on eligible render targets. The Mali profile already applies the lighter 4:3 rate on its own; this switch selects 2:1. It cuts render-target memory traffic but can slightly change image quality. Unsupported images use the normal path.</string>
+    <string name="native_gpu_mode">Native GPU mode (experimental)</string>
+    <string name="native_gpu_mode_description">Overlaps Switch GPU emulation with CPU work and enables the Mali throughput profile. Vulkan uses native ASTC formats per texture, fixed-point ASTC decode when the driver supports VK_EXT_astc_decode_mode, and fixed-rate compression on eligible Mali render targets. Switch GPU commands and shaders still need translation; async overlap can cause timing issues, and compression may slightly change image quality.</string>
+    <string name="no_well">No Well (experimental)</string>
+    <string name="no_well_description">Skips the NVIDIA Maxwell shader workaround pass. This does not bypass Maxwell shader translation; Switch shaders are still translated to SPIR-V. It only removes an NVIDIA-specific workaround, so it is safe on Mali but may break games that rely on it.</string>
     <string name="enable_buffer_history">Enable buffer history</string>
     <string name="enable_buffer_history_description">Enables access to previous buffer states. This option may improve rendering quality and performance consistency in some games.</string>
     <string name="enable_gpu_buffer_readback">Enable GPU Buffer Readback</string>
     <string name="enable_gpu_buffer_readback_description">Preserves GPU-modified buffer data by reading it back before uploads. Some games require this to render certain effects properly. May cause issues if the hardware cannot handle the additional workload.</string>
     <string name="use_optimized_vertex_buffers">Optimized Vertex Buffers</string>
-    <string name="use_optimized_vertex_buffers_description">Enables optimized vertex buffer binding for improved performance. Requires Mesa 26.0+ Turnip drivers/ QCOM drivers. Will crash on older Turnip drivers (25.3 and below).</string>
+    <string name="use_optimized_vertex_buffers_description">Groups adjacent vertex-buffer bindings to reduce Vulkan driver calls. Turn it off if a game or driver shows broken geometry.</string>
 
     <string name="hacks">Hacks</string>
 
     <string name="fast_gpu_time">Fast GPU Time</string>
-    <string name="fast_gpu_time_description">Forces most games to run at their highest native resolution. Use 256 for maximal performance and 512 for maximal graphics fidelity.</string>
+    <string name="fast_gpu_time_description">Emulated GPU timing divisor. Higher values make GPU work appear to finish sooner, reducing CPU/GPU sync stalls at the cost of timing accuracy. 256 is balanced, 512 is faster, and 1024/2048 are experimental.</string>
     <string name="skip_cpu_inner_invalidation">Skip CPU Inner Invalidation</string>
     <string name="skip_cpu_inner_invalidation_description">Skips certain CPU-side cache invalidations during memory updates, reducing CPU usage and improving it\'s performance. This may cause glitches or crashes on some games.</string>
     <string name="fix_bloom_effects">Fix Bloom Effects</string>
@@ -764,6 +801,8 @@
 
     <!-- Preferences Screen -->
     <string name="preferences_settings">Settings</string>
+    <string name="settings_hub_eyebrow">Sakura</string>
+    <string name="settings_hub_subtitle">Every option in one place. Tune the emulator, graphics and input to your liking.</string>
     <string name="preferences_system">System</string>
     <string name="preferences_system_description">Docked mode, region, language</string>
     <string name="preferences_graphics">Graphics</string>
@@ -833,7 +872,7 @@
     <string name="clear_shader_cache_warning_description">You will experience more stuttering as the shader cache regenerates</string>
     <string name="cleared_shaders_successfully">Cleared shaders successfully</string>
     <string name="driver_shader_wipe_dialog_title">Shaders Cleared</string>
-    <string name="driver_shader_wipe_dialog_message">suyu has automatically cleared all shader caches to maintain Vulkan pipeline validation. This is required when switching GPU drivers to prevent crashes and graphical corruption. You may experience some stuttering as shaders rebuild.</string>
+    <string name="driver_shader_wipe_dialog_message">Sakura cleared the shader cache after a GPU driver change to prevent crashes and graphical corruption. You may experience some stuttering while shaders rebuild.</string>
     <string name="addons_game">Addons: %1$s</string>
     <string name="save_data">Save data</string>
     <string name="save_data_description">Manage save data specific to this game</string>
@@ -987,6 +1026,8 @@
     <string name="off">Off</string>
     <string name="fast_gpu_medium">Medium (256)</string>
     <string name="fast_gpu_high">High (512)</string>
+    <string name="fast_gpu_veryhigh">Very High (1024)</string>
+    <string name="fast_gpu_extreme">Extreme (2048)</string>
 
     <!-- GPU swizzle texture size -->
     <string name="gpu_texturesizeswizzle_verysmall">Very Small (16 MB)</string>
@@ -1046,6 +1087,7 @@
 
     <!-- Renderer APIs -->
     <string name="renderer_vulkan" translatable="false">Vulkan</string>
+    <string name="renderer_malikan" translatable="false">Malikan (experimental)</string>
     <string name="renderer_none">None</string>
 
     <!-- Renderer Accuracy -->
@@ -1064,6 +1106,11 @@
     <string name="gpu_fence_behavior_balanced">Balanced</string>
     <string name="gpu_fence_behavior_accurate">Accurate</string>
     <string name="gpu_fence_behavior_strict">Strict</string>
+    <string name="frame_pacing_auto">Auto</string>
+    <string name="frame_pacing_30">30 FPS</string>
+    <string name="frame_pacing_60">60 FPS</string>
+    <string name="frame_pacing_90">90 FPS</string>
+    <string name="frame_pacing_120">120 FPS</string>
 
     <!-- ASTC Decoding Method Choices -->
     <string name="accelerate_astc_cpu" translatable="false">CPU</string>
@@ -1179,6 +1226,12 @@
     <string name="theme_and_color">Theme And Color</string>
     <string name="fullscreen_mode">Fullscreen mode</string>
     <string name="fullscreen_mode_description">Hide Android system bars across app screens. Swipe from an edge to reveal them temporarily.</string>
+    <string name="change_app_icon">App Icon</string>
+    <string name="change_app_icon_description">Select launcher icon style</string>
+    <string name="app_icon_default">Sakura Classic</string>
+    <string name="app_icon_poly">Origami Facet (SOTA)</string>
+    <string name="app_icon_dark">Midnight Blossom</string>
+    <string name="app_icon_neon">Cyber Neon</string>
 
     <!-- Theme Modes -->
     <string name="change_theme_mode">Change theme mode</string>
@@ -1241,7 +1294,7 @@
 
     <!-- Static Themes -->
     <string name="static_theme_color">Theme Color</string>
-    <string name="suyu_theme">suyu</string>
+    <string name="suyu_theme">Sakura</string>
     <string name="violet">Violet</string>
     <string name="blue">Blue</string>
     <string name="cyan">Cyan</string>
@@ -1817,5 +1870,47 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <string name="external_content">External Content</string>
     <string name="add_folders">Add Folder</string>
     <string name="percent">%1$d%%</string>
+
+    <string name="dashboard_title">Performance</string>
+    <string name="dashboard_idle">No game is running. Start one to collect metrics.</string>
+    <string name="dashboard_frametime">Frame time</string>
+    <string name="dashboard_speed">Emulation speed</string>
+    <string name="dashboard_thermal_headroom">Thermal headroom</string>
+    <string name="dashboard_battery_temp">Battery temp</string>
+    <string name="dashboard_frametime_graph">Frame time (last frames)</string>
+    <string name="dashboard_p50">Median</string>
+    <string name="dashboard_p95">95th percentile</string>
+    <string name="dashboard_worst">Worst</string>
+    <string name="dashboard_sample_window">Samples</string>
+    <string name="dashboard_memory">Memory</string>
+    <string name="dashboard_emulator_heap">Emulator heap</string>
+    <string name="dashboard_process_pss">Process PSS</string>
+    <string name="dashboard_device_ram">Device free / total</string>
+    <string name="dashboard_shaders_building">Shaders compiling</string>
+
+    <string name="tweaks_title">Quick tweaks</string>
+    <string name="tweaks_apply_live">Most changes apply now. Vulkan layer selection takes effect when you restart the game.</string>
+    <string name="tweaks_speed">Speed</string>
+    <string name="tweaks_overlay">Overlay readouts</string>
+    <string name="tweaks_graphics">Graphics</string>
+    <string name="tweaks_turbo">Turbo (unlocked speed)</string>
+    <string name="tweaks_slow">Slow motion</string>
+    <string name="tweaks_standard">Normal speed</string>
+    <string name="tweaks_performance_overlay">Performance overlay</string>
+    <string name="tweaks_show_fps">Show FPS</string>
+    <string name="tweaks_show_frametime">Show frame time</string>
+    <string name="tweaks_show_ram">Show RAM usage</string>
+    <string name="tweaks_show_battery_temp">Show battery temperature</string>
+    <string name="tweaks_show_shaders">Show shaders compiling</string>
+    <string name="tweaks_afrc">Compressed render targets (Mali AFRC)</string>
+    <string name="tweaks_raster_order">Relaxed raster order (Mali, needs driver support)</string>
+    <string name="panvk_driver">Use PanVK (experimental)</string>
+    <string name="panvk_driver_description">Runs the open-source Mesa PanVK driver instead of the stock GPU driver. Import its package in the GPU driver manager first. Restart the game after switching; if a title fails to boot, turn this off.</string>
+    <string name="tweaks_dashboard">Open performance dashboard</string>
+
+    <string name="vulkan_layers_title">Vulkan layers</string>
+    <string name="vulkan_layers_reported">Available to Sakura: %1$s</string>
+    <string name="vulkan_layers_none">No Vulkan layers are available from this app or the GPU driver.</string>
+    <string name="vulkan_layers_help">Sakura bundles the Khronos validation layer. Android may also expose layers from the GPU driver. Select a layer here, then restart the game.</string>
 
 </resources>

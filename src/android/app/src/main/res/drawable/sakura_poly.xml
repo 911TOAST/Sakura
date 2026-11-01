@@ -1,0 +1,100 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.86"
+        android:scaleY="0.86">
+        <group android:rotation="0" android:pivotX="256" android:pivotY="256">
+            <path
+                android:fillColor="#8C1D40"
+                android:pathData="M256,256 L208,198 L206,128 L236,76 L256,62 L276,76 L306,128 L304,198 Z" />
+            <path
+                android:fillColor="#F06292"
+                android:pathData="M256,256 L212,194 L212,132 L254,72 L256,256 Z" />
+            <path
+                android:fillColor="#FF80AB"
+                android:pathData="M256,256 L258,72 L300,132 L300,194 L256,256 Z" />
+            <path
+                android:fillColor="#E91E63"
+                android:pathData="M256,256 L238,186 L238,136 L256,96 Z" />
+            <path
+                android:fillColor="#FF4081"
+                android:pathData="M256,256 L256,96 L274,136 L274,186 Z" />
+        </group>
+        <group android:rotation="72" android:pivotX="256" android:pivotY="256">
+            <path
+                android:fillColor="#8C1D40"
+                android:pathData="M256,256 L208,198 L206,128 L236,76 L256,62 L276,76 L306,128 L304,198 Z" />
+            <path
+                android:fillColor="#F06292"
+                android:pathData="M256,256 L212,194 L212,132 L254,72 L256,256 Z" />
+            <path
+                android:fillColor="#FF80AB"
+                android:pathData="M256,256 L258,72 L300,132 L300,194 L256,256 Z" />
+            <path
+                android:fillColor="#E91E63"
+                android:pathData="M256,256 L238,186 L238,136 L256,96 Z" />
+            <path
+                android:fillColor="#FF4081"
+                android:pathData="M256,256 L256,96 L274,136 L274,186 Z" />
+        </group>
+        <group android:rotation="144" android:pivotX="256" android:pivotY="256">
+            <path
+                android:fillColor="#8C1D40"
+                android:pathData="M256,256 L208,198 L206,128 L236,76 L256,62 L276,76 L306,128 L304,198 Z" />
+            <path
+                android:fillColor="#F06292"
+                android:pathData="M256,256 L212,194 L212,132 L254,72 L256,256 Z" />
+            <path
+                android:fillColor="#FF80AB"
+                android:pathData="M256,256 L258,72 L300,132 L300,194 L256,256 Z" />
+            <path
+                android:fillColor="#E91E63"
+                android:pathData="M256,256 L238,186 L238,136 L256,96 Z" />
+            <path
+                android:fillColor="#FF4081"
+                android:pathData="M256,256 L256,96 L274,136 L274,186 Z" />
+        </group>
+        <group android:rotation="216" android:pivotX="256" android:pivotY="256">
+            <path
+                android:fillColor="#8C1D40"
+                android:pathData="M256,256 L208,198 L206,128 L236,76 L256,62 L276,76 L306,128 L304,198 Z" />
+            <path
+                android:fillColor="#F06292"
+                android:pathData="M256,256 L212,194 L212,132 L254,72 L256,256 Z" />
+            <path
+                android:fillColor="#FF80AB"
+                android:pathData="M256,256 L258,72 L300,132 L300,194 L256,256 Z" />
+            <path
+                android:fillColor="#E91E63"
+                android:pathData="M256,256 L238,186 L238,136 L256,96 Z" />
+            <path
+                android:fillColor="#FF4081"
+                android:pathData="M256,256 L256,96 L274,136 L274,186 Z" />
+        </group>
+        <group android:rotation="288" android:pivotX="256" android:pivotY="256">
+            <path
+                android:fillColor="#8C1D40"
+                android:pathData="M256,256 L208,198 L206,128 L236,76 L256,62 L276,76 L306,128 L304,198 Z" />
+            <path
+                android:fillColor="#F06292"
+                android:pathData="M256,256 L212,194 L212,132 L254,72 L256,256 Z" />
+            <path
+                android:fillColor="#FF80AB"
+                android:pathData="M256,256 L258,72 L300,132 L300,194 L256,256 Z" />
+            <path
+                android:fillColor="#E91E63"
+                android:pathData="M256,256 L238,186 L238,136 L256,96 Z" />
+            <path
+                android:fillColor="#FF4081"
+                android:pathData="M256,256 L256,96 L274,136 L274,186 Z" />
+        </group>
+        <path
+            android:fillColor="#C2185B"
+            android:pathData="M256,236 L262,250 L276,252 L266,262 L268,276 L256,270 L244,276 L246,262 L236,252 L250,250 Z" />
+    </group>
+</vector>

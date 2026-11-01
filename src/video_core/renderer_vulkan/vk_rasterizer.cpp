@@ -932,18 +932,20 @@ void RasterizerVulkan::LoadDiskResources(u64 title_id, std::stop_token stop_load
 
 void RasterizerVulkan::FlushWork() {
 #ifdef __ANDROID__
-    static constexpr u32 DRAWS_TO_DISPATCH = 512;
-    static constexpr u32 CHECK_MASK = 3;
+    // Malikan records larger batches before handing a chunk to the worker. This halves the number
+    // of queue wakeups and command-chunk allocations per frame without starving the worker.
+    const bool malikan = device.IsMalikanMode();
+    const u32 draws_to_dispatch = malikan ? 1024U : 512U;
+    const u32 check_mask = malikan ? 7U : 3U;
 #else
-    static constexpr u32 DRAWS_TO_DISPATCH = 4096;
-    static constexpr u32 CHECK_MASK = 7;
+    const u32 draws_to_dispatch = 4096U;
+    const u32 check_mask = 7U;
 #endif // __ANDROID__
 
-    static_assert(DRAWS_TO_DISPATCH % (CHECK_MASK + 1) == 0);
-    if ((++draw_counter & CHECK_MASK) != CHECK_MASK) {
+    if ((++draw_counter & check_mask) != check_mask) {
         return;
     }
-    if (draw_counter < DRAWS_TO_DISPATCH) {
+    if (draw_counter < draws_to_dispatch) {
         scheduler.DispatchWork();
         return;
     }

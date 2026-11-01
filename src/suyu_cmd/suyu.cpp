@@ -804,6 +804,7 @@ int main(int argc, char** argv) {
         emu_window = std::make_unique<EmuWindow_SDL2_GL>(&input_subsystem, system, fullscreen);
         break;
     case Settings::RendererBackend::Vulkan:
+    case Settings::RendererBackend::Malikan:
         emu_window = std::make_unique<EmuWindow_SDL2_VK>(&input_subsystem, system, fullscreen);
         break;
     case Settings::RendererBackend::Null:

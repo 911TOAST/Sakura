@@ -35,6 +35,8 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
+import org.yuzu.yuzu_emu.features.dashboard.PerfDashboardActivity
+import org.yuzu.yuzu_emu.features.dashboard.showTweaksSheet
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -94,6 +96,7 @@ import org.yuzu.yuzu_emu.utils.InputHandler
 import org.yuzu.yuzu_emu.utils.Log
 import org.yuzu.yuzu_emu.utils.NativeConfig
 import org.yuzu.yuzu_emu.utils.NativeFreedrenoConfig
+import org.yuzu.yuzu_emu.utils.VulkanLayerHelper
 import org.yuzu.yuzu_emu.utils.ViewUtils
 import org.yuzu.yuzu_emu.utils.ViewUtils.setVisible
 import org.yuzu.yuzu_emu.utils.collect
@@ -111,6 +114,10 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
 
     private var perfStatsUpdater: (() -> Unit)? = null
     private var socUpdater: (() -> Unit)? = null
+    private var lastOverlayText: String? = null
+    private var lastOverlayBackground: Int? = null
+    private var lastSocOverlayText: String? = null
+    private var lastSocOverlayBackground: Int? = null
 
     val handler = Handler(Looper.getMainLooper())
 
@@ -346,6 +353,10 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
             }
         }
         try {
+            // Apply the selected Android app-scoped layers after per-game settings are loaded and
+            // before the renderer creates its Vulkan instance.
+            VulkanLayerHelper.applyStoredLayers()
+
             if (GpuDriverHelper.isAdrenoGpu()) {
                 val programIdHex = game!!.programIdHex
                 if (NativeFreedrenoConfig.loadPerGameConfigWithGlobalFallback(programIdHex)) {
@@ -814,6 +825,20 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                 }
 
                 R.id.menu_load_amiibo -> handleLoadAmiiboSelection()
+
+                R.id.menu_quick_tweaks -> {
+                    binding.drawerLayout.closeDrawers()
+                    emulationActivity?.let { showTweaksSheet(it) }
+                    true
+                }
+
+                R.id.menu_perf_dashboard -> {
+                    binding.drawerLayout.closeDrawers()
+                    emulationActivity?.let {
+                        it.startActivity(Intent(it, PerfDashboardActivity::class.java))
+                    }
+                    true
+                }
 
                 R.id.menu_controls -> {
                     val action = HomeNavigationDirections.actionGlobalSettingsActivity(
@@ -1438,6 +1463,10 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         handler.removeCallbacksAndMessages(null)
         clearPausedFrame()
         _binding?.surfaceInputOverlay?.touchEventListener = null
+        lastOverlayText = null
+        lastOverlayBackground = null
+        lastSocOverlayText = null
+        lastSocOverlayBackground = null
         _binding = null
         isAmiiboPickerOpen = false
     }
@@ -1590,21 +1619,33 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                         sb.append(String.format("$prefix %d $suffix", shadersBuilding))
                     }
 
-                    if (BooleanSetting.PERF_OVERLAY_BACKGROUND.getBoolean(needsGlobal)) {
-                        binding.showStatsOverlayText.setBackgroundResource(
-                            R.color.yuzu_transparent_black
-                        )
+                    val background = if (
+                        BooleanSetting.PERF_OVERLAY_BACKGROUND.getBoolean(needsGlobal)
+                    ) {
+                        R.color.yuzu_transparent_black
                     } else {
-                        binding.showStatsOverlayText.setBackgroundResource(0)
+                        0
+                    }
+                    if (background != lastOverlayBackground) {
+                        binding.showStatsOverlayText.setBackgroundResource(background)
+                        lastOverlayBackground = background
                     }
 
-                    binding.showStatsOverlayText.text = sb.toString()
+                    // A TextView with new text re-measures and re-draws on the UI thread. Most
+                    // stats tick over slowly, so skip the write when nothing changed.
+                    val text = sb.toString()
+                    if (text != lastOverlayText) {
+                        binding.showStatsOverlayText.text = text
+                        lastOverlayText = text
+                    }
                 }
                 perfStatsUpdateHandler.postDelayed(perfStatsRunnable!!, 800)
             }
             perfStatsRunnable = Runnable { perfStatsUpdater?.invoke() }
             perfStatsUpdateHandler.post(perfStatsRunnable!!)
         } else {
+            lastOverlayText = null
+            lastOverlayBackground = null
             perfStatsRunnable?.let { perfStatsUpdateHandler.removeCallbacks(it) }
         }
     }
@@ -1737,17 +1778,23 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                         appendWithPipe(fwVersion)
                     }
 
-                    binding.showSocOverlayText.text = sb.toString()
+                    val text = sb.toString()
+                    if (text != lastSocOverlayText) {
+                        binding.showSocOverlayText.text = text
+                        lastSocOverlayText = text
+                    }
 
-                    if (BooleanSetting.SOC_OVERLAY_BACKGROUND.getBoolean(
+                    val background = if (BooleanSetting.SOC_OVERLAY_BACKGROUND.getBoolean(
                             NativeConfig.isPerGameConfigLoaded()
                         )
                     ) {
-                        binding.showSocOverlayText.setBackgroundResource(
-                            R.color.yuzu_transparent_black
-                        )
+                        R.color.yuzu_transparent_black
                     } else {
-                        binding.showSocOverlayText.setBackgroundResource(0)
+                        0
+                    }
+                    if (background != lastSocOverlayBackground) {
+                        binding.showSocOverlayText.setBackgroundResource(background)
+                        lastSocOverlayBackground = background
                     }
                 }
 
@@ -1756,6 +1803,8 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
             socRunnable = Runnable { socUpdater?.invoke() }
             socUpdateHandler.post(socRunnable!!)
         } else {
+            lastSocOverlayText = null
+            lastSocOverlayBackground = null
             socRunnable?.let { socUpdateHandler.removeCallbacks(it) }
         }
     }

@@ -121,6 +121,16 @@ namespace Vulkan {
         MemoryCommit Commit(const vk::Buffer &buffer, MemoryUsage usage);
 
     private:
+        /// Restricts the memory types a commit may use. On Mali, readback memory is kept on
+        /// coherent (and preferably uncached) types; see docs/DriverBugs.md.
+        [[nodiscard]] u32 MemoryTypeBitsFor(MemoryUsage usage, u32 bits) const noexcept {
+            if (usage != MemoryUsage::Download || !prefer_coherent_readbacks) {
+                return bits;
+            }
+            const u32 coherent_bits = bits & download_memory_types;
+            return coherent_bits != 0 ? coherent_bits : bits;
+        }
+
         static bool IsAutoUsage(VmaMemoryUsage u) noexcept {
             switch (u) {
                 case VMA_MEMORY_USAGE_AUTO:
@@ -137,6 +147,8 @@ namespace Vulkan {
         const VkPhysicalDeviceMemoryProperties properties; ///< Physical device memory properties.
         VkDeviceSize buffer_image_granularity;            ///< Adjacent buffer/image granularity
         u32 valid_memory_types{~0u};
+        u32 download_memory_types{~0u};                   ///< Coherent readback types (Mali)
+        bool prefer_coherent_readbacks{false};            ///< Avoid cached readbacks on Mali
     };
 
 } // namespace Vulkan

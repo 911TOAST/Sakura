@@ -244,7 +244,7 @@ class DriverViewModel : ViewModel() {
     }
 
     fun updateDriverNameForGame(game: Game?) {
-        if (!GpuDriverHelper.supportsCustomDriverLoading()) {
+        if (!GpuDriverHelper.supportsCustomDriver()) {
             return
         }
 

@@ -655,6 +655,8 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
                               PAIR(GpuOverclock, Normal, tr("Off")),
                               PAIR(GpuOverclock, Medium, tr("Medium (256)")),
                               PAIR(GpuOverclock, High, tr("High (512)")),
+                              PAIR(GpuOverclock, VeryHigh, tr("Very High (1024)")),
+                              PAIR(GpuOverclock, Extreme, tr("Extreme (2048)")),
                           }});
     translations->insert({Settings::EnumMetadata<Settings::GpuUnswizzleSize>::Index(),
                           {

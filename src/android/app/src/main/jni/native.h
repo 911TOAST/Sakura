@@ -37,6 +37,11 @@ public:
                              const std::string& custom_driver_name,
                              const std::string& file_redirect_dir);
 
+    /// Handle for the Vulkan loader currently in use (system driver or injected custom driver).
+    const std::shared_ptr<Common::DynamicLibrary>& DriverLibrary() const {
+        return m_vulkan_library;
+    }
+
     bool IsRunning() const;
     bool IsPaused() const;
     void PauseEmulation();

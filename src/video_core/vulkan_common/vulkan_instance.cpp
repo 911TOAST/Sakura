@@ -8,11 +8,14 @@
 #include <future>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "common/common_types.h"
 #include "common/dynamic_library.h"
 #include "common/logging.h"
+#include "common/settings.h"
 #include <ranges>
 #include <vulkan/vulkan_core.h>
 #include "core/frontend/emu_window.h"
@@ -85,10 +88,39 @@ namespace {
     return extensions;
 }
 
-[[nodiscard]] std::vector<const char*> Layers(bool enable_validation) {
-    std::vector<const char*> layers;
+[[nodiscard]] std::vector<std::string> ParseLayerList(std::string_view config) {
+    std::vector<std::string> layers;
+    std::size_t pos = 0;
+    while (pos < config.size()) {
+        const std::size_t end = config.find_first_of(":,", pos);
+        std::string_view entry =
+            config.substr(pos, end == std::string_view::npos ? std::string_view::npos
+                                                             : end - pos);
+        const std::size_t begin = entry.find_first_not_of(" \t\r\n");
+        if (begin != std::string_view::npos) {
+            const std::size_t last = entry.find_last_not_of(" \t\r\n");
+            entry = entry.substr(begin, last - begin + 1);
+        }
+        if (!entry.empty()) {
+            layers.emplace_back(entry);
+        }
+        if (end == std::string_view::npos) {
+            break;
+        }
+        pos = end + 1;
+    }
+    return layers;
+}
+
+[[nodiscard]] std::vector<std::string> Layers(bool enable_validation) {
+    std::vector<std::string> layers;
     if (enable_validation) {
         layers.push_back("VK_LAYER_KHRONOS_validation");
+    }
+    const std::string& configured = Settings::values.vulkan_instance_layers.GetValue();
+    if (!configured.empty()) {
+        const std::vector<std::string> injected = ParseLayerList(configured);
+        layers.insert(layers.end(), injected.begin(), injected.end());
     }
     return layers;
 }
@@ -142,8 +174,19 @@ vk::Instance CreateInstance(const Common::DynamicLibrary& library, vk::InstanceD
         RequiredExtensions(dld, *properties, window_type, enable_validation);
     if (!AreExtensionsSupported(dld, *properties, extensions))
         throw vk::Exception(VK_ERROR_EXTENSION_NOT_PRESENT);
-    std::vector<const char*> layers = Layers(enable_validation);
+    std::vector<std::string> layer_names = Layers(enable_validation);
+    std::vector<const char*> layers;
+    layers.reserve(layer_names.size());
+    for (const std::string& name : layer_names) {
+        layers.push_back(name.c_str());
+    }
     RemoveUnavailableLayers(dld, layers);
+    if (layers.size() != layer_names.size()) {
+        LOG_INFO(Render_Vulkan, "Injected {} Vulkan layer(s), {} unavailable and dropped",
+                 layers.size(), layer_names.size() - layers.size());
+    } else if (!layers.empty()) {
+        LOG_INFO(Render_Vulkan, "Injecting {} Vulkan layer(s)", layers.size());
+    }
 
     const u32 available_version = vk::AvailableVersion(dld);
     if (available_version < required_version) {

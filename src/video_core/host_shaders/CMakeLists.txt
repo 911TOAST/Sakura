@@ -87,8 +87,11 @@ if (PLATFORM_HAIKU)
     # glslangValidator WILL crash, glslang will not
     set(GLSLANGVALIDATOR "glslang")
 else()
-    # Normal sane platform who doesn't have a CRASHING glslangValidator
-    find_program(GLSLANGVALIDATOR "glslangValidator")
+    find_program(GLSLANGVALIDATOR "glslangValidator"
+        HINTS
+        "${CMAKE_SOURCE_DIR}/../tools/glslang/bin"
+        "${CMAKE_SOURCE_DIR}/tools/glslang/bin"
+    )
 endif()
 
 if ("${GLSLANGVALIDATOR}" STREQUAL "GLSLANGVALIDATOR-NOTFOUND")

@@ -42,7 +42,32 @@ VkSurfaceFormatKHR ChooseSwapSurfaceFormat(vk::Span<VkSurfaceFormatKHR> formats)
 }
 
 static VkPresentModeKHR ChooseSwapPresentMode(bool has_imm, bool has_mailbox,
-                                              bool has_fifo_relaxed) {
+                                              bool has_fifo_relaxed, bool force_unlocked) {
+    // Malikan is a throughput-first profile: FIFO/FIFO_RELAXED are treated as a request to unlock
+    // the presentation path. Explicit Mailbox/Immediate selections are still honoured, and the
+    // profile itself defaults to Immediate.
+    if (force_unlocked) {
+        switch (Settings::values.vsync_mode.GetValue()) {
+        case Settings::VSyncMode::Immediate:
+            if (has_imm) {
+                return VK_PRESENT_MODE_IMMEDIATE_KHR;
+            }
+            break;
+        case Settings::VSyncMode::Mailbox:
+            if (has_mailbox) {
+                return VK_PRESENT_MODE_MAILBOX_KHR;
+            }
+            break;
+        default:
+            break;
+        }
+        if (has_imm) {
+            return VK_PRESENT_MODE_IMMEDIATE_KHR;
+        }
+        if (has_mailbox) {
+            return VK_PRESENT_MODE_MAILBOX_KHR;
+        }
+    }
     // Mailbox doesn't lock the application like FIFO (vsync)
     // FIFO present mode locks the framerate to the monitor's refresh rate
     Settings::VSyncMode setting = [has_imm, has_mailbox]() {
@@ -208,15 +233,10 @@ bool Swapchain::AcquireNextImage() {
     }
     };
 
-#ifdef __ANDROID__
-    if (android_get_device_api_level() >= 30) {
-        scheduler.Wait(resource_ticks[image_index]);
-    } else {
-        wait_with_frame_pacing();
-    }
-#else
+    // Target_Auto is a plain tick wait, i.e. exactly what the removed Android API>=30 bypass
+    // hardcoded, so default behaviour is unchanged; the explicit 30/60/90/120 targets give the
+    // user a working frame-rate cap, which on a 120 Hz panel is the main GPU-load lever.
     wait_with_frame_pacing();
-#endif
 
     resource_ticks[image_index] = scheduler.CurrentTick();
 
@@ -272,9 +292,23 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
 
     const VkCompositeAlphaFlagBitsKHR alpha_flags{ChooseAlphaFlags(capabilities)};
     surface_format = ChooseSwapSurfaceFormat(formats);
-    present_mode = ChooseSwapPresentMode(has_imm, has_mailbox, has_fifo_relaxed);
+    present_mode =
+        ChooseSwapPresentMode(has_imm, has_mailbox, has_fifo_relaxed, device.IsMalikanMode());
 
-    u32 requested_image_count{capabilities.minImageCount + 1};
+    LOG_INFO(Render_Vulkan,
+             "[Swapchain] caps min={} max={} cur={}x{} transform={:#x} supported={:#x} alpha={:#x}",
+             capabilities.minImageCount, capabilities.maxImageCount,
+             capabilities.currentExtent.width, capabilities.currentExtent.height,
+             static_cast<u32>(capabilities.currentTransform), capabilities.supportedTransforms,
+             capabilities.supportedCompositeAlpha);
+
+    // Triple buffering overlaps rendering and presentation without building a multi-frame backlog.
+    u32 requested_image_count{capabilities.minImageCount + 1U};
+    if (device.IsPanVk()) {
+        // Mesa's Android WSI binds the buffers the window actually provides; the loader's
+        // minImageCount + 1 backlog gets the AHB import refused outright.
+        requested_image_count = (std::max)(2U, (std::min)(capabilities.minImageCount, 3U));
+    }
     // Ensure Triple buffering if possible.
     if (capabilities.maxImageCount > 0) {
         if (requested_image_count > capabilities.maxImageCount) {
@@ -286,6 +320,15 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
     } else {
         requested_image_count = (std::max)(requested_image_count, 3U);
     }
+    // Mesa's AHB import needs the buffer readable as well as writable; the vendor DDK accepts a
+    // write-only colour buffer, PanVK refuses it with VK_ERROR_INVALID_EXTERNAL_HANDLE.
+    VkImageUsageFlags swapchain_usage =
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if (device.IsPanVk()) {
+        const VkImageUsageFlags panvk_usage =
+            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        swapchain_usage |= panvk_usage & capabilities.supportedUsageFlags;
+    }
     VkSwapchainCreateInfoKHR swapchain_ci{
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .pNext = nullptr,
@@ -296,19 +339,22 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
         .imageColorSpace = surface_format.colorSpace,
         .imageExtent = {},
         .imageArrayLayers = 1,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .imageUsage = swapchain_usage,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
 #ifdef __ANDROID__
-        // On Android, do not allow surface rotation to deviate from the frontend.
-        .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+        // On Android, do not allow surface rotation to deviate from the frontend, except on Mesa
+        // WSI which only advertises the window's current transform as supported.
+        .preTransform = device.IsPanVk() ? capabilities.currentTransform
+                                         : VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
 #else
         .preTransform = capabilities.currentTransform,
 #endif
         .compositeAlpha = alpha_flags,
         .presentMode = present_mode,
-        .clipped = VK_FALSE,
+        // Let the presentation engine discard pixels that are not visible on the surface.
+        .clipped = device.IsMalikanMode() ? VK_TRUE : VK_FALSE,
         .oldSwapchain = VkSwapchainKHR{},
     };
     const u32 graphics_family{device.GetGraphicsFamily()};
@@ -336,10 +382,20 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
         .viewFormatCount = static_cast<u32>(view_formats.size()),
         .pViewFormats = view_formats.data(),
     };
-    if (device.IsKhrSwapchainMutableFormatEnabled()) {
+    // Mesa's Android WSI binds a single AHB format per image, so a multi-format view list makes
+    // the import fail with VK_ERROR_INVALID_EXTERNAL_HANDLE. Vendor DDKs accept it; PanVK does
+    // not, and it advertises the extension anyway.
+    const bool use_mutable_format =
+        device.IsKhrSwapchainMutableFormatEnabled() && !device.IsPanVk();
+    if (use_mutable_format) {
         format_list.pNext = std::exchange(swapchain_ci.pNext, &format_list);
         swapchain_ci.flags |= VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR;
     }
+    LOG_INFO(Render_Vulkan,
+             "[Swapchain] format={} space={} present={} count={} mutable={} extent={}x{}",
+             static_cast<u32>(surface_format.format), static_cast<u32>(surface_format.colorSpace),
+             static_cast<u32>(present_mode), requested_image_count, use_mutable_format, width,
+             height);
     // Request the size again to reduce the possibility of a TOCTOU race condition.
     const auto updated_capabilities = physical_device.GetSurfaceCapabilitiesKHR(VkSurfaceKHR(surface));
     swapchain_ci.imageExtent = ChooseSwapExtent(updated_capabilities, width, height);
@@ -375,7 +431,8 @@ void Swapchain::Destroy() {
 }
 
 bool Swapchain::NeedsPresentModeUpdate() const {
-    const auto requested_mode = ChooseSwapPresentMode(has_imm, has_mailbox, has_fifo_relaxed);
+    const auto requested_mode =
+        ChooseSwapPresentMode(has_imm, has_mailbox, has_fifo_relaxed, device.IsMalikanMode());
     return present_mode != requested_mode;
 }
 

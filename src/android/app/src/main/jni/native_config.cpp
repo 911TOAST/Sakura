@@ -22,13 +22,19 @@ std::unique_ptr<AndroidConfig> per_game_config;
 template <typename T>
 Settings::Setting<T>* getSetting(JNIEnv* env, jstring jkey) {
     auto key = Common::Android::GetJString(env, jkey);
-    auto basic_setting = Settings::values.linkage.by_key[key];
-    if (basic_setting != 0) {
-        return static_cast<Settings::Setting<T>*>(basic_setting);
+    // These are keyed containers of pointers, and operator[] default-constructs and INSERTS a null
+    // value for a missing key. This getter runs on every MotionEvent from the input overlay, where
+    // the Android-only keys (touchscreen, dpad_slide, haptic_feedback, joystick_rel_center) are
+    // absent from the core registry by design - so each read permanently poisoned
+    // Settings::values.linkage.by_key with a nullptr and then paid an extra tree descent on every
+    // later lookup.
+    const auto core = Settings::values.linkage.by_key.find(key);
+    if (core != Settings::values.linkage.by_key.end() && core->second != nullptr) {
+        return static_cast<Settings::Setting<T>*>(core->second);
     }
-    auto basic_android_setting = AndroidSettings::values.linkage.by_key[key];
-    if (basic_android_setting != 0) {
-        return static_cast<Settings::Setting<T>*>(basic_android_setting);
+    const auto android = AndroidSettings::values.linkage.by_key.find(key);
+    if (android != AndroidSettings::values.linkage.by_key.end() && android->second != nullptr) {
+        return static_cast<Settings::Setting<T>*>(android->second);
     }
     LOG_ERROR(Frontend, "[Android Native] Could not find setting - {}", key);
     return nullptr;

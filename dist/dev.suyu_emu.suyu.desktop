@@ -5,9 +5,9 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=suyu
+Name=Sakura
 GenericName=Switch Emulator
-Comment=Nintendo Switch video game console emulator
+Comment=Nintendo Switch emulator based on Suyu
 Icon=dev.suyu_emu.suyu
 TryExec=suyu
 Exec=suyu %f

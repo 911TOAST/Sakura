@@ -72,15 +72,33 @@ void PerfStats::EndSystemFrame() {
 
     auto frame_end = Clock::now();
     const auto frame_time = frame_end - frame_begin;
+    const double ms = std::chrono::duration<double, std::milli>(frame_time).count();
     if (current_index < perf_history.size()) {
-        perf_history[current_index++] =
-            std::chrono::duration<double, std::milli>(frame_time).count();
+        perf_history[current_index++] = ms;
     }
+    recent_frametimes[recent_index] = ms;
+    recent_index = (recent_index + 1) % RecentWindow;
+    recent_count = std::min(recent_count + 1, RecentWindow);
     accumulated_frametime += frame_time;
     system_frames += 1;
 
     previous_frame_length = frame_end - previous_frame_end;
     previous_frame_end = frame_end;
+}
+
+std::vector<double> PerfStats::GetRecentFrametimes(std::size_t count) const {
+    std::scoped_lock lock{object_mutex};
+
+    const std::size_t n = std::min(count, recent_count);
+    std::vector<double> out;
+    out.reserve(n);
+    // recent_index points one past the newest sample; walk backwards, then reverse.
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::size_t idx = (recent_index + RecentWindow - 1 - i) % RecentWindow;
+        out.push_back(recent_frametimes[idx]);
+    }
+    std::reverse(out.begin(), out.end());
+    return out;
 }
 
 void PerfStats::EndGameFrame() {
@@ -128,6 +146,18 @@ PerfStatsResults PerfStats::GetAndResetStats(microseconds current_system_time_us
     return results;
 }
 
+double PerfStats::PeekEmulationSpeed(microseconds current_system_time_us) const {
+    std::scoped_lock lock{object_mutex};
+
+    const auto interval = duration_cast<DoubleSecs>(Clock::now() - reset_point).count();
+    if (interval <= 0) {
+        return 0;
+    }
+
+    const auto system_us_per_second = (current_system_time_us - reset_point_system_us) / interval;
+    return system_us_per_second.count() / 1'000'000.0;
+}
+
 double PerfStats::GetLastFrameTimeScale() const {
     std::scoped_lock lock{object_mutex};
 
@@ -136,11 +166,14 @@ double PerfStats::GetLastFrameTimeScale() const {
 }
 
 void SpeedLimiter::DoSpeedLimiting(microseconds current_system_time_us) {
+    // Multicore must stay out of this: CoreTiming::GetGlobalTimeUs() already returns the host wall
+    // clock when multicore is on (core_timing.cpp), so the delta below would cancel itself at 100%
+    // and, at any other speed percent, sleep once per frame for no reason. Multicore pacing is
+    // Conductor::GetNextTicks' job.
     if (Settings::values.use_multi_core.GetValue() ||
         !Settings::values.use_speed_limit.GetValue()) {
         return;
     }
-
     auto now = Clock::now();
 
     const double sleep_scale = Settings::SpeedLimit() / 100.0;

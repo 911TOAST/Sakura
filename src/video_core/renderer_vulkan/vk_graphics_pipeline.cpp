@@ -37,6 +37,7 @@
 
 namespace Vulkan {
 namespace {
+
 using boost::container::small_vector;
 using boost::container::static_vector;
 using Shader::ImageBufferDescriptor;
@@ -314,8 +315,11 @@ void GraphicsPipeline::AddTransition(GraphicsPipeline* transition) {
 
 template <typename Spec>
 bool GraphicsPipeline::ConfigureImpl(bool is_indexed) {
-    boost::container::small_vector<VideoCommon::ImageViewInOut, 64> views;
-    boost::container::small_vector<VideoCommon::SamplerId, 64> samplers;
+    // Inline capacity has to cover the rasterizer's documented maxima (MAX_IMAGE_VIEWS = 240,
+    // MAX_TEXTURES = 192), summed across all five shader stages. At 64 any material over that
+    // bound made reserve() heap-allocate on every single draw, on the GPU thread.
+    boost::container::small_vector<VideoCommon::ImageViewInOut, 256> views;
+    boost::container::small_vector<VideoCommon::SamplerId, 192> samplers;
     views.reserve(num_image_elements);
     samplers.reserve(num_textures);
 
@@ -616,6 +620,9 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
         for (size_t index = 0; index < key.state.attributes.size(); ++index) {
             const auto& attribute = key.state.attributes[index];
             if (!attribute.enabled || !stage_infos[0].loads.Generic(index)) {
+                continue;
+            }
+            if (attribute.buffer >= device.GetMaxVertexInputBindings()) {
                 continue;
             }
             vertex_attributes.push_back({

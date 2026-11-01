@@ -200,8 +200,11 @@ void AudioRenderer::Main(std::stop_token stop_token) {
 
                     // Process the command list
                     {
-                        render_times_taken[index] =
-                            command_list_processor.Process(index) - start_time;
+                        // Process() already returns an elapsed duration in microseconds; it was
+                        // being subtracted from the absolute timestamp captured above, which
+                        // underflowed to ~1.8e19 and made the budget arithmetic below always take
+                        // its zero branch.
+                        render_times_taken[index] = command_list_processor.Process(index);
                     }
 
                     const auto end_time{system.CoreTiming().GetGlobalTimeUs().count()};

@@ -211,7 +211,13 @@ void SinkStream::ProcessAudioOutAndRender(std::span<s16> output_buffer, std::siz
             playing_buffer.consumed = true;
     }
 
-    std::memcpy(last_frame.data(), &output_buffer[(frames_written - 1) * frame_size], frame_size_bytes);
+    // frames_written is unsigned and the loop above never runs when num_frames is 0, so
+    // (frames_written - 1) underflows to SIZE_MAX and reads past the buffer. The equivalent copy
+    // in ProcessAudioIn is guarded; whatever lands in last_frame here is what gets emitted on every
+    // subsequent underrun, so one bad callback becomes persistent noise.
+    if (frames_written > 0) {
+        std::memcpy(last_frame.data(), &output_buffer[(frames_written - 1) * frame_size], frame_size_bytes);
+    }
 
     {
         std::scoped_lock lk{sample_count_lock};

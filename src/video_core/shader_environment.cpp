@@ -593,7 +593,8 @@ std::optional<Shader::ReplaceConstant> FileEnvironment::GetReplaceConstBuffer(u3
 }
 
 void SerializePipeline(std::span<const char> key, std::span<const GenericEnvironment* const> envs,
-                       const std::filesystem::path& filename, u32 cache_version) try {
+                       const std::filesystem::path& filename, u32 cache_version,
+                       std::span<const u8> extra_data) try {
     std::ofstream file(filename, std::ios::binary | std::ios::ate | std::ios::app);
     file.exceptions(std::ifstream::failbit);
     if (!file.is_open()) {
@@ -615,6 +616,18 @@ void SerializePipeline(std::span<const char> key, std::span<const GenericEnviron
         env->Serialize(file);
     }
     file.write(key.data(), key.size_bytes());
+    if (!extra_data.empty()) {
+        const u32 extra_size{static_cast<u32>(extra_data.size())};
+        u64 checksum{1469598103934665603ULL};
+        for (const u8 byte : extra_data) {
+            checksum = (checksum ^ byte) * 1099511628211ULL;
+        }
+        file.write(reinterpret_cast<const char*>(&PIPELINE_EXTRA_DATA_MAGIC),
+                   sizeof(PIPELINE_EXTRA_DATA_MAGIC))
+            .write(reinterpret_cast<const char*>(&extra_size), sizeof(extra_size))
+            .write(reinterpret_cast<const char*>(&checksum), sizeof(checksum))
+            .write(reinterpret_cast<const char*>(extra_data.data()), extra_size);
+    }
 
 } catch (const std::ios_base::failure& e) {
     LOG_ERROR(Common_Filesystem, "{}", e.what());

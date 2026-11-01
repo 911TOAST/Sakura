@@ -1,37 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <color name="suyu_primary">#A7DDEC</color>
-    <color name="suyu_onPrimary">#003399</color>
-    <color name="suyu_primaryContainer">#31323F</color>
-    <color name="suyu_onPrimaryContainer">#D1E4FF</color>
-    <color name="suyu_secondary">#BAC8DB</color>
-    <color name="suyu_onSecondary">#253140</color>
-    <color name="suyu_secondaryContainer">#3B4858</color>
-    <color name="suyu_onSecondaryContainer">#D6E4F7</color>
-    <color name="suyu_tertiary">#D6BEE5</color>
-    <color name="suyu_onTertiary">#3A2948</color>
-    <color name="suyu_tertiaryContainer">#524060</color>
-    <color name="suyu_onTertiaryContainer">#F2DAFF</color>
+    <!-- =====================================================================
+         Sakura Rose - Material 3 Expressive palette (dark / night)
+         Dark scheme: primary promoted to luminous petal pink for contrast,
+         containers use deep plum-rose for the "bold dark" Expressive tone.
+         Tertiary is warm peach-gold to complement the rose base.
+         ===================================================================== -->
+
+    <!-- Primary -->
+    <color name="suyu_primary">#FFB1CB</color>
+    <color name="suyu_onPrimary">#690030</color>
+    <color name="suyu_primaryContainer">#8E1045</color>
+    <color name="suyu_onPrimaryContainer">#FFD6E4</color>
+
+    <!-- Secondary -->
+    <color name="suyu_secondary">#EFBDD0</color>
+    <color name="suyu_onSecondary">#531C31</color>
+    <color name="suyu_secondaryContainer">#6D3248</color>
+    <color name="suyu_onSecondaryContainer">#FFD8E6</color>
+
+    <!-- Tertiary - warm peach-gold (M3E expressive contrast pop) -->
+    <color name="suyu_tertiary">#F0BD6E</color>
+    <color name="suyu_onTertiary">#4E3500</color>
+    <color name="suyu_tertiaryContainer">#6E4D00</color>
+    <color name="suyu_onTertiaryContainer">#FFDEA0</color>
+
+    <!-- Error -->
     <color name="suyu_error">#FFB4AB</color>
     <color name="suyu_errorContainer">#93000A</color>
     <color name="suyu_onError">#690005</color>
     <color name="suyu_onErrorContainer">#FFDAD6</color>
-    <color name="suyu_background">#1A1C1E</color>
-    <color name="suyu_onBackground">#E2E2E6</color>
-    <color name="suyu_surface">#1B1B1D</color>
-    <color name="suyu_onSurface">#E2E2E6</color>
-    <color name="suyu_surfaceVariant">#26282C</color>
-    <color name="suyu_onSurfaceVariant">#C3C7CF</color>
-    <color name="suyu_outline">#8C9199</color>
-    <color name="suyu_inverseOnSurface">#1A1C1E</color>
-    <color name="suyu_inverseSurface">#E2E2E6</color>
-    <color name="suyu_inversePrimary">#0062A2</color>
-    <color name="suyu_shadow">#000000</color>
-    <color name="suyu_surfaceTint">#9DCAFF</color>
-    <color name="suyu_outlineVariant">#42474E</color>
 
-    <color name="suyu_ea_background_start">#840099</color>
-    <color name="suyu_ea_background_end">#005AE1</color>
+    <!-- Background and surfaces - warm deep plum -->
+    <color name="suyu_background">#190F11</color>
+    <color name="suyu_onBackground">#F3E0E5</color>
+    <color name="suyu_surface">#190F11</color>
+    <color name="suyu_onSurface">#F3E0E5</color>
+    <color name="suyu_surfaceVariant">#524047</color>
+    <color name="suyu_onSurfaceVariant">#D7C3C8</color>
+
+    <!-- M3 tonal surface ramp -->
+    <color name="suyu_surfaceDim">#190F11</color>
+    <color name="suyu_surfaceBright">#423437</color>
+    <color name="suyu_surfaceContainerLowest">#130A0C</color>
+    <color name="suyu_surfaceContainerLow">#1F1315</color>
+    <color name="suyu_surfaceContainer">#231719</color>
+    <color name="suyu_surfaceContainerHigh">#2E2124</color>
+    <color name="suyu_surfaceContainerHighest">#392B2F</color>
+
+    <!-- Outline -->
+    <color name="suyu_outline">#A08D92</color>
+    <color name="suyu_outlineVariant">#524047</color>
+
+    <!-- Inverse -->
+    <color name="suyu_inverseOnSurface">#190F11</color>
+    <color name="suyu_inverseSurface">#F3E0E5</color>
+    <color name="suyu_inversePrimary">#C2185B</color>
+
+    <!-- Misc -->
+    <color name="suyu_shadow">#000000</color>
+    <color name="suyu_surfaceTint">#FFB1CB</color>
+
+    <!-- Sakura decorative tokens (dark) -->
+    <color name="sakura_petal">#F0ADC0</color>
+    <color name="sakura_center">#E8B68E</color>
+    <color name="sakura_wash">#3C252C</color>
+    <color name="sakura_outline">#5C3D48</color>
+    <color name="sakura_track">#4A3840</color>
+
+    <!-- EA gradient (dark) -->
+    <color name="suyu_ea_background_start">#870099</color>
+    <color name="suyu_ea_background_end">#0060E0</color>
 
 </resources>

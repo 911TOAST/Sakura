@@ -220,6 +220,45 @@ namespace Vulkan {
                 }
             });
         }
+
+        // Mali's proprietary driver performs cache maintenance around host-cached readbacks,
+        // which shows up as high CPU time in __pi___inval_cache_range (docs/DriverBugs.md).
+        // Keep download/staging buffers on coherent memory types, and prefer the uncached
+        // coherent types when the device exposes them: coherent mappings never need
+        // vmaInvalidateAllocation, so the kernel-side cache flush/invalidate disappears.
+        if (device.IsMali()) {
+            constexpr VkMemoryPropertyFlags required_flags =
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+            u32 coherent_types{};
+            u32 uncached_coherent_types{};
+            for (u32 type = 0; type < properties.memoryTypeCount; ++type) {
+                const VkMemoryPropertyFlags flags = properties.memoryTypes[type].propertyFlags;
+                if ((flags & required_flags) != required_flags ||
+                    (valid_memory_types & (1u << type)) == 0) {
+                    continue;
+                }
+
+                coherent_types |= 1u << type;
+                if ((flags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) == 0) {
+                    uncached_coherent_types |= 1u << type;
+                }
+            }
+
+            if (coherent_types != 0) {
+                prefer_coherent_readbacks = true;
+                download_memory_types =
+                    uncached_coherent_types != 0 ? uncached_coherent_types : coherent_types;
+                LOG_INFO(Render_Vulkan,
+                         "[Mali] Readback buffers restricted to {} memory ({} type(s) available).",
+                         uncached_coherent_types != 0 ? "coherent uncached" : "coherent cached",
+                         std::popcount(download_memory_types));
+            } else {
+                LOG_WARNING(Render_Vulkan,
+                            "[Mali] No coherent host-visible memory type; readbacks keep the "
+                            "default memory selection.");
+            }
+        }
     }
 
     MemoryAllocator::~MemoryAllocator() = default;
@@ -266,7 +305,9 @@ namespace Vulkan {
             .usage = MemoryUsageVma(usage),
             .requiredFlags = 0,
             .preferredFlags = MemoryUsagePreferredVmaFlags(usage) | anv_flags,
-            .memoryTypeBits = usage == MemoryUsage::Stream ? 0u : valid_memory_types,
+            .memoryTypeBits = usage == MemoryUsage::Stream
+                                  ? 0u
+                                  : MemoryTypeBitsFor(usage, valid_memory_types),
             .pool = VK_NULL_HANDLE,
             .pUserData = nullptr,
             .priority = 0.f,
@@ -305,7 +346,7 @@ namespace Vulkan {
         VmaAllocationCreateInfo ci{};
         ci.flags = VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT | MemoryUsageVmaFlags(usage);
         ci.usage = vma_usage;
-        ci.memoryTypeBits = reqs.memoryTypeBits & valid_memory_types;
+        ci.memoryTypeBits = MemoryTypeBitsFor(usage, reqs.memoryTypeBits & valid_memory_types);
         ci.requiredFlags = 0;
         ci.preferredFlags = MemoryUsagePreferredVmaFlags(usage);
 

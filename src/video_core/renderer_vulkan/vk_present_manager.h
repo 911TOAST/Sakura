@@ -26,14 +26,17 @@ class Scheduler;
 class Swapchain;
 
 struct Frame {
-    u32 width;
-    u32 height;
+    u32 width{};
+    u32 height{};
     vk::Image image;
     vk::ImageView image_view;
     vk::Framebuffer framebuffer;
     vk::CommandBuffer cmdbuf;
     vk::Semaphore render_ready;
     vk::Fence present_done;
+    /// The frame is a swapchain image handed out by GetRenderFrame(). No intermediate image,
+    /// no copy and no free queue are involved; Present() hands the image straight to the WSI.
+    bool direct_present{};
 };
 
 class PresentManager {
@@ -53,12 +56,22 @@ public:
     /// Pushes a frame for presentation
     void Present(Frame* frame);
 
-    /// Recreates the present frame to match the provided parameters
-    void RecreateFrame(Frame* frame, u32 width, u32 height, VkFormat image_view_format,
-                       VkRenderPass rd);
+    /// Recreates the present frame to match the provided parameters.
+    /// Returns the frame to use. Direct-present frame recreation rebuilds every per-image
+    /// view/framebuffer, so callers should use the returned pointer.
+    Frame* RecreateFrame(Frame* frame, u32 width, u32 height, VkFormat image_view_format,
+                         VkRenderPass rd);
 
     /// Waits for the present thread to finish presenting all queued frames.
     void WaitPresent();
+
+    /// True when the renderer composites directly into the acquired swapchain image.
+    [[nodiscard]] bool UsesDirectPresent() const noexcept {
+        return use_direct_present;
+    }
+
+    /// Binary semaphore the render submission must wait on before touching the acquired image.
+    [[nodiscard]] VkSemaphore GetPresentWaitSemaphore() const;
 
 private:
     void PresentThread(std::stop_token token);
@@ -68,6 +81,10 @@ private:
     void CopyToSwapchainImpl(Frame* frame);
 
     void RecreateSwapchain(Frame* frame);
+
+    void RecreateSwapchainDirect(u32 width, u32 height);
+
+    void ResetDirectFrames();
 
     void SetImageCount();
 
@@ -90,6 +107,7 @@ private:
     std::mutex free_mutex;
     std::jthread present_thread;
     bool blit_supported;
+    bool use_direct_present;
     bool use_present_thread;
     std::size_t image_count{};
 };

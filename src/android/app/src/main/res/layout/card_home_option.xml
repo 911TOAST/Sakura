@@ -1,84 +1,106 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    style="@style/SuyuCard"
     android:id="@+id/option_card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="16dp"
-    android:layout_marginHorizontal="8dp"
-    android:background="@android:color/transparent"
+    android:layout_marginBottom="10dp"
     android:clickable="true"
     android:focusable="true"
-    app:cardCornerRadius="16dp"
-    app:cardBackgroundColor="@android:color/transparent"
+    app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+    app:cardCornerRadius="24dp"
     app:cardElevation="0dp"
-    app:strokeColor="?attr/colorOutline"
-    app:strokeWidth="1dp">
+    app:rippleColor="?attr/colorPrimary"
+    app:strokeWidth="0dp">
 
-    <LinearLayout
+    <androidx.appcompat.widget.LinearLayoutCompat
         android:id="@+id/option_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_vertical">
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="14dp">
 
-        <ImageView
-            android:id="@+id/option_icon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginStart="24dp"
-            android:layout_gravity="center_vertical"
-            app:tint="?attr/colorPrimary" />
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            app:cardBackgroundColor="?attr/colorPrimaryContainer"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp">
 
-        <LinearLayout
-            android:layout_width="match_parent"
+            <ImageView
+                android:id="@+id/option_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                app:tint="?attr/colorOnPrimaryContainer"
+                tools:src="@drawable/ic_m3_tune" />
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginVertical="10dp"
-            android:layout_marginHorizontal="20dp"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
             android:orientation="vertical">
 
             <com.google.android.material.textview.MaterialTextView
-                style="@style/SynthwaveText.Body"
                 android:id="@+id/option_title"
+                style="@style/TextAppearance.Suyu.TitleMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:fontFamily="@font/google_sans_semibold"
                 android:textAlignment="viewStart"
-                android:textStyle="bold"
-                android:textSize="16sp"
-                tools:text="@string/install_prod_keys" />
+                android:textColor="?attr/colorOnSurface"
+                tools:text="@string/advanced_settings" />
 
             <com.google.android.material.textview.MaterialTextView
-                style="@style/SynthwaveText.Body"
                 android:id="@+id/option_description"
+                style="@style/TextAppearance.Suyu.BodySmall"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="2"
                 android:textAlignment="viewStart"
-                android:textSize="14sp"
-                android:layout_marginTop="5dp"
-                android:alpha="0.8"
-                tools:text="@string/install_prod_keys_description" />
+                android:textColor="?attr/colorOnSurfaceVariant"
+                tools:text="@string/settings_description" />
 
             <com.google.android.material.textview.MaterialTextView
-                style="@style/SynthwaveText.Secondary"
                 android:id="@+id/option_detail"
+                style="@style/TextAppearance.Suyu.LabelMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="none"
+                android:fontFamily="@font/google_sans_semibold"
+                android:marqueeRepeatLimit="marquee_forever"
+                android:requiresFadingEdge="horizontal"
+                android:singleLine="true"
                 android:textAlignment="viewStart"
                 android:textColor="?attr/colorPrimary"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:singleLine="true"
-                android:marqueeRepeatLimit="marquee_forever"
-                android:ellipsize="none"
-                android:requiresFadingEdge="horizontal"
-                android:layout_marginTop="5dp"
                 android:visibility="gone"
-                tools:visibility="visible"
-                tools:text="/tree/primary:Games" />
+                tools:text="/tree/primary:Games"
+                tools:visibility="visible" />
 
-        </LinearLayout>
+        </androidx.appcompat.widget.LinearLayoutCompat>
 
-    </LinearLayout>
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_marginStart="8dp"
+            android:alpha="0.7"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_m3_chevron_right"
+            app:tint="?attr/colorOnSurfaceVariant" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
 
 </com.google.android.material.card.MaterialCardView>

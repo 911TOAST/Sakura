@@ -8,7 +8,6 @@
 
 #include <array>
 #include <bit>
-#include <bitset>
 #include <concepts>
 #include <cstddef>
 
@@ -163,7 +162,7 @@ public:
             }
 
             if (m_queues[priority].PushBack(core, member)) {
-                m_available_priorities[core].set(std::size_t(priority));
+                m_available_priorities[core] |= UINT64_C(1) << priority;
             }
         }
 
@@ -176,7 +175,7 @@ public:
             }
 
             if (m_queues[priority].PushFront(core, member)) {
-                m_available_priorities[core].set(std::size_t(priority));
+                m_available_priorities[core] |= UINT64_C(1) << priority;
             }
         }
 
@@ -189,24 +188,21 @@ public:
             }
 
             if (m_queues[priority].Remove(core, member)) {
-                m_available_priorities[core].reset(std::size_t(priority));
+                m_available_priorities[core] &= ~(UINT64_C(1) << priority);
             }
         }
 
         constexpr Member* GetFront(s32 core) const {
             ASSERT(IsValidCore(core));
 
-            const s32 priority = s32([](auto const& e) {
-                for (size_t i = 0; i < e.size(); ++i)
-                    if (e[i])
-                        return i;
-                return e.size();
-            }(m_available_priorities[core]));
-            if (priority <= LowestPriority) {
-                return m_queues[priority].GetFront(core);
-            } else {
+            const u64 available = m_available_priorities[core];
+            if (available == 0) {
                 return nullptr;
             }
+
+            const s32 priority = s32(std::countr_zero(available));
+            ASSERT(priority <= LowestPriority);
+            return m_queues[priority].GetFront(core);
         }
 
         constexpr Member* GetFront(s32 priority, s32 core) const {
@@ -220,12 +216,12 @@ public:
             }
         }
 
-        template<size_t N>
-        constexpr size_t GetNextSet(std::bitset<N> const& bit, size_t n) const {
-            for (size_t i = n + 1; i < bit.size(); i++)
-                if (bit[i])
-                    return i;
-            return bit.size();
+        constexpr size_t GetNextSet(u64 available, size_t n) const {
+            if (n + 1 >= NumPriority) {
+                return NumPriority;
+            }
+            const u64 remaining = available & (~UINT64_C(0) << (n + 1));
+            return remaining == 0 ? NumPriority : std::countr_zero(remaining);
         }
 
         constexpr Member* GetNext(s32 core, const Member* member) const {
@@ -265,7 +261,8 @@ public:
 
     private:
         std::array<KPerCoreQueue, NumPriority> m_queues{};
-        std::array<std::bitset<NumPriority>, NumCores> m_available_priorities{};
+        static_assert(NumPriority <= 64, "Priority bitmask must fit in u64");
+        std::array<u64, NumCores> m_available_priorities{};
     };
 
 private:

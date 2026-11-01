@@ -103,7 +103,7 @@ void KServerPort::EnqueueSession(KernelCore& kernel, KServerSession* session) {
     // Add the session to our queue.
     m_session_list.push_back(*session);
     if (m_session_list.size() == 1) {
-        this->NotifyAvailable(kernel);
+        this->NotifyAvailableLocked(kernel);
     }
 }
 
@@ -115,7 +115,7 @@ void KServerPort::EnqueueSession(KernelCore& kernel, KLightServerSession* sessio
     // Add the session to our queue.
     m_light_session_list.push_back(*session);
     if (m_light_session_list.size() == 1) {
-        this->NotifyAvailable(kernel);
+        this->NotifyAvailableLocked(kernel);
     }
 }
 

@@ -39,6 +39,8 @@ public:
 
     VkDescriptorSetLayout GetDescriptorSetLayout();
     VkRenderPass GetRenderPass();
+    /// Render pass whose final layout is PRESENT_SRC_KHR, used by the zero-copy present path.
+    VkRenderPass GetPresentRenderPass();
 
 private:
     void CreateDescriptorSetLayout(const Device& device);
@@ -56,6 +58,10 @@ private:
     vk::Pipeline opaque_pipeline;
     vk::Pipeline premultiplied_pipeline;
     vk::Pipeline coverage_pipeline;
+    vk::RenderPass present_render_pass;
+    vk::Pipeline present_opaque_pipeline;
+    vk::Pipeline present_premultiplied_pipeline;
+    vk::Pipeline present_coverage_pipeline;
 };
 
 } // namespace Vulkan

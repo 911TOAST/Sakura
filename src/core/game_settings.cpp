@@ -60,14 +60,41 @@ static GPUVendor GetGPU(const std::string& gpu_vendor_string) {
         }
     }
 
-    // legacy (shouldn't be needed anymore, but just in case)
+    // Substring fallback: real driver strings are never bare vendor names.
+    // e.g. "Mali-G610-TC r1p0", "Mali-G52 MC-2", "Adreno (TM) 740",
+    // "PowerVR Rogue G6430", "Apple M2". The previous exact-match-only table
+    // silently misdetected every one of them as Unknown, which disabled every
+    // vendor-specific optimization. Mali is checked first on purpose.
+    static const Entry SubstringRules[] = {
+        // ARM / Mali (Mali, Immortalis, Panfrost, PanVK)
+        {"mali",       GPUVendor::ARM},
+        {"immortalis", GPUVendor::ARM},
+        {"panvk",      GPUVendor::ARM},
+        {"panfrost",   GPUVendor::ARM},
+        {"bifrost",    GPUVendor::ARM},
+        {"valhall",    GPUVendor::ARM},
+        // Qualcomm / Adreno
+        {"adreno",     GPUVendor::Qualcomm},
+        {"turnip",     GPUVendor::Qualcomm},
+        // Imagination / PowerVR
+        {"powervr",    GPUVendor::Imagination},
+        {"rogue",      GPUVendor::Imagination},
+        // Apple
+        {"apple",      GPUVendor::Apple},
+        // NVIDIA
+        {"geforce",    GPUVendor::Nvidia},
+        {"nvidia",     GPUVendor::Nvidia},
+        // AMD
+        {"radeon",     GPUVendor::AMD},
+        // Intel
+        {"intel",      GPUVendor::Intel},
+    };
     std::string gpu = gpu_vendor_string;
     std::transform(gpu.begin(), gpu.end(), gpu.begin(), [](unsigned char c){ return (char)std::tolower(c); });
-    if (gpu.find("geforce") != std::string::npos) {
-        return GPUVendor::Nvidia;
-    }
-    if (gpu.find("radeon") != std::string::npos || gpu.find("ati") != std::string::npos) {
-        return GPUVendor::AMD;
+    for (const auto& entry : SubstringRules) {
+        if (gpu.find(entry.name) != std::string::npos) {
+            return entry.vendor;
+        }
     }
 
     return GPUVendor::Unknown;

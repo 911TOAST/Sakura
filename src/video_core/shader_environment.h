@@ -215,14 +215,19 @@ private:
     u32 viewport_transform_state = 1;
 };
 
+inline constexpr u32 PIPELINE_EXTRA_DATA_MAGIC = 0x43565053; // "SPVC"
+
 void SerializePipeline(std::span<const char> key, std::span<const GenericEnvironment* const> envs,
-                       const std::filesystem::path& filename, u32 cache_version);
+                       const std::filesystem::path& filename, u32 cache_version,
+                       std::span<const u8> extra_data = {});
 
 template <typename Key, typename Envs>
     requires std::is_trivially_copyable_v<Key>
         && std::has_unique_object_representations_v<Key>
-void SerializePipeline(const Key& key, const Envs& envs, const std::filesystem::path& filename, u32 cache_version) {
-    SerializePipeline(std::span(reinterpret_cast<const char*>(&key), sizeof(key)), std::span(envs.data(), envs.size()), filename, cache_version);
+void SerializePipeline(const Key& key, const Envs& envs, const std::filesystem::path& filename,
+                       u32 cache_version, std::span<const u8> extra_data = {}) {
+    SerializePipeline(std::span(reinterpret_cast<const char*>(&key), sizeof(key)),
+                      std::span(envs.data(), envs.size()), filename, cache_version, extra_data);
 }
 
 void LoadPipelines(std::stop_token stop_loading, const std::filesystem::path& filename, u32 expected_cache_version,

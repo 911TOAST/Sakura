@@ -93,11 +93,13 @@
 
     <string-array name="rendererApiNames">
         <item>@string/renderer_vulkan</item>
+        <item>@string/renderer_malikan</item>
         <item>@string/renderer_none</item>
     </string-array>
 
     <integer-array name="rendererApiValues">
         <item>1</item>
+        <item>5</item>
         <item>2</item>
     </integer-array>
 
@@ -372,6 +374,19 @@
         <item>2</item>
     </integer-array>
 
+    <string-array name="appIconEntries">
+        <item>@string/app_icon_default</item>
+        <item>@string/app_icon_poly</item>
+        <item>@string/app_icon_dark</item>
+        <item>@string/app_icon_neon</item>
+    </string-array>
+    <integer-array name="appIconValues">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </integer-array>
+
     <string-array name="appLanguageNames">
         <item>@string/app_language_system</item>
         <item>@string/app_language_english</item>
@@ -537,6 +552,21 @@
         <item>4</item>
     </integer-array>
 
+    <string-array name="framePacingModeNames">
+        <item>@string/frame_pacing_auto</item>
+        <item>@string/frame_pacing_30</item>
+        <item>@string/frame_pacing_60</item>
+        <item>@string/frame_pacing_90</item>
+        <item>@string/frame_pacing_120</item>
+    </string-array>
+    <integer-array name="framePacingModeValues">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+    </integer-array>
+
 
     <string-array name="appletEntries">
         <item>@string/applet_hle</item>
@@ -552,12 +582,16 @@
         <item>@string/off</item>
         <item>@string/fast_gpu_medium</item>
         <item>@string/fast_gpu_high</item>
+        <item>@string/fast_gpu_veryhigh</item>
+        <item>@string/fast_gpu_extreme</item>
     </string-array>
 
     <integer-array name="gpuValues">
         <item>0</item>
         <item>1</item>
         <item>2</item>
+        <item>3</item>
+        <item>4</item>
     </integer-array>
 
     <string-array name="gpuTextureSizeSwizzleEntries">

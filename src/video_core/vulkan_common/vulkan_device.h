@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <array>
+#include <map>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <span>
@@ -74,11 +77,13 @@ VK_DEFINE_HANDLE(VmaAllocator)
     FEATURE(KHR, WorkgroupMemoryExplicitLayout, WORKGROUP_MEMORY_EXPLICIT_LAYOUT,                  \
             workgroup_memory_explicit_layout)                                                      \
     FEATURE(EXT, TextureCompressionASTCHDR, TEXTURE_COMPRESSION_ASTC_HDR,                          \
-            texture_compression_astc_hdr)
+            texture_compression_astc_hdr)                                                          \
+    FEATURE(EXT, ImageCompressionControl, IMAGE_COMPRESSION_CONTROL, image_compression_control)
 
 
 // Define miscellaneous extensions which may be used by the implementation here.
 #define FOR_EACH_VK_EXTENSION(EXTENSION)                                                           \
+    EXTENSION(EXT, ASTC_DECODE_MODE, astc_decode_mode)                                             \
     EXTENSION(EXT, CONDITIONAL_RENDERING, conditional_rendering)                                   \
     EXTENSION(EXT, CONSERVATIVE_RASTERIZATION, conservative_rasterization)                         \
     EXTENSION(EXT, DEPTH_RANGE_UNRESTRICTED, depth_range_unrestricted)                             \
@@ -351,14 +356,44 @@ FN_MAX_LIMIT_LIST
     }
 
     bool IsOptimalAstcSupported() const {
+        if (IsMali() || IsMalikanMode()) {
+            return features.features.textureCompressionASTC_LDR;
+        }
         return features.features.textureCompressionASTC_LDR &&
-               features.texture_compression_astc_hdr.textureCompressionASTC_HDR;
+               (features.texture_compression_astc_hdr.textureCompressionASTC_HDR || is_optimal_astc_supported);
     }
 
     /// Returns true if BCn is natively supported.
     bool IsOptimalBcnSupported() const {
         return features.features.textureCompressionBC;
     }
+
+    /// True when VK_EXT_image_compression_control is available and enabled, i.e. images may be
+    /// created with an explicit AFBC/AFRC request.
+    bool HasImageCompressionControl() const {
+        return extensions.image_compression_control &&
+               features.image_compression_control.imageCompressionControl;
+    }
+
+    /// Returns true when every ASTC permutation used by the guest was verified to support
+    /// sampling, filtering and transfers. This is the computed full-set check, not the Mali
+    /// shortcut used by IsOptimalAstcSupported().
+    bool AreAllAstcFormatsNativelySupported() const noexcept {
+        return is_optimal_astc_supported;
+    }
+
+    /// True when native ASTC image views can choose an explicit decode format through
+    /// VK_EXT_astc_decode_mode. Decoding to UNORM avoids the hardware's default FP16 decode
+    /// path, which is both slower and unnecessary for Switch's LDR ASTC content.
+    bool IsAstcDecodeModeSupported() const {
+        return extensions.astc_decode_mode;
+    }
+
+    /// Fixed rates the driver accepts for these exact image parameters, or 0 when it accepts
+    /// none. Rates must be requested explicitly on Mali; asking for the default rate makes the
+    /// driver answer with an empty mask and silently create an uncompressed image.
+    [[nodiscard]] VkImageCompressionFixedRateFlagsEXT GetFixedRateCompressionFlags(
+        const VkImageCreateInfo& image_info) const;
 
     /// Returns true if ETC2 is natively supported.
     bool IsOptimalEtc2Supported() const {
@@ -962,12 +997,25 @@ FN_MAX_LIMIT_LIST
         return properties.driver.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY;
     }
 
+    bool IsMali() const noexcept {
+        return properties.driver.driverID == VK_DRIVER_ID_ARM_PROPRIETARY ||
+               properties.properties.vendorID == 0x13B5;
+    }
+
     bool IsMoltenVK() const noexcept {
         return properties.driver.driverID == VK_DRIVER_ID_MOLTENVK;
     }
 
+    bool IsPanVk() const noexcept {
+        return properties.driver.driverID == VK_DRIVER_ID_MESA_PANVK;
+    }
+
     NvidiaArchitecture GetNvidiaArch() const noexcept {
         return nvidia_arch;
+    }
+
+    bool IsMalikanMode() const noexcept {
+        return malikan_mode;
     }
 
     /// GPU logging integration
@@ -975,6 +1023,12 @@ FN_MAX_LIMIT_LIST
     void ShutdownGPULogging();
 
 private:
+    struct ImageCompressionSupport {
+        VkImageFormatProperties limits{};
+        VkImageCompressionFixedRateFlagsEXT rates{};
+        bool valid{};
+    };
+
     /// Checks if the physical device is suitable and configures the object state
     /// with all necessary info about its properties.
     bool GetSuitability(bool requires_swapchain);
@@ -1101,7 +1155,10 @@ private:
     bool dynamic_state3_alpha_to_coverage{};
     bool dynamic_state3_alpha_to_one{};
     bool supports_conditional_barriers{};      ///< Allows barriers in conditional control flow.
+    bool malikan_mode{};                       ///< Malikan profile selected on Mali hardware.
     size_t sampler_heap_budget{};              ///< Sampler budget for buggy drivers (0 = unlimited).
+    mutable std::mutex image_compression_mutex;
+    mutable std::map<std::array<u32, 5>, ImageCompressionSupport> image_compression_cache;
     u64 device_access_memory{};                ///< Total size of device local memory in bytes.
     u32 sets_per_pool{};                       ///< Sets per Description Pool
     NvidiaArchitecture nvidia_arch{NvidiaArchitecture::Arch_AmpereOrNewer};

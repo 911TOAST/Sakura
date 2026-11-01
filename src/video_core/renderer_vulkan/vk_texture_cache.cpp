@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <memory>
@@ -123,14 +124,32 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
             break;
         }
     }
-    if (info.storage) {
-        usage |= VK_IMAGE_USAGE_STORAGE_BIT;
-    }
+    // Do not add VK_IMAGE_USAGE_STORAGE_BIT from the format table. Almost every guest colour
+    // format is storage-capable, so doing it unconditionally tagged every image in the emulator as
+    // a storage image. Mali (and most tile-based drivers) refuse to back a storage image with
+    // AFBC/AFRC, which silently disabled the compression paths the rest of this file requests:
+    // the AFRC gate below requires (usage & STORAGE) == 0, so no game surface ever asked for it.
+    // Storage usage is now added only for the few images that actually receive a storage image
+    // view, see MakeImageCreateInfo().
     return usage;
 }
 
+[[nodiscard]] bool UsesNativeAstc(const Device& device, PixelFormat format) {
+    if (!IsPixelFormatASTC(format)) {
+        return false;
+    }
+    // SurfaceFormat already resolves the guest format through the host feature table and returns
+    // an alternative (typically RGBA8) when the driver cannot sample this ASTC permutation.
+    // Checking the resolved VkFormat is therefore a per-format native test, unlike the global
+    // IsOptimalAstcSupported() all-or-nothing check.
+    const auto resolved =
+        MaxwellToVK::SurfaceFormat(device, FormatType::Optimal, false, format).format;
+    return resolved >= VK_FORMAT_ASTC_4x4_UNORM_BLOCK &&
+           resolved <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK;
+}
+
 [[nodiscard]] bool WillUseAcceleratedAstcDecode(const Device& device, const ImageInfo& info) {
-    if (!IsPixelFormatASTC(info.format) || device.IsOptimalAstcSupported()) {
+    if (!IsPixelFormatASTC(info.format) || UsesNativeAstc(device, info.format)) {
         return false;
     }
     if (Settings::values.accelerate_astc.GetValue() != Settings::AstcDecodeMode::Gpu) {
@@ -164,6 +183,15 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
         flags |= VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
     }
     const auto [samples_x, samples_y] = VideoCommon::SamplesLog2(info.num_samples);
+    VkImageUsageFlags usage = ImageUsageFlags(format_info, info.format);
+    // The only images that ever get a storage image view are the ones handed to a compute pass:
+    // format-override upload targets (BL3D unswizzle), ASTC decode destinations and multisampled
+    // resolves. Everything else (scene colour/depth targets, sampled textures) stays free of
+    // STORAGE so the driver is allowed to compress it.
+    if (format_override.has_value() || info.num_samples > 1 ||
+        WillUseAcceleratedAstcDecode(device, info)) {
+        usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+    }
     return VkImageCreateInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = nullptr,
@@ -179,12 +207,37 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
         .arrayLayers = static_cast<u32>(info.resources.layers),
         .samples = ConvertSampleCount(info.num_samples),
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = ImageUsageFlags(format_info, info.format),
+        .usage = usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
+}
+
+// AFRC fixed rates are bits per component. For an 8-bit colour format 8bpc is 32 bpp (no
+// saving), 6bpc is 24 bpp (4:3) and 4bpc is 16 bpp (2:1). Below 4bpc the banding is obvious,
+// so this profile never asks for it. 4bpc is opt-in through the experimental AFRC toggle;
+// otherwise 6bpc is used so the default picture does not visibly change.
+[[nodiscard]] VkImageCompressionFixedRateFlagsEXT ChooseAfrcRate(
+    VkImageCompressionFixedRateFlagsEXT supported, bool aggressive) {
+    constexpr VkImageCompressionFixedRateFlagsEXT Four =
+        VK_IMAGE_COMPRESSION_FIXED_RATE_4BPC_BIT_EXT;
+    constexpr VkImageCompressionFixedRateFlagsEXT Five =
+        VK_IMAGE_COMPRESSION_FIXED_RATE_5BPC_BIT_EXT;
+    constexpr VkImageCompressionFixedRateFlagsEXT Six =
+        VK_IMAGE_COMPRESSION_FIXED_RATE_6BPC_BIT_EXT;
+
+    if (aggressive) {
+        if (supported & Four) return Four;
+        if (supported & Five) return Five;
+        if (supported & Six) return Six;
+    } else {
+        if (supported & Six) return Six;
+        if (supported & Five) return Five;
+        if (supported & Four) return Four;
+    }
+    return VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
 }
 
 [[nodiscard]] vk::Image MakeImage(const Device& device, const MemoryAllocator& allocator,
@@ -194,27 +247,83 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
         return vk::Image{};
     }
     VkImageCreateInfo image_ci = MakeImageCreateInfo(device, info, format_override);
+
+    // The mutable-format handling below changes both flags and usage, so it has to run before the
+    // fixed-rate-compression query: the driver answers that query for the exact final image
+    // parameters, and a stale usage mask can reject compression the image could otherwise use.
     const VkImageFormatListCreateInfo image_format_list = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO,
         .pNext = nullptr,
         .viewFormatCount = static_cast<u32>(view_formats.size()),
         .pViewFormats = view_formats.data(),
     };
+    const bool has_format_list =
+        view_formats.size() > 1 && device.IsKhrImageFormatListSupported();
     if (view_formats.size() > 1) {
-        image_ci.flags |=
-            VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
+        // Format-compatible views no longer need EXTENDED_USAGE: the only view that overrides the
+        // image's usage mask is the compute storage view, and those images are created with
+        // STORAGE in MakeImageCreateInfo(). Dropping it keeps the driver free to compress.
+        image_ci.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    }
 
-        const bool has_storage_compatible_view =
-            std::any_of(view_formats.begin(), view_formats.end(), [&device](VkFormat view_format) {
-                return device.IsFormatSupported(view_format, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT,
-                                                FormatType::Optimal);
-            });
-        if (has_storage_compatible_view) {
-            image_ci.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
-        }
-
-        if (device.IsKhrImageFormatListSupported()) {
-            image_ci.pNext = &image_format_list;
+    // AFRC is requested independently of AFBC and may coexist with storage/mutable-format usage
+    // on drivers that support it; the format list stays in the pNext chain when compression is
+    // used, otherwise attaching the compression struct would silently drop it. Surfaces where
+    // compression cannot pay for itself, or where the artefacts would be the most visible, are
+    // skipped: tiny targets (UI, fonts, cursor blobs, small bloom mips), non-2D targets, and
+    // images compute shaders write through storage views. The main scene targets are far above
+    // that size, so the bandwidth win stays where it matters.
+    const u64 afrc_pixels = static_cast<u64>(info.size.width) * info.size.height;
+    const bool afrc_shape =
+        !format_override.has_value() &&
+        info.type == ImageType::e2D && info.num_samples == 1 &&
+        info.size.depth <= 1 &&
+        afrc_pixels >= 256ULL * 256ULL &&
+        (image_ci.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0 &&
+        (image_ci.usage & VK_IMAGE_USAGE_STORAGE_BIT) == 0;
+    // Only ask the driver for rates on images that could actually take them; sampled-only
+    // textures are the majority of image creations and must not pay for a format probe.
+    const bool afrc_profile =
+        afrc_shape && (Settings::values.mali_afrc.GetValue() ||
+                       Settings::values.native_gpu_mode.GetValue() || device.IsMalikanMode());
+    const VkImageCompressionFixedRateFlagsEXT afrc_rates =
+        afrc_profile ? device.GetFixedRateCompressionFlags(image_ci) : 0;
+    const VkImageCompressionFixedRateFlagsEXT afrc_rate =
+        ChooseAfrcRate(afrc_rates, Settings::values.mali_afrc.GetValue());
+    VkImageCompressionFixedRateFlagsEXT afrc_plane_rates[1] = {afrc_rate};
+    VkImageCompressionControlEXT compression_control{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT,
+        .pNext = has_format_list ? &image_format_list : nullptr,
+        // Mali r44 answers an explicit request with the supported rates; the "default rate" form
+        // comes back with an empty mask and silently produces an uncompressed image.
+        .flags = VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT,
+        .compressionControlPlaneCount = 1,
+        .pFixedRateFlags = afrc_plane_rates,
+    };
+    const bool wants_afrc = afrc_rate != VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
+    if (wants_afrc) {
+        static std::once_flag afrc_log;
+        std::call_once(afrc_log, [afrc_rate] {
+            LOG_INFO(Render_Vulkan, "[AFRC] explicit fixed-rate compression, rate {:#x}",
+                     static_cast<u32>(afrc_rate));
+        });
+        image_ci.pNext = &compression_control;
+    } else if (has_format_list) {
+        image_ci.pNext = &image_format_list;
+    }
+    if (wants_afrc) {
+        try {
+            return allocator.CreateImage(image_ci);
+        } catch (const vk::Exception& e) {
+            if (e.GetResult() != VK_ERROR_COMPRESSION_EXHAUSTED_EXT &&
+                e.GetResult() != VK_ERROR_FORMAT_NOT_SUPPORTED &&
+                e.GetResult() != VK_ERROR_FEATURE_NOT_PRESENT) {
+                throw;
+            }
+            LOG_WARNING(Render_Vulkan, "[AFRC] compression rejected ({}), using an uncompressed "
+                                       "image", static_cast<int>(e.GetResult()));
+            // Keep the format list on the retry; only the compression request is dropped.
+            image_ci.pNext = has_format_list ? &image_format_list : nullptr;
         }
     }
     return allocator.CreateImage(image_ci);
@@ -905,7 +1014,13 @@ TextureCacheRuntime::TextureCacheRuntime(const Device& device_, Scheduler& sched
     : device{device_}, scheduler{scheduler_}, memory_allocator{memory_allocator_},
       staging_buffer_pool{staging_buffer_pool_}, blit_image_helper{blit_image_helper_},
       render_pass_cache{render_pass_cache_}, resolution{Settings::values.resolution_info} {
-    if (Settings::values.accelerate_astc.GetValue() == Settings::AstcDecodeMode::Gpu) {
+    // Native ASTC needs no decoder pass. On Mali (and other fully native ASTC devices) creating
+    // this compute pipeline only adds startup cost and memory; per-format decoding is handled
+    // entirely by the texture unit.
+    const bool needs_astc_decoder =
+        Settings::values.accelerate_astc.GetValue() == Settings::AstcDecodeMode::Gpu &&
+        !device.AreAllAstcFormatsNativelySupported();
+    if (needs_astc_decoder) {
         astc_decoder_pass.emplace(device, scheduler, descriptor_pool, staging_buffer_pool,
                                   compute_pass_descriptor_queue, memory_allocator);
     }
@@ -917,7 +1032,7 @@ TextureCacheRuntime::TextureCacheRuntime(const Device& device_, Scheduler& sched
     }
     for (size_t index_a = 0; index_a < VideoCore::Surface::MaxPixelFormat; index_a++) {
         const auto image_format = static_cast<PixelFormat>(index_a);
-        if (IsPixelFormatASTC(image_format) && !device.IsOptimalAstcSupported()) {
+        if (IsPixelFormatASTC(image_format) && !UsesNativeAstc(device, image_format)) {
             view_formats[index_a].push_back(VK_FORMAT_A8B8G8R8_UNORM_PACK32);
         }
         for (size_t index_b = 0; index_b < VideoCore::Surface::MaxPixelFormat; index_b++) {
@@ -1581,17 +1696,21 @@ void TextureCacheRuntime::TickFrame() {}
 
 Image::Image(TextureCacheRuntime& runtime_, const ImageInfo& info_, GPUVAddr gpu_addr_,
              VAddr cpu_addr_)
+    : Image(runtime_, info_, gpu_addr_, cpu_addr_,
+            MakeImage(runtime_.device, runtime_.memory_allocator, info_,
+                      WillUseWidenedAstcFormat(runtime_.device, info_)
+                          ? std::span<const VkFormat>{}
+                          : runtime_.ViewFormats(info_.format),
+                      WillUseWidenedAstcFormat(runtime_.device, info_)
+                          ? std::make_optional(VK_FORMAT_R32G32B32A32_SFLOAT)
+                          : std::nullopt)) {}
+
+Image::Image(TextureCacheRuntime& runtime_, const ImageInfo& info_, GPUVAddr gpu_addr_,
+             VAddr cpu_addr_, vk::Image existing_image)
     : VideoCommon::ImageBase(info_, gpu_addr_, cpu_addr_), scheduler{&runtime_.scheduler},
-      runtime{&runtime_},
-      original_image(MakeImage(runtime_.device, runtime_.memory_allocator, info,
-                               WillUseWidenedAstcFormat(runtime_.device, info)
-                                   ? std::span<const VkFormat>{}
-                                   : runtime->ViewFormats(info.format),
-                               WillUseWidenedAstcFormat(runtime_.device, info)
-                                   ? std::make_optional(VK_FORMAT_R32G32B32A32_SFLOAT)
-                                   : std::nullopt)),
-      aspect_mask(ImageAspectMask(info.format)) {
-    if (IsPixelFormatASTC(info.format) && !runtime->device.IsOptimalAstcSupported()) {
+      runtime{&runtime_}, original_image(std::move(existing_image)),
+      aspect_mask(ImageAspectMask(info_.format)) {
+    if (IsPixelFormatASTC(info.format) && !UsesNativeAstc(runtime->device, info.format)) {
         switch (Settings::values.accelerate_astc.GetValue()) {
         case Settings::AstcDecodeMode::Gpu:
             if (WillUseAcceleratedAstcDecode(runtime->device, info)) {
@@ -1616,7 +1735,7 @@ Image::Image(TextureCacheRuntime& runtime_, const ImageInfo& info_, GPUVAddr gpu
     }
     current_image = &Image::original_image;
     storage_image_views.resize(info.resources.levels);
-    if (IsPixelFormatASTC(info.format) && !runtime->device.IsOptimalAstcSupported() &&
+    if (IsPixelFormatASTC(info.format) && !UsesNativeAstc(runtime->device, info.format) &&
         Settings::values.astc_recompression.GetValue() ==
             Settings::AstcRecompression::Uncompressed) {
         const auto& device = runtime->device.GetLogical();
@@ -1708,11 +1827,11 @@ void Image::UploadMemory(VkBuffer buffer, VkDeviceSize offset,
         image_ci.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
 
-        // CHANGE: The previous stack-allocated wrapper was destroyed at function exit,
-        //         which could destroy VkImage before the GPU used it.
-        auto temp_wrapper = std::make_shared<Image>(*runtime, temp_info, 0, 0);
-        temp_wrapper->original_image = runtime->memory_allocator.CreateImage(image_ci);
-        temp_wrapper->current_image = &Image::original_image;
+        // CHANGE: The wrapper owns the image we hand it. Constructing the default Image ctor here
+        //         allocated a second VkImage (plus its memory commit) that the assignment below
+        //         immediately orphaned, leaking both on every MSAA upload.
+        auto temp_wrapper = std::make_shared<Image>(*runtime, temp_info, 0, 0,
+                                                    runtime->memory_allocator.CreateImage(image_ci));
         temp_wrapper->aspect_mask = aspect_mask;
         temp_wrapper->initialized = true;
 
@@ -1803,11 +1922,9 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
 
             VkImageCreateInfo image_ci = MakeImageCreateInfo(runtime->device, temp_info);
             image_ci.usage = original_image.UsageFlags();
-            vk::Image temp_image = runtime->memory_allocator.CreateImage(image_ci);
 
-            Image temp_wrapper(*runtime, temp_info, 0, 0);
-            temp_wrapper.original_image = std::move(temp_image);
-            temp_wrapper.current_image = &Image::original_image;
+            Image temp_wrapper(*runtime, temp_info, 0, 0,
+                               runtime->memory_allocator.CreateImage(image_ci));
             temp_wrapper.aspect_mask = aspect_mask;
             temp_wrapper.initialized = true;
 
@@ -2154,7 +2271,14 @@ ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageViewI
     if (uses_widened_astc_format) {
         format_info.format = VK_FORMAT_R32G32B32A32_SFLOAT;
     }
-    if (device->ApiVersion() >= VK_API_VERSION_1_3) {
+    // vkGetPhysicalDeviceFormatProperties2 is a live driver entry point, not the device's cached
+    // format table - and the table cannot serve this query because VkFormatProperties has no
+    // depth-comparison bit. Its only consumer is the depth-comparison sampler fallback in
+    // pipeline_helper.h, reached solely when desc.is_depth holds, so querying it for every colour
+    // view cost a driver call per image view creation for a result that was always discarded.
+    const bool is_depth_view =
+        (aspect_mask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) != 0;
+    if (is_depth_view && device->ApiVersion() >= VK_API_VERSION_1_3) {
         const VkFormatProperties3 properties3 =
             device->GetPhysical().GetFormatProperties3(format_info.format);
         supports_depth_comparison =
@@ -2166,11 +2290,30 @@ ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageViewI
     const VkImageUsageFlags requested_view_usage = ImageUsageFlags(format_info, format);
     const VkImageUsageFlags image_usage = image.UsageFlags();
     const VkImageUsageFlags clamped_view_usage = requested_view_usage & image_usage;
-    const VkImageViewUsageCreateInfo image_view_usage{
+    VkImageViewUsageCreateInfo image_view_usage{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
         .pNext = nullptr,
         .usage = clamped_view_usage,
     };
+    VkImageViewASTCDecodeModeEXT astc_decode_mode{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_ASTC_DECODE_MODE_EXT,
+        .pNext = nullptr,
+        .decodeMode = VK_FORMAT_UNDEFINED,
+    };
+    // Native GPU mode: ask the driver to decode native ASTC straight to 8-bit UNORM/SRGB. Switch
+    // ASTC content is LDR, so the default FP16 decode costs bandwidth without adding precision;
+    // VK_EXT_astc_decode_mode is the only way to select the cheaper fixed-point hardware path.
+    const bool native_astc_view =
+        (Settings::values.native_gpu_mode.GetValue() || device->IsMalikanMode()) &&
+        device->IsAstcDecodeModeSupported() && IsPixelFormatASTC(image.info.format) &&
+        format_info.format >= VK_FORMAT_ASTC_4x4_UNORM_BLOCK &&
+        format_info.format <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK;
+    if (native_astc_view) {
+        astc_decode_mode.decodeMode =
+            VideoCore::Surface::IsPixelFormatSRGB(format) ? VK_FORMAT_R8G8B8A8_SRGB
+                                                          : VK_FORMAT_R8G8B8A8_UNORM;
+        image_view_usage.pNext = &astc_decode_mode;
+    }
     const VkImageViewCreateInfo create_info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = &image_view_usage,
@@ -2540,7 +2683,11 @@ void TextureCacheRuntime::AccelerateImageUpload(
     u32 z_start, u32 z_count) {
 
     if (IsPixelFormatASTC(image.info.format)) {
-        return astc_decoder_pass->Assemble(image, map, swizzles);
+        if (astc_decoder_pass) {
+            return astc_decoder_pass->Assemble(image, map, swizzles);
+        }
+        ASSERT_MSG(false, "ASTC decoder pass is required but was not created");
+        return;
     }
 
     if (!Settings::values.gpu_unswizzle_enabled.GetValue() || !bl3d_unswizzle_pass) {

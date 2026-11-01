@@ -36,6 +36,11 @@ public:
     Result Reset(KernelCore& kernel);
 
 private:
+    friend class KEvent;
+
+    Result SignalLocked(KernelCore& kernel);
+    Result ResetLocked(KernelCore& kernel);
+
     bool m_is_signaled{};
     KEvent* m_parent{};
 };

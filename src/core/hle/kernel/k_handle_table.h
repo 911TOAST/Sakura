@@ -198,15 +198,7 @@ private:
         return id;
     }
 
-    bool IsValidHandle(Handle handle) const {
-        // Unpack the handle.
-        const auto handle_pack = HandlePack(handle);
-        const auto raw_value = handle_pack.raw;
-        const auto index = handle_pack.index;
-        const auto linear_id = handle_pack.linear_id;
-        const auto reserved = handle_pack.reserved;
-        ASSERT(reserved == 0);
-
+    bool IsValidHandleFields(u32 raw_value, u32 index, u32 linear_id) const {
         // Validate our indexing information.
         if (raw_value == 0) [[unlikely]] {
             return false;
@@ -229,6 +221,14 @@ private:
         return true;
     }
 
+    bool IsValidHandle(Handle handle) const {
+        // Unpack the handle.
+        const auto handle_pack = HandlePack(handle);
+        ASSERT(handle_pack.reserved == 0);
+        return this->IsValidHandleFields(handle_pack.raw, handle_pack.index,
+                                         handle_pack.linear_id);
+    }
+
     KAutoObject* GetObjectImpl(Handle handle) const {
         // Handles must not have reserved bits set.
         const auto handle_pack = HandlePack(handle);
@@ -236,11 +236,21 @@ private:
             return nullptr;
         }
 
-        if (this->IsValidHandle(handle)) [[likely]] {
-            return m_objects[handle_pack.index];
-        } else {
+        // Validate the handle and fetch the object with a single load of the
+        // object pointer. This path is hit for every IPC object lookup.
+        if (handle_pack.raw == 0 || handle_pack.linear_id == 0 ||
+            handle_pack.index >= m_table_size) [[unlikely]] {
             return nullptr;
         }
+
+        KAutoObject* object = m_objects[handle_pack.index];
+        if (object == nullptr ||
+            m_entry_infos[handle_pack.index].GetLinearId() != handle_pack.linear_id)
+            [[unlikely]] {
+            return nullptr;
+        }
+
+        return object;
     }
 
     KAutoObject* GetObjectByIndexImpl(Handle* out_handle, size_t index) const {

@@ -8,7 +8,9 @@
 #include <mutex>
 #include <string>
 #include <tuple>
-#include "common/cpu_features.h"
+
+#include <boost/container/small_vector.hpp>
+
 #include "common/cpu_features.h"
 
 #ifdef _WIN32
@@ -165,7 +167,7 @@ void CoreTiming::UnscheduleEvent(const std::shared_ptr<EventType>& event_type,
     {
         std::scoped_lock lk{basic_lock};
 
-        std::vector<heap_t::handle_type> to_remove;
+        boost::container::small_vector<heap_t::handle_type, 1> to_remove;
         for (auto itr = event_queue.begin(); itr != event_queue.end(); itr++) {
             const Event& e = *itr;
             if (e.type.lock().get() == event_type.get()) {
@@ -173,7 +175,7 @@ void CoreTiming::UnscheduleEvent(const std::shared_ptr<EventType>& event_type,
             }
         }
 
-        for (auto& h : to_remove) {
+        for (const auto& h : to_remove) {
             event_queue.erase(h);
         }
 
@@ -208,16 +210,31 @@ void CoreTiming::ResetTicks() {
 }
 
 u64 CoreTiming::GetClockTicks() const {
-    u64 fres = is_multicore ? Common::g_wall_clock.GetCNTPCT() : Common::WallClock::CPUTickToCNTPCT(cpu_ticks);
-    if (auto const overclock = Settings::values.fast_cpu_time.GetValue(); overclock != Settings::CpuClock::Off) {
-        fres = u64(f64(fres) * (1.7 + 0.3 * u32(overclock)));
+    const u64 fres = is_multicore ? Common::g_wall_clock.GetCNTPCT()
+                                  : Common::WallClock::CPUTickToCNTPCT(cpu_ticks);
+    const auto overclock = Settings::values.fast_cpu_time.GetValue();
+    const bool sync_core_speed = Settings::values.sync_core_speed.GetValue();
+
+    // Default timing configuration: the guest clock is just the unscaled wall
+    // clock. This is by far the hottest path (svcGetSystemTick, context switches
+    // and thread CPU-time accounting), so avoid the floating point work below.
+    if (overclock == Settings::CpuClock::Off && !sync_core_speed) {
+        return fres;
     }
-    if (::Settings::values.sync_core_speed.GetValue()) {
-        auto const ticks = f64(fres);
-        auto const speed_limit = f64(Settings::SpeedLimit()) * 0.01;
-        return u64(ticks / speed_limit);
+
+    u64 ticks = fres;
+    if (overclock != Settings::CpuClock::Off) {
+        ticks = u64(f64(ticks) * (1.7 + 0.3 * u32(overclock)));
     }
-    return fres;
+    if (sync_core_speed) {
+        const u16 speed_limit = Settings::SpeedLimit();
+        // A limit of 0 means "unconfigured" (see the old comment about division
+        // by zero) and 100% is the identity; skip the conversion in both cases.
+        if (speed_limit != 0 && speed_limit != 100) {
+            return u64(f64(ticks) / (f64(speed_limit) * 0.01));
+        }
+    }
+    return ticks;
 }
 
 u64 CoreTiming::GetGPUTicks() const {

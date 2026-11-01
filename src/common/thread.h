@@ -21,9 +21,13 @@ namespace Common {
 class Event {
 public:
     void Set() {
+        if (is_set.load(std::memory_order_relaxed)) {
+            return;
+        }
+
         std::scoped_lock lk{mutex};
-        if (!is_set) {
-            is_set = true;
+        if (!is_set.load(std::memory_order_relaxed)) {
+            is_set.store(true, std::memory_order_relaxed);
             condvar.notify_one();
         }
     }
@@ -101,6 +105,5 @@ enum class ThreadPriority : u32 {
 
 void SetCurrentThreadPriority(ThreadPriority new_priority);
 void SetCurrentThreadName(const char* name);
-void PinCurrentThreadToPerformanceCore(size_t core_id);
 
 } // namespace Common

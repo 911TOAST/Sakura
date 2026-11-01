@@ -159,10 +159,14 @@ try
 
     is_headless = (render_window.GetWindowInfo().type == Core::Frontend::WindowSystemType::Headless);
 
+#ifndef __ANDROID__
+    // TurboMode only exists to submit a periodic compute dispatch on desktop. Its loop is compiled
+    // out on Android, so registering it would wake a thread on every submission for nothing.
     if (Settings::values.renderer_force_max_clock.GetValue() && device.ShouldBoostClocks()) {
         turbo_mode.emplace(instance, dld);
         scheduler.RegisterOnSubmit([this] { turbo_mode->QueueSubmitted(); });
     }
+#endif
 
     Report();
 } catch (const vk::Exception& exception) {
@@ -223,7 +227,10 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
     blit_swapchain.DrawToFrame(device, rasterizer, frame, framebuffers,
                                render_window.GetFramebufferLayout(), swapchain.GetImageCount(),
                                swapchain.GetImageViewFormat());
-    scheduler.Flush(*frame->render_ready);
+    // Direct present renders into an image acquired from the WSI, so the composition submission
+    // must wait for the acquire semaphore before the render pass performs its UNDEFINED ->
+    // PRESENT_SRC_KHR transition. The fallback path returns VK_NULL_HANDLE and is unaffected.
+    scheduler.Flush(*frame->render_ready, present_manager.GetPresentWaitSemaphore());
 
     present_manager.Present(frame);
 

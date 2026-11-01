@@ -33,6 +33,7 @@ import org.yuzu.yuzu_emu.features.input.NativeInput
 import org.yuzu.yuzu_emu.features.settings.model.Settings
 import org.yuzu.yuzu_emu.features.settings.model.view.PathSetting
 import org.yuzu.yuzu_emu.fragments.MessageDialogFragment
+import org.yuzu.yuzu_emu.ui.MotionBlur
 import org.yuzu.yuzu_emu.utils.PathUtil
 import org.yuzu.yuzu_emu.utils.ViewUtils.updateMargins
 import org.yuzu.yuzu_emu.utils.*
@@ -42,6 +43,7 @@ import androidx.core.net.toUri
 class SettingsFragment : Fragment() {
     private lateinit var presenter: SettingsFragmentPresenter
     private var settingsAdapter: SettingsAdapter? = null
+    private var motionBlur: MotionBlur? = null
 
     private var _binding: FragmentSettingsBinding? = null
     private val binding get() = _binding!!
@@ -104,6 +106,7 @@ class SettingsFragment : Fragment() {
         binding.listSettings.apply {
             adapter = settingsAdapter
             layoutManager = LinearLayoutManager(requireContext())
+            motionBlur = MotionBlur(this).also { addOnScrollListener(it) }
         }
 
         binding.toolbarSettings.setNavigationOnClickListener {
@@ -180,6 +183,13 @@ class SettingsFragment : Fragment() {
         presenter.onViewCreated()
         setInsets()
     }
+
+    override fun onDestroyView() {
+        motionBlur?.stop()
+        motionBlur = null
+        super.onDestroyView()
+    }
+
 private fun getPlayerIndex(): Int =
         when (args.menuTag) {
             Settings.MenuTag.SECTION_INPUT_PLAYER_ONE -> 0

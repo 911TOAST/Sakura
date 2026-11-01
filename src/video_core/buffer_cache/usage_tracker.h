@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <algorithm>
+#include <vector>
+
 #include "common/alignment.h"
 #include "common/common_types.h"
 
@@ -17,10 +20,21 @@ public:
     explicit UsageTracker(size_t size) {
         const size_t num_pages = (size >> PAGE_SHIFT) + 1;
         pages.resize(num_pages, 0ULL);
+        dirty_begin = num_pages;
     }
 
+    /// Clears only the pages Track() could have set. Clearing the whole bitmap was O(buffer size)
+    /// and ran for every cached buffer on every frame, which cost more than tracking itself.
     void Reset() noexcept {
-        std::ranges::fill(pages, 0ULL);
+        for (size_t i = dirty_begin; i < dirty_end; ++i) {
+            pages[i] = 0ULL;
+        }
+        dirty_begin = pages.size();
+        dirty_end = 0;
+    }
+
+    [[nodiscard]] bool HasDirtyPages() const noexcept {
+        return dirty_begin < dirty_end;
     }
 
     void Track(u64 offset, u64 size) noexcept {
@@ -31,6 +45,7 @@ public:
         }
         TrackPage(page, offset, size);
         if (page == page_end) {
+            MarkDirty(page, page + 1);
             return;
         }
         for (size_t i = page + 1; i < page_end; i++) {
@@ -39,6 +54,7 @@ public:
         const size_t offset_end = offset + size;
         const size_t offset_end_page_aligned = Common::AlignDown(offset_end, PAGE_BYTES);
         TrackPage(page_end, offset_end_page_aligned, offset_end - offset_end_page_aligned);
+        MarkDirty(page, page_end + 1);
     }
 
     [[nodiscard]] bool IsUsed(u64 offset, u64 size) const noexcept {
@@ -61,6 +77,11 @@ public:
     }
 
 private:
+    void MarkDirty(size_t begin, size_t end) noexcept {
+        dirty_begin = (std::min)(dirty_begin, begin);
+        dirty_end = (std::max)(dirty_end, end);
+    }
+
     void TrackPage(u64 page, u64 offset, u64 size) noexcept {
         const size_t offset_in_page = offset % PAGE_BYTES;
         const size_t first_bit = offset_in_page >> BYTES_PER_BIT_SHIFT;
@@ -80,6 +101,9 @@ private:
 
 private:
     std::vector<u64> pages;
+    /// Half-open range of pages that may be non-zero. Empty when dirty_begin >= dirty_end.
+    size_t dirty_begin{0};
+    size_t dirty_end{0};
 };
 
 } // namespace VideoCommon

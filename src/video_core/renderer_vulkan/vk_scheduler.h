@@ -13,6 +13,7 @@
 #include <thread>
 #include <utility>
 #include <queue>
+#include <vector>
 
 #include "common/alignment.h"
 #include "common/common_types.h"
@@ -99,6 +100,17 @@ public:
     }
 
     template <typename T>
+        requires std::is_invocable_v<T, vk::CommandBuffer, vk::CommandBuffer>
+    void RecordUploadBuffer(VkBuffer destination, T&& command) {
+        RecordWithUploadBuffer(
+            [this, destination, command = std::forward<T>(command)](
+                vk::CommandBuffer cmdbuf, vk::CommandBuffer upload_cmdbuf) {
+                command(cmdbuf, upload_cmdbuf);
+                RegisterUploadBuffer(destination);
+            });
+    }
+
+    template <typename T>
         requires std::is_invocable_v<T, vk::CommandBuffer>
     void Record(T&& c) {
         this->RecordWithUploadBuffer(
@@ -137,9 +149,10 @@ public:
             frame_counter++;
             auto target_time = start_time + frame_interval * frame_counter;
             if (target_time >= now) {
-                auto sleep_time = target_time - now;
-                if (sleep_time > std::chrono::milliseconds(15)) {
-                    std::this_thread::sleep_for(sleep_time - std::chrono::milliseconds(1));
+                const auto sleep_time = target_time - now;
+                constexpr auto spin_threshold = std::chrono::microseconds(250);
+                if (sleep_time > std::chrono::milliseconds(1)) {
+                    std::this_thread::sleep_for(sleep_time - spin_threshold);
                 }
                 while (std::chrono::steady_clock::now() < target_time) {
                     std::this_thread::yield();
@@ -255,6 +268,8 @@ private:
 
     void AllocateWorkerCommandBuffer();
 
+    void RegisterUploadBuffer(VkBuffer buffer);
+
     u64 SubmitExecution(VkSemaphore signal_semaphore, VkSemaphore wait_semaphore);
 
     void AllocateNewContext();
@@ -287,6 +302,10 @@ private:
 
     std::queue<std::unique_ptr<CommandChunk>> work_queue;
     std::vector<std::unique_ptr<CommandChunk>> chunk_reserve;
+    // Written and consumed only on the scheduler worker thread. These let Mali use
+    // resource-scoped barriers instead of flushing unrelated memory after each submit.
+    std::vector<VkBuffer> pending_upload_buffers;
+    std::vector<VkBufferMemoryBarrier> pending_upload_barriers;
     std::mutex execution_mutex;
     std::mutex reserve_mutex;
     std::mutex queue_mutex;

@@ -10,72 +10,60 @@
 
     <org.yuzu.yuzu_emu.views.GradientBorderCardView
         android:id="@+id/card_game_grid_compact"
-        app:cardElevation="0dp"
-        app:cardBackgroundColor="@color/neon_card_background"
-        app:strokeWidth="0dp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:layout_margin="4dp"
         android:clickable="true"
         android:clipToPadding="true"
         android:focusable="true"
         android:transitionName="card_game_compact"
-        app:cardCornerRadius="16dp"
-        android:foreground="@color/neon_border_gradient_start">
+        app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp">
 
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingTop="3dp"
-            android:paddingLeft="4dp"
-            android:paddingRight="4dp"
-            android:paddingBottom="3dp">
+        <FrameLayout
+            android:id="@+id/image_container"
+            android:layout_width="156dp"
+            android:layout_height="104dp">
 
-            <FrameLayout
-                android:id="@+id/image_container"
-                android:layout_width="150dp"
-                android:layout_height="100dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent">
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/image_game_screen_compact"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:transitionName="game_artwork"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.sakura.GameArtwork"
+                tools:src="@drawable/default_icon" />
 
-                <com.google.android.material.imageview.ShapeableImageView
-                    android:id="@+id/image_game_screen_compact"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    app:shapeAppearance="@style/ShapeAppearance.Material3.Corner.Medium"
-                    android:scaleType="centerCrop"
-                    tools:src="@drawable/default_icon" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/gradient_overlay_bottom" />
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@drawable/gradient_overlay_bottom" />
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/text_game_title_compact"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:layout_marginBottom="8dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/google_sans_medium"
+                android:letterSpacing="0.004"
+                android:maxLines="2"
+                android:shadowColor="@android:color/black"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="3"
+                android:textAlignment="viewStart"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                tools:text="The Legend of Zelda: Skyward Sword" />
 
-                <com.google.android.material.textview.MaterialTextView
-                    android:id="@+id/text_game_title_compact"
-                    style="@style/SynthwaveText.Body"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="bottom"
-                    android:layout_margin="6dp"
-                    android:requiresFadingEdge="horizontal"
-                    android:textAlignment="center"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:textColor="@android:color/white"
-                    android:shadowColor="@android:color/black"
-                    android:shadowDx="1"
-                    android:shadowDy="1"
-                    android:shadowRadius="2"
-                    android:maxLines="2"
-                    android:ellipsize="end"
-                    tools:text="The Legend of Zelda: Skyward Sword" />
-
-            </FrameLayout>
-
-        </androidx.constraintlayout.widget.ConstraintLayout>
+        </FrameLayout>
 
     </org.yuzu.yuzu_emu.views.GradientBorderCardView>
 

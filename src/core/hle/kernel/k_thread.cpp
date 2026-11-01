@@ -441,7 +441,7 @@ namespace Kernel {
 
         // Signal.
         m_signaled = true;
-        KSynchronizationObject::NotifyAvailable(kernel);
+        KSynchronizationObject::NotifyAvailableLocked(kernel);
 
         // Close the thread.
         this->Close(kernel);

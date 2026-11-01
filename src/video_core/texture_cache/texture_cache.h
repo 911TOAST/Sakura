@@ -77,6 +77,19 @@ TextureCache<P>::TextureCache(Runtime& runtime_, Tegra::MaxwellDeviceMemoryManag
         minimum_memory = 0;
     }
 
+#if defined(__ANDROID__)
+    // There is no dedicated VRAM on a phone: every texture byte competes with the guest's 4 GiB
+    // of DRAM and the rest of the system. Even when the device reports a large heap (or omits
+    // VK_EXT_memory_budget and leaves the caller guessing), keep the texture cache's planning
+    // ceiling well below that so eviction, not the platform's reclaimer, is what trims it.
+    expected_memory = std::min<u64>(expected_memory, 1_GiB + 256_MiB);
+    critical_memory = std::min<u64>(critical_memory, 1_GiB + 768_MiB);
+    // The formula above yields zero once device_local_memory drops below TARGET_THRESHOLD, which
+    // made TickFrame run the garbage collector every single frame. Keep a floor so a mostly-idle
+    // cache is left alone.
+    minimum_memory = std::max<u64>(minimum_memory, 256_MiB);
+#endif
+
     const bool gpu_unswizzle_enabled = Settings::values.gpu_unswizzle_enabled.GetValue();
 
     if (gpu_unswizzle_enabled) {

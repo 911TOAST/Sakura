@@ -31,8 +31,11 @@
 #elif defined(__DragonFly__) || defined(__OpenBSD__) || defined(__Bitrig__)
 #include <pthread_np.h>
 #endif
+#include <cerrno>
 #include <pthread.h>
 #include <sched.h>
+#include <sys/resource.h>
+#include <sys/syscall.h>
 #endif
 
 #ifndef _WIN32
@@ -78,6 +81,42 @@ void SetCurrentThreadPriority(ThreadPriority new_priority) {
         }
     }();
     set_thread_priority(find_thread(NULL), priority);
+#elif defined(__linux__)
+    // SCHED_OTHER only accepts a static priority of 0, so sched_get_priority_{max,min} both
+    // return 0 and the pthread_setschedparam call below changed nothing. Every priority request
+    // in the emulator - the Critical GPU thread, the core threads, High audio, the Low clock
+    // worker - was a no-op on Android. nice is what EAS actually consults, so use that, backing
+    // off in steps if RLIMIT_NICE forbids a negative value for an unprivileged app.
+    const int requested_nice = [&]() {
+        switch (new_priority) {
+        case ThreadPriority::Low: return 10;
+        case ThreadPriority::Normal: return 0;
+        case ThreadPriority::High: return -8;
+        case ThreadPriority::VeryHigh: return -14;
+        case ThreadPriority::Critical: return -20;
+        default: return 0;
+        }
+    }();
+
+    const auto tid = static_cast<id_t>(syscall(SYS_gettid));
+    auto try_set = [tid](int value) {
+        errno = 0;
+        return setpriority(PRIO_PROCESS, tid, value) == 0;
+    };
+
+    if (requested_nice >= 0) {
+        try_set(requested_nice);
+    } else {
+        for (int candidate = requested_nice; candidate <= 0; candidate += 2) {
+            if (try_set(candidate)) {
+                if (candidate != requested_nice) {
+                    LOG_WARNING(Common, "nice {} not permitted for this process, using {}",
+                                requested_nice, candidate);
+                }
+                break;
+            }
+        }
+    }
 #else
     pthread_t this_thread = pthread_self();
     const auto scheduling_type = SCHED_OTHER;
@@ -132,30 +171,13 @@ void SetCurrentThreadName(const char* name) {
 #endif
 }
 
-void PinCurrentThreadToPerformanceCore(size_t core_id) {
-    ASSERT(core_id < 4);
-    // If we set a flag for a CPU that doesn't exist, the thread may not be allowed to
-    // run in ANY processor!
-    auto const total_cores = std::thread::hardware_concurrency();
-    if (core_id < total_cores) {
-#if defined(__ANDROID__)
-        cpu_set_t set;
-        CPU_ZERO(&set);
-        CPU_SET(core_id, &set);
-        sched_setaffinity(pthread_self(), sizeof(set), &set);
-#elif defined(__linux__) || defined(__FreeBSD__)
-        cpu_set_t set;
-        CPU_ZERO(&set);
-        CPU_SET(core_id, &set);
-        pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
-#elif defined(_WIN32)
-        DWORD set = 1UL << core_id;
-        SetThreadAffinityMask(GetCurrentThread(), set);
-#else
-        // No pin functionality implemented
-#endif
-    }
-}
+// No CPU affinity pinning. Android's cpuset controller, not this process, owns the top of the
+// mask: on a motorola edge 60 fusion the same process was observed on 0-6 while menuing, 0-7 in
+// game and 0-2 in background, and each migration resets every thread's affinity. Anything set at
+// thread start is therefore transient, and whatever sticks is inherited by threads spawned later,
+// cramming present and shader-compile workers onto the big cores the emulated CPUs need. EAS
+// already ranks cores by cpu_capacity, which is the same signal a pin would use.
+
 
 #ifdef ARCHITECTURE_x86_64
 // On Linux and UNIX systems, a futex would nominally be used to cover the costs

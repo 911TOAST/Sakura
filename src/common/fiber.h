@@ -45,7 +45,6 @@ public:
     /// Fiber 'from' must be the currently running fiber.
     static void YieldTo(std::weak_ptr<Fiber> weak_from, Fiber& to);
     [[nodiscard]] static std::shared_ptr<Fiber> ThreadToFiber();
-    void SetRewindPoint(std::function<void()>&& rewind_func);
     /// Only call from main thread's fiber
     void Exit();
 private:

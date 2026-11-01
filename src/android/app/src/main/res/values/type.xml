@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Clean Material 3 type scale set in Google Sans.
+         Tracking follows the M3 spec but is kept neutral (no expanded spacing)
+         so long game titles and settings rows stay calm and readable.
+         Note: letterSpacing is in em on the Android View side. -->
+    <!-- M3 Expressive Display — tighter negative tracking for editorial confidence -->
+    <style name="TextAppearance.Suyu.DisplayLarge" parent="TextAppearance.Material3.DisplayLarge">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <!-- -0.008em: more editorial/confident than baseline M3 -0.004em -->
+        <item name="android:letterSpacing">-0.008</item>
+    </style>
+    <style name="TextAppearance.Suyu.DisplayMedium" parent="TextAppearance.Material3.DisplayMedium">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">-0.004</item>
+    </style>
+    <style name="TextAppearance.Suyu.DisplaySmall" parent="TextAppearance.Material3.DisplaySmall">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <!-- M3 Expressive Headlines — SemiBold weight for confident hierarchy -->
+    <style name="TextAppearance.Suyu.HeadlineLarge" parent="TextAppearance.Material3.HeadlineLarge">
+        <item name="android:fontFamily">@font/google_sans_semibold</item>
+        <item name="android:letterSpacing">-0.002</item>
+    </style>
+    <style name="TextAppearance.Suyu.HeadlineMedium" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:fontFamily">@font/google_sans_semibold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+    <style name="TextAppearance.Suyu.HeadlineSmall" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:fontFamily">@font/google_sans_medium</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="TextAppearance.Suyu.TitleLarge" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+    <style name="TextAppearance.Suyu.TitleMedium" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.004</item>
+    </style>
+    <style name="TextAppearance.Suyu.TitleSmall" parent="TextAppearance.Material3.TitleSmall">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.004</item>
+    </style>
+
+    <style name="TextAppearance.Suyu.BodyLarge" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.008</item>
+    </style>
+    <style name="TextAppearance.Suyu.BodyMedium" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.008</item>
+    </style>
+    <style name="TextAppearance.Suyu.BodySmall" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.012</item>
+    </style>
+
+    <style name="TextAppearance.Suyu.LabelLarge" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.01</item>
+    </style>
+    <style name="TextAppearance.Suyu.LabelMedium" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.015</item>
+    </style>
+    <style name="TextAppearance.Suyu.LabelSmall" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:letterSpacing">0.02</item>
+    </style>
+
+</resources>

@@ -118,6 +118,8 @@ add_library(video_core STATIC
     renderer_null/renderer_null.h
 
     # Vulkan
+    renderer_malikan/renderer_malikan.cpp
+    renderer_malikan/renderer_malikan.h
     renderer_vulkan/present/anti_alias_pass.h
     renderer_vulkan/present/filters.cpp
     renderer_vulkan/present/filters.h

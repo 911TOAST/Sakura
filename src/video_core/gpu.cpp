@@ -146,10 +146,16 @@ struct GPU::Impl {
 
     [[nodiscard]] u64 GetTicks() const {
         u64 gpu_tick = system.CoreTiming().GetGPUTicks();
+        if (!Settings::values.use_fast_gpu_time.GetValue()) {
+            return gpu_tick;
+        }
         Settings::GpuOverclock overclock = Settings::values.fast_gpu_time.GetValue();
 
         if (overclock != Settings::GpuOverclock::Normal) {
-            gpu_tick /= 256 * u64(overclock);
+            // Divide by 128 * 2^level: Medium = 256, High = 512, VeryHigh = 1024,
+            // Extreme = 2048. Higher levels make the emulated GPU appear to finish
+            // sooner, trading timing accuracy for fewer CPU/GPU sync stalls.
+            gpu_tick /= 128ull << static_cast<u32>(overclock);
         }
 
         return gpu_tick;
@@ -227,7 +233,11 @@ struct GPU::Impl {
     void RequestComposite(std::vector<Tegra::FramebufferConfig>&& layers, std::vector<Service::Nvidia::NvFence>&& fences) {
         size_t num_fences{fences.size()};
         size_t current_request_counter{};
-        {
+        // The counter below is only released by the executer callbacks, and those are registered
+        // once per fence. Claiming one when num_fences == 0 therefore leaks the slot permanently:
+        // request_swap_counters grew by an entry on every unfenced composite, which is the common
+        // single-layer path, and the deque was never reclaimed.
+        if (num_fences != 0) {
             std::unique_lock<std::mutex> lk(request_swap_mutex);
             if (free_swap_counters.empty()) {
                 current_request_counter = request_swap_counters.size();

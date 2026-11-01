@@ -45,7 +45,7 @@ Result KEvent::Signal(KernelCore& kernel) {
 
     R_SUCCEED_IF(m_readable_event_destroyed);
 
-    return m_readable_event.Signal(kernel);
+    return m_readable_event.SignalLocked(kernel);
 }
 
 Result KEvent::Clear(KernelCore& kernel) {
@@ -53,7 +53,8 @@ Result KEvent::Clear(KernelCore& kernel) {
 
     R_SUCCEED_IF(m_readable_event_destroyed);
 
-    return m_readable_event.Clear(kernel);
+    m_readable_event.ResetLocked(kernel);
+    R_SUCCEED();
 }
 
 void KEvent::PostDestroy(KernelCore& kernel, uintptr_t arg) {

@@ -44,7 +44,7 @@ import org.yuzu.yuzu_emu.ui.main.MainActivity
 import org.yuzu.yuzu_emu.utils.FileUtil
 import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.Log
-import org.yuzu.yuzu_emu.utils.ViewUtils.updateMargins
+import org.yuzu.yuzu_emu.utils.SuyuMotion
 
 class HomeSettingsFragment : Fragment() {
     private var _binding: FragmentHomeSettingsBinding? = null
@@ -73,17 +73,23 @@ class HomeSettingsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         homeViewModel.setStatusBarShadeVisibility(visible = false)
         mainActivity = requireActivity() as MainActivity
-        binding.toolbarHomeSettings.setNavigationOnClickListener {
+        binding.settingsBackButton.setOnClickListener {
             findNavController().popBackStack()
         }
-        binding.toolbarHomeSettings.title = getString(R.string.preferences_settings)
+
+        // Swipe from the left edge to slide the panel back out.
+        binding.root.onSwipeBack = {
+            if (isAdded) {
+                findNavController().popBackStack()
+            }
+        }
 
         val optionsList: MutableList<HomeSetting> = mutableListOf<HomeSetting>().apply {
             add(
                 HomeSetting(
                     R.string.advanced_settings,
                     R.string.settings_description,
-                    R.drawable.ic_settings,
+                    R.drawable.ic_m3_tune,
                     {
                         val action = HomeNavigationDirections.actionGlobalSettingsActivity(
                             null,
@@ -97,7 +103,7 @@ class HomeSettingsFragment : Fragment() {
                 HomeSetting(
                     R.string.app_settings,
                     R.string.app_settings_description,
-                    R.drawable.ic_palette,
+                    R.drawable.ic_m3_settings,
                     {
                         val action = HomeNavigationDirections.actionGlobalSettingsActivity(
                             null,
@@ -111,7 +117,7 @@ class HomeSettingsFragment : Fragment() {
                 HomeSetting(
                     R.string.preferences_controls,
                     R.string.preferences_controls_description,
-                    R.drawable.ic_controller,
+                    R.drawable.ic_m3_sports_esports,
                     {
                         val action = HomeNavigationDirections.actionGlobalSettingsActivity(
                             null,
@@ -147,10 +153,7 @@ class HomeSettingsFragment : Fragment() {
                         )
                         binding.root.findNavController().navigate(action)
                     },
-                    { true },
-                    R.string.custom_driver_not_supported,
-                    R.string.custom_driver_not_supported_description,
-                    driverViewModel.selectedDriverTitle
+                    details = driverViewModel.selectedDriverTitle
                 )
             )
             if (GpuDriverHelper.isAdrenoGpu()) {
@@ -184,7 +187,7 @@ class HomeSettingsFragment : Fragment() {
                 HomeSetting(
                     R.string.applets,
                     R.string.applets_description,
-                    R.drawable.ic_applet,
+                    R.drawable.ic_m3_apps,
                     {
                         val action = HomeNavigationDirections.actionGlobalSettingsSubscreenActivity(
                             SettingsSubscreen.APPLET_LAUNCHER,
@@ -215,7 +218,7 @@ class HomeSettingsFragment : Fragment() {
                 HomeSetting(
                     R.string.manage_game_folders,
                     R.string.select_games_folder_description,
-                    R.drawable.ic_add,
+                    R.drawable.ic_m3_create_new_folder,
                     {
                         val action = HomeNavigationDirections.actionGlobalSettingsSubscreenActivity(
                             SettingsSubscreen.GAME_FOLDERS,
@@ -283,7 +286,7 @@ class HomeSettingsFragment : Fragment() {
                 HomeSetting(
                     R.string.open_user_folder,
                     R.string.open_user_folder_description,
-                    R.drawable.ic_folder_open,
+                    R.drawable.ic_m3_folder_open,
                     { openFileManager() }
                 )
             )
@@ -327,6 +330,25 @@ class HomeSettingsFragment : Fragment() {
         }
 
         setInsets()
+        animateHeaderEntrance()
+    }
+
+    /**
+     * Expressive hub entrance: the header rises on the emphasized curve while
+     * the option rows stagger in through the adapter.
+     */
+    private fun animateHeaderEntrance() {
+        val context = requireContext()
+        val header = binding.homeSettingsHeader
+        header.animate().cancel()
+        header.alpha = 0f
+        header.translationY = resources.getDimensionPixelSize(R.dimen.spacing_large).toFloat()
+        header.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(SuyuMotion.durationLong2(context))
+            .setInterpolator(SuyuMotion.emphasizedDecelerate(context))
+            .start()
     }
 
     override fun onStart() {
@@ -506,18 +528,16 @@ class HomeSettingsFragment : Fragment() {
             val barInsets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             val cutoutInsets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
 
-            binding.appbarHomeSettings.updateMargins(
-                left = barInsets.left + cutoutInsets.left,
-                right = barInsets.right + cutoutInsets.right
-            )
-
             binding.scrollViewSettings.updatePadding(
+                top = barInsets.top + resources.getDimensionPixelSize(R.dimen.spacing_small),
                 bottom = barInsets.bottom
             )
 
-            binding.homeSettingsList.updatePadding(
-                left = barInsets.left + cutoutInsets.left,
-                right = barInsets.right + cutoutInsets.right
+            binding.linearLayoutSettings.updatePadding(
+                left = barInsets.left + cutoutInsets.left +
+                    resources.getDimensionPixelSize(R.dimen.spacing_large),
+                right = barInsets.right + cutoutInsets.right +
+                    resources.getDimensionPixelSize(R.dimen.spacing_large)
             )
 
             windowInsets

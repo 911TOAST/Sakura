@@ -152,6 +152,11 @@ KSynchronizationObject::~KSynchronizationObject() = default;
 
 void KSynchronizationObject::NotifyAvailable(KernelCore& kernel, Result result) {
     KScopedSchedulerLock sl(kernel);
+    NotifyAvailableLocked(kernel, result);
+}
+
+void KSynchronizationObject::NotifyAvailableLocked(KernelCore& kernel, Result result) {
+    ASSERT(KScheduler::IsSchedulerLockedByCurrentThread(kernel));
 
     // If we're not signaled, we've nothing to notify.
     if (!this->IsSignaled(kernel)) {

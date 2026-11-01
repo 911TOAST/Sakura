@@ -753,6 +753,7 @@ bool GRenderWindow::InitRenderTarget() {
             return false;
         break;
     case Settings::RendererBackend::Vulkan:
+    case Settings::RendererBackend::Malikan:
         if (!InitializeVulkan())
             return false;
         break;

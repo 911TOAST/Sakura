@@ -69,6 +69,8 @@ static const std::map<Settings::GpuAccuracy, QString> gpu_accuracy_texts_map = {
 
 static const std::map<Settings::RendererBackend, QString> renderer_backend_texts_map = {
     {Settings::RendererBackend::Vulkan, QStringLiteral(QT_TRANSLATE_NOOP("MainWindow", "Vulkan"))},
+    {Settings::RendererBackend::Malikan,
+     QStringLiteral(QT_TRANSLATE_NOOP("MainWindow", "Malikan (experimental)"))},
     {Settings::RendererBackend::OpenGL_GLSL,
      QStringLiteral(QT_TRANSLATE_NOOP("MainWindow", "OpenGL GLSL"))},
     {Settings::RendererBackend::OpenGL_SPIRV,

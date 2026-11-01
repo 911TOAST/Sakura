@@ -21,6 +21,7 @@ import org.yuzu.yuzu_emu.features.settings.model.LongSetting
 import org.yuzu.yuzu_emu.features.settings.model.ShortSetting
 import org.yuzu.yuzu_emu.features.settings.model.StringSetting
 import org.yuzu.yuzu_emu.network.NetDataValidators
+import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.NativeConfig
 
 /**
@@ -108,6 +109,8 @@ abstract class SettingsItem(
 
         const val FASTMEM_COMBINED = "fastmem_combined"
         const val GPU_UNSWIZZLE_COMBINED = "gpu_unswizzle_combined"
+        const val DEAD_PERFORMANCE_COMBINED = "dead_performance_combined"
+        const val PANVK_DRIVER = "panvk_driver"
 
         val emptySetting = object : AbstractSetting {
             override val key: String = ""
@@ -679,6 +682,15 @@ abstract class SettingsItem(
                 )
             )
             put(
+                SingleChoiceSetting(
+                    IntSetting.FRAME_PACING_MODE,
+                    titleId = R.string.frame_pacing_mode,
+                    descriptionId = R.string.frame_pacing_mode_description,
+                    choicesId = R.array.framePacingModeNames,
+                    valuesId = R.array.framePacingModeValues
+                )
+            )
+            put(
                 SwitchSetting(
                     BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS,
                     titleId = R.string.renderer_asynchronous_shaders,
@@ -799,6 +811,55 @@ abstract class SettingsItem(
                     BooleanSetting.RENDERER_REACTIVE_FLUSHING,
                     titleId = R.string.renderer_reactive_flushing,
                     descriptionId = R.string.renderer_reactive_flushing_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.MALI_AFRC,
+                    titleId = R.string.mali_afrc,
+                    descriptionId = R.string.mali_afrc_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.NATIVE_GPU_MODE,
+                    titleId = R.string.native_gpu_mode,
+                    descriptionId = R.string.native_gpu_mode_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.NO_WELL,
+                    titleId = R.string.no_well,
+                    descriptionId = R.string.no_well_description
+                )
+            )
+            val panvkDriver = object : AbstractBooleanSetting {
+                override fun getBoolean(needsGlobal: Boolean): Boolean =
+                    GpuDriverHelper.isPanVkInstalled()
+
+                override fun setBoolean(value: Boolean) {
+                    GpuDriverHelper.setPanVkEnabled(value)
+                }
+
+                override val key: String = PANVK_DRIVER
+                override val isRuntimeModifiable: Boolean = false
+                override val defaultValue: Boolean = false
+                override val isSwitchable: Boolean = false
+                override val pairedSettingKey: String = ""
+                override var global: Boolean = true
+                override val isSaveable: Boolean = false
+
+                override fun getValueAsString(needsGlobal: Boolean): String =
+                    getBoolean(needsGlobal).toString()
+
+                override fun reset() = setBoolean(defaultValue)
+            }
+            put(
+                SwitchSetting(
+                    panvkDriver,
+                    titleId = R.string.panvk_driver,
+                    descriptionId = R.string.panvk_driver_description
                 )
             )
             put(
@@ -1035,6 +1096,46 @@ abstract class SettingsItem(
                 override fun reset() = setBoolean(defaultValue)
             }
             put(SwitchSetting(fastmem, R.string.fastmem))
+
+            val deadPerformance = object : AbstractBooleanSetting {
+                override fun getBoolean(needsGlobal: Boolean): Boolean =
+                    BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS.getBoolean() &&
+                        BooleanSetting.USE_OPTIMIZED_VERTEX_BUFFERS.getBoolean()
+
+                override fun setBoolean(value: Boolean) {
+                    BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS.setBoolean(value)
+                    BooleanSetting.USE_OPTIMIZED_VERTEX_BUFFERS.setBoolean(value)
+                }
+
+                override val key: String = DEAD_PERFORMANCE_COMBINED
+                override val isRuntimeModifiable: Boolean = false
+                override val defaultValue: Boolean = true
+                override val isSwitchable: Boolean = true
+                override val pairedSettingKey: String = ""
+                override var global: Boolean
+                    get() {
+                        return BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS.global &&
+                            BooleanSetting.USE_OPTIMIZED_VERTEX_BUFFERS.global
+                    }
+                    set(value) {
+                        BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS.global = value
+                        BooleanSetting.USE_OPTIMIZED_VERTEX_BUFFERS.global = value
+                    }
+
+                override val isSaveable = true
+
+                override fun getValueAsString(needsGlobal: Boolean): String =
+                    getBoolean().toString()
+
+                override fun reset() = setBoolean(defaultValue)
+            }
+            put(
+                SwitchSetting(
+                    deadPerformance,
+                    titleId = R.string.dead_performance,
+                    descriptionId = R.string.dead_performance_description
+                )
+            )
 
             // Applet Settings
             put(

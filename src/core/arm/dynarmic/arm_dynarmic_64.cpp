@@ -250,6 +250,13 @@ void ArmDynarmic64::MakeJit(Common::PageTable* page_table, std::size_t address_s
     // Timing
     config.wall_clock_cntpct = m_uses_wall_clock;
     config.enable_cycle_counting = !m_uses_wall_clock;
+    // svcGetSystemTick only reads the clock. When the guest clock is the
+    // unscaled wall clock, GetCNTPCT() and the SVC return the same value, so the
+    // translator can service it without exiting the JIT.
+    config.fast_svc_get_system_tick =
+        m_uses_wall_clock &&
+        Settings::values.fast_cpu_time.GetValue() == Settings::CpuClock::Off &&
+        !Settings::values.sync_core_speed.GetValue();
 
     // Code cache size
 #if defined(ARCHITECTURE_arm64) || defined(__sun__) || defined(__NetBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
@@ -336,7 +343,10 @@ void ArmDynarmic64::MakeJit(Common::PageTable* page_table, std::size_t address_s
     // Safe optimisations
     case Settings::CpuAccuracy::Auto:
         config.unsafe_optimizations = true;
-        config.optimizations |= Dynarmic::OptimizationFlag::Unsafe_UnfuseFMA;
+        // ReducedErrorFP is the usual yuzu trade. InaccurateNaN is not: guest code that branches
+        // on NaN (common in collision and animation math) can take the wrong path and crash.
+        config.optimizations |= Dynarmic::OptimizationFlag::Unsafe_UnfuseFMA |
+                                Dynarmic::OptimizationFlag::Unsafe_ReducedErrorFP;
         config.fastmem_address_space_bits = 64;
         break;
     // Paranoia mode for debugging optimizations
