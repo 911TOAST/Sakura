@@ -58,7 +58,7 @@ class GameIconKeyer : Keyer<Game> {
 }
 
 object GameIconUtils {
-    private val imageLoader = ImageLoader.Builder(YuzuApplication.appContext)
+    val imageLoader = ImageLoader.Builder(YuzuApplication.appContext)
         .components {
             add(GameIconKeyer())
             add(GameIconFetcher.Factory())

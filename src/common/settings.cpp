@@ -308,6 +308,10 @@ bool IsNceEnabled() {
     return is_nce_enabled;
 }
 
+bool IsHlePerformancePresetEnabled() {
+    return values.hle_performance_preset.GetValue();
+}
+
 static u64 current_program_id = 0;
 
 void SetCurrentProgramID(u64 program_id) {

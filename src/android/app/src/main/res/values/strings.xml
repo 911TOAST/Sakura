@@ -9,7 +9,7 @@
     <string name="notice_notification_channel_description">Shows notifications when something goes wrong.</string>
     <string name="notification_permission_not_granted">Notification permission not granted!</string>
     <string name="app_notification_channel_name" translatable="false">Sakura</string>
-    <string name="app_notification_channel_id" translatable="false">suyu</string>
+    <string name="app_notification_channel_id" translatable="false">sakura</string>
     <string name="app_notification_channel_description">Sakura emulator notifications</string>
     <string name="app_notification_running">Sakura is running</string>
     <string name="seconds">Seconds</string>
@@ -77,6 +77,8 @@
     <string name="mali_stream_buffer_description">Host-visible memory reserved up front for uploads. On Mali this is ordinary system RAM, so a smaller buffer leaves more memory for the guest and the OS, at the cost of splitting large uploads into more batches. Applied when a game starts.</string>
     <string name="vram_budget">Video Memory Budget</string>
     <string name="vram_budget_description">How much memory the texture and buffer caches may plan against. Mali drivers report no video memory of their own, so this caps the share of system RAM they reserve. Lower it to leave more memory for the system and reduce reclaimer stutter, at the cost of more texture eviction and re-uploads. Applied when a game starts.</string>
+    <string name="draw_batch_size">Draw Batch Size</string>
+    <string name="draw_batch_size_description">How many draws the renderer records before submitting work to the GPU. Higher means fewer submissions and less driver overhead per frame, but the GPU starts each batch later and each batch costs more command memory. Applies immediately and can be set per game; the default matches the previous behaviour.</string>
     <string name="overlay_position">Overlay Position</string>
     <string name="overlay_position_description">Choose where the overlay is displayed on the screen</string>
     <string name="overlay_position_top_left">Top Left</string>
@@ -443,7 +445,7 @@
     <!-- About screen strings -->
     <string name="gaia_is_not_real">Gaia isn\'t real</string>
     <string name="copied_to_clipboard">Copied to clipboard</string>
-    <string name="about_app_description">An open-source Switch emulator</string>
+    <string name="about_app_description">A community Switch emulator, based on the suyu codebase</string>
     <string name="contributors">Contributors</string>
     <string name="contributors_description">People who made Sakura for Android possible</string>
     <string name="contributors_link" translatable="false">https://web.archive.org/web/*/https://git.suyu.dev/suyu/suyu/graphs/contributors</string>
@@ -458,8 +460,11 @@
     <string name="user_data_import_success">User data imported successfully</string>
     <string name="user_data_export_cancelled">Export cancelled</string>
     <string name="user_data_import_failed_description">Make sure the user data folders are at the root of the zip folder and contain a config file at config/config.ini and try again.</string>
-    <string name="github_link" translatable="false">https://github.com/suyu-emu/SuyuEclipse</string>
     <string name="reddit_link" translatable="false">https://www.reddit.com/r/suyu/</string>
+    <!-- Quiet pointer to a one-developer game made with the same codebase. -->
+    <string name="neotron_credit_title">Also try NE0TR0N!!</string>
+    <string name="neotron_credit">A small game made by one dev.</string>
+    <string name="neotron_link" translatable="false">https://www.roblox.com/games/78128522742858/NE0TR0N</string>
 
     <!-- General settings strings -->
     <string name="frame_limit_enable">Limit speed</string>
@@ -507,6 +512,54 @@
     <string name="web_username_description">Username to be shown in multiplayer lobbies. It must be 4–20 characters, containing only alphanumeric characters, dashes, periods, underscores, and spaces.</string>
     <string name="network">Network</string>
 
+    <!-- Discord Rich Presence strings -->
+    <string name="discord">Discord</string>
+
+    <string name="discord_rich_presence_page_description">Choose how the running game is published, then customise what it says.</string>
+    <string name="discord_enable">Enable Rich Presence</string>
+    <string name="discord_transport">Transport</string>
+    <string name="discord_mode_social_sdk">Social SDK (official)</string>
+    <string name="discord_mode_social_sdk_summary">Uses the installed Discord app. Only the public Application ID is needed, nothing secret is stored, and the status appears on your own profile. Requires the Discord app to be installed and signed in.</string>
+    <string name="discord_mode_account">Account token</string>
+    <string name="discord_mode_account_summary">Connects to the gateway as your own account, so no Discord app is needed. This is a self-bot, which Discord terms forbid; the risk to the account is yours to accept.</string>
+    <string name="discord_mode_bot">Bot token</string>
+    <string name="discord_mode_bot_summary">Connects as a bot account. Allowed by Discord, but the status belongs to the bot and is only visible to members of a server the bot has been invited to.</string>
+    <string name="discord_application_id">Application ID</string>
+    <string name="discord_application_id_hint">Empty uses the built-in Sakura application</string>
+    <string name="discord_token">Token</string>
+    <string name="discord_token_hint">Pasted here only, never sent anywhere else</string>
+    <string name="discord_account_warning">Self-bot mode: this can put your Discord account at risk. Switch to Social SDK to avoid it.</string>
+    <string name="discord_social_sdk_missing">Social SDK is not bundled in this build. Add discord_partner_sdk.aar to app/libs and enable the Social SDK for the application.</string>
+    <string name="discord_customizer">Activity</string>
+    <string name="discord_activity_name">Headline</string>
+    <string name="discord_activity_name_hint">Empty uses the game title</string>
+    <string name="discord_details">Details line</string>
+    <string name="discord_details_hint">Shown under the headline</string>
+    <string name="discord_state">State line</string>
+    <string name="discord_state_hint">Shown under the details</string>
+    <string name="discord_large_image">Large image</string>
+    <string name="discord_large_image_hint">Asset key or https image URL</string>
+    <string name="discord_small_image">Small image</string>
+    <string name="discord_small_image_hint">Asset key or https image URL</string>
+    <string name="discord_button_one">Button 1</string>
+    <string name="discord_button_two">Button 2</string>
+    <string name="discord_button_label">Label</string>
+    <string name="discord_button_url">https URL</string>
+    <string name="discord_show_timestamps">Show elapsed time</string>
+    <string name="discord_show_timestamps_description">Counts up from when the game started.</string>
+    <string name="discord_preview">Preview</string>
+    <string name="discord_preview_playing">Playing</string>
+    <string name="discord_save">Save</string>
+    <string name="discord_apply">Save and reconnect</string>
+    <string name="discord_disconnect">Disconnect</string>
+    <string name="discord_saved">Saved</string>
+    <string name="discord_status_idle">Idle</string>
+
+    <string name="discord_rich_presence">Rich Presence</string>
+    <string name="discord_rich_presence_description">Publish the running game as this app presence on Discord. Android has no Discord client connection, so the presence is published through a bot account using the token below.</string>
+    <string name="discord_bot_token">Bot Token</string>
+    <string name="discord_bot_token_description">Token of the bot account whose presence shows the running game. Only that bot status is affected, not your own. Kept locally in config.ini, never logged, and never sent anywhere except the Discord gateway.</string>
+
     <!-- Graphics settings strings -->
     <string name="renderer_resolution">Resolution (Handheld/Docked)</string>
     <string name="renderer_vsync">VSync mode</string>
@@ -541,12 +594,22 @@
     <string name="renderer_force_max_clock_description">Forces the GPU to run at the maximum possible clocks (thermal constraints will still be applied).</string>
     <string name="dead_performance">Performance mode</string>
     <string name="dead_performance_description">Uses asynchronous shader compilation and grouped vertex-buffer binding to reduce CPU stalls. Turn it off if a game shows glitches.</string>
+    <string name="hle_performance_preset">HLE performance preset</string>
+    <string name="hle_performance_preset_description">High-level emulation, forced everywhere it is available. Every library applet is served by the HLE frontend instead of booting a real guest applet process, and Maxwell macro programs always use their HLE implementation instead of interpreting guest GPM code. This removes whole applet launches from the critical path and shortens GPU setup work per frame. Turn it off if a system applet misbehaves or a game depends on its real applet implementation.</string>
+    <string name="fake_system_applets">Fake missing system software</string>
+    <string name="fake_system_applets_description">Keeps games running when a system applet is not installed (for example on a firmware-free setup). Missing library applets are served by the emulator instead of being launched from system files, and applets the emulator does not implement return an empty result so the game continues. Turn this off only if a title misbehaves and you have the system files installed.</string>
     <string name="graphics_advanced">Advanced graphics</string>
     <string name="graphics_advanced_description">Accuracy, hacks and extension overrides</string>
     <string name="renderer_asynchronous_gpu_emulation">GPU async emulation</string>
     <string name="renderer_asynchronous_gpu_emulation_description">This hack can increase performance by running GPU emulation asynchronously at the cost of graphical issues and increased crash rates by timing-related operations.</string>
     <string name="renderer_async_presentation">Asynchronous presentation</string>
     <string name="renderer_async_presentation_description">This hack can increase performance by moving presentation to a separate CPU thread at the cost of graphical issues.</string>
+    <string name="renderer_maxwell_bypass">Maxwell bypass (experimental)</string>
+    <string name="renderer_maxwell_bypass_description">Skips re-deriving the graphics pipeline on draws where the game wrote no register that can change it, so a repeating frame only re-issues its draw commands. Only takes effect on devices with the full extended dynamic state set; elsewhere the switch does nothing. Turn it off if a game shows state leaking between draws, missing effects or wrong topology.</string>
+    <string name="renderer_clear_loadop">Clear as render pass load (experimental)</string>
+    <string name="renderer_clear_loadop_description">When the game clears a whole render target before drawing into it, starts the render pass with that clear instead of loading the old contents first and then clearing them. On a tile-based GPU the load reads the entire render target from memory only for the clear to throw it away, so this removes a full attachment read per cleared target. The clear values and covered pixels are exactly the ones the game asked for; partial clears and clears after a draw still use the normal path. Turn it off if a scene shows stale pixels or a target that should have kept its contents.</string>
+    <string name="renderer_async_direct_present">Malikan async present</string>
+    <string name="renderer_async_direct_present_description">Hands the zero-copy Malikan frame to the display from a dedicated thread, so the CPU starts the next frame instead of waiting for the render worker to drain. Mali GPUs only, and it takes effect when a game starts. Turn it off if a device shows pacing or surface glitches.</string>
     <string name="renderer_reactive_flushing">Use reactive flushing</string>
     <string name="renderer_reactive_flushing_description">Improves rendering accuracy in some games at the cost of performance.</string>
     <string name="mali_afrc">Mali AFRC compression (experimental)</string>
@@ -750,6 +813,9 @@
     <string name="reset_all_settings_description">All advanced settings will be reset to their default configuration. This can not be undone.</string>
     <string name="settings_reset">Settings reset</string>
     <string name="close">Close</string>
+    <string name="copy">Copy</string>
+    <string name="crash_report_title">Last crash report</string>
+    <string name="crash_report_message">The app crashed last time. The report below can be copied and shared to help fix it.</string>
     <string name="learn_more">Learn more</string>
     <string name="auto">Auto</string>
     <string name="submit">Submit</string>
@@ -1876,7 +1942,44 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <string name="percent">%1$d%%</string>
 
     <string name="dashboard_title">Performance</string>
+    <string name="dashboard_description">Live frame times, thermals and memory</string>
+    <string name="performance_preset_title">Performance preset</string>
+    <string name="performance_preset_description">Fewer shaded pixels: raises FPS on Mali. Applies immediately.</string>
+    <string name="performance_preset_max">Maximum (0.5x resolution)</string>
+    <string name="performance_preset_balanced">Balanced (0.75x resolution)</string>
+    <string name="performance_preset_applied">Performance preset applied. It takes effect on the next frame.</string>
+    <string name="library_hide_titles">Hide game titles</string>
+    <string name="library_hide_titles_description">Show only the artwork in the library</string>
+    <string name="library_titles_hidden">Game titles hidden</string>
+    <string name="library_titles_shown">Game titles shown</string>
+    <string name="library_background">Library background</string>
+    <string name="library_background_description">Use your own picture behind the library</string>
+    <string name="library_background_online">Browse online backgrounds…</string>
+    <string name="library_background_online_title">Online backgrounds</string>
+    <string name="library_background_online_loading">Loading picks…</string>
+    <string name="library_background_online_hint">Recommended picks. A picture is downloaded once and stored encrypted on this device.</string>
+    <string name="library_background_online_offline">Online catalog unavailable. Showing built-in picks.</string>
+    <string name="library_background_online_downloading">Downloading and encrypting…</string>
+    <string name="library_background_online_failed">Could not download that background. Try another one.</string>
+    <string name="library_background_online_applied">Background saved and encrypted</string>
+    <string name="library_background_online_catalog_source">Catalog source…</string>
+    <string name="library_background_online_catalog_url">https:// catalog URL</string>
+    <string name="library_background_online_catalog_https_only">Only https URLs are allowed</string>
+    <string name="library_background_choose">Choose image…</string>
+    <string name="library_background_clear">Use theme background</string>
+    <string name="library_background_applied">Background updated</string>
+    <string name="library_background_blur">Background blur</string>
+    <string name="library_background_blur_description">Soften the picture so titles stay readable</string>
+    <string name="library_background_blur_off">Off</string>
+    <string name="library_background_blur_soft">Soft</string>
+    <string name="library_background_blur_medium">Medium</string>
+    <string name="library_background_blur_strong">Strong</string>
     <string name="dashboard_idle">No game is running. Start one to collect metrics.</string>
+    <string name="dashboard_idle_badge">Idle</string>
+    <string name="dashboard_live_badge">Live</string>
+    <string name="dashboard_fps">FPS</string>
+    <string name="dashboard_frame_budget">Frame budget</string>
+    <string name="dashboard_frame_budget_hint">of the 60 FPS budget</string>
     <string name="dashboard_frametime">Frame time</string>
     <string name="dashboard_speed">Emulation speed</string>
     <string name="dashboard_thermal_headroom">Thermal headroom</string>
@@ -1893,6 +1996,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <string name="dashboard_shaders_building">Shaders compiling</string>
 
     <string name="tweaks_title">Quick tweaks</string>
+    <string name="tweaks_description">Speed modes, overlay readouts and Vulkan layers</string>
     <string name="tweaks_apply_live">Most changes apply now. Vulkan layer selection takes effect when you restart the game.</string>
     <string name="tweaks_speed">Speed</string>
     <string name="tweaks_overlay">Overlay readouts</string>
@@ -1907,6 +2011,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <string name="tweaks_show_battery_temp">Show battery temperature</string>
     <string name="tweaks_show_shaders">Show shaders compiling</string>
     <string name="tweaks_afrc">Compressed render targets (Mali AFRC)</string>
+    <string name="tweaks_async_present">Async present (Malikan, Mali)</string>
+    <string name="tweaks_maxwell_bypass">Maxwell bypass (skip per-draw translation)</string>
+    <string name="tweaks_clear_loadop">Clear as pass load (saves render target reads)</string>
+    <string name="tweaks_gpu_overclock">GPU overclock</string>
     <string name="tweaks_raster_order">Relaxed raster order (Mali, needs driver support)</string>
     <string name="panvk_driver">Use PanVK (experimental)</string>
     <string name="panvk_driver_description">Runs the open-source Mesa PanVK driver instead of the stock GPU driver. Import its package in the GPU driver manager first. Restart the game after switching; if a title fails to boot, turn this off.</string>
@@ -1915,6 +2023,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <string name="vulkan_layers_title">Vulkan layers</string>
     <string name="vulkan_layers_reported">Available to Sakura: %1$s</string>
     <string name="vulkan_layers_none">No Vulkan layers are available from this app or the GPU driver.</string>
-    <string name="vulkan_layers_help">Sakura bundles the Khronos validation layer. Android may also expose layers from the GPU driver. Select a layer here, then restart the game.</string>
+    <string name="vulkan_layers_help">Layers come from the GPU driver. Debug builds additionally bundle the Khronos validation layer. Select a layer here, then restart the game.</string>
 
 </resources>

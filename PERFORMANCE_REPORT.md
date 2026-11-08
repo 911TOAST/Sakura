@@ -1,6 +1,30 @@
 # Sakura optimized build — performance reports
 
-Date: 2026-10-24 (CPU pass), updated 2026-10-27 (decoder segment copies)
+Date: 2026-10-24 (CPU pass), updated 2026-11-07 (shader warmup + device-wide pipeline cache)
+
+## 2026-11-07 update — shader warmup and cross-title GPU pipeline cache
+
+Files: `src/video_core/renderer_vulkan/vk_pipeline_cache.{h,cpp}`,
+`src/video_core/vulkan_common/vulkan_wrapper.{h,cpp}`.
+Full description: `SHADER_WARMUP_AND_CACHE.md`.
+
+- The Vulkan driver pipeline cache (the driver's compiled device code) is now a
+  **device-wide** cache, `vulkan_pipelines_global_<salt>.bin`, loaded at boot and
+  merged with the per-title `vulkan_pipelines.bin` through
+  `vkMergePipelineCaches`. A pipeline compiled for one game is reused by the
+  next game on the same device/driver. The salt prevents sharing blobs between
+  different drivers. The global file is capped at 128 MiB.
+- Boot-time warmup now reports what it actually did:
+  `[ShaderWarmup] N pipelines ready in T ms: X from disk, Y compiled, Z failed`.
+  The `Y compiled` counter is the number to drive to zero per title.
+- Duplicate pipeline keys in the append-only cache file are skipped before they
+  reach a worker, so a pipeline is never created twice in one boot.
+- Fixed a malformed format string in the driver-cache load log (`"{}"` missing),
+  which could throw from inside cache loading with fmt's checked strings.
+
+Deterministic effect: fewer `vkCreateGraphicsPipelines` calls at boot and across
+titles. No device is attached, so no FPS/frametime claim is made; the warmup
+log line is the measurement hook to use on hardware.
 
 ## 2026-10-27 update — block-linear segment copies (latest build)
 

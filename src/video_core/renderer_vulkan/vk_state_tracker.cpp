@@ -232,6 +232,28 @@ void SetupRasterModes(Maxwell3D::DirtyState::Tables &tables) {
     table[OFF(conservative_raster_enable)] = ConservativeRasterizationMode;
     table[OFF(line_anti_alias_enable)] = LineRasterizationMode;
 }
+
+// Registers FixedPipelineState::Refresh reads that no other setup function claims. Without these
+// the pipeline cache's skip-derivation path would not see the write and would keep a stale key.
+// Registers that already carry a flag (zeta, the render targets, the vertex formats) are left
+// alone: their existing flags are watched as well, and overwriting them would change what the
+// rest of the backend invalidates on.
+void SetupDirtyPipelineState(Maxwell3D::DirtyState::Tables& tables) {
+    auto& table = tables[0];
+    const auto setup = [&](size_t position) { table[position] = PipelineState; };
+    setup(OFF(transform_feedback_enabled));
+    setup(OFF(depth_mode));
+    setup(OFF(polygon_mode_front));
+    setup(OFF(patch_vertices));
+    setup(OFF(anti_alias_samples_mode));
+    setup(OFF(alpha_test_enabled));
+    setup(OFF(alpha_test_func));
+    setup(OFF(alpha_test_ref));
+    setup(OFF(mandated_early_z));
+    setup(OFF(provoking_vertex));
+    setup(OFF(point_size));
+    FillBlock(table, OFF(tessellation), NUM(tessellation), PipelineState);
+}
 } // Anonymous namespace
 
 void StateTracker::SetupTables(Tegra::Control::ChannelState& channel_state) {
@@ -255,6 +277,7 @@ void StateTracker::SetupTables(Tegra::Control::ChannelState& channel_state) {
     SetupDirtyVertexBindings(tables);
     SetupDirtySpecialOps(tables);
     SetupRasterModes(tables);
+    SetupDirtyPipelineState(tables);
 }
 
 void StateTracker::ChangeChannel(Tegra::Control::ChannelState& channel_state) {

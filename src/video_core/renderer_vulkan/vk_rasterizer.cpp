@@ -43,6 +43,10 @@
 #include "video_core/vulkan_common/vulkan_device.h"
 #include "video_core/vulkan_common/vulkan_wrapper.h"
 
+#ifdef __ANDROID__
+#include "../../android/app/src/main/jni/android_settings.h"
+#endif
+
 namespace Vulkan {
 
 using Maxwell = Tegra::Engines::Maxwell3D::Regs;
@@ -247,7 +251,7 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func) {
     if (!pipeline->Configure(is_indexed))
         return;
 
-    UpdateDynamicStates();
+    UpdateDynamicStates(pipeline);
 
     query_cache.NotifySegment(true);
     HandleTransformFeedback();
@@ -357,7 +361,7 @@ void RasterizerVulkan::DrawTexture() {
     texture_cache.SynchronizeDescriptors(false);
     texture_cache.UpdateRenderTargets(false);
 
-    UpdateDynamicStates();
+    UpdateDynamicStates(nullptr);
 
     query_cache.NotifySegment(true);
     query_cache.CounterEnable(VideoCommon::QueryType::ZPassPixelCount64, maxwell3d->regs.zpass_pixel_count_enable);
@@ -410,18 +414,13 @@ void RasterizerVulkan::Clear(u32 layer_count) {
     texture_cache.UpdateRenderTargets(true);
     const Framebuffer* const framebuffer = texture_cache.GetFramebuffer();
     const VkExtent2D render_area = framebuffer->RenderArea();
-    scheduler.RequestRenderpass(framebuffer);
 
-    query_cache.NotifySegment(true);
-    query_cache.CounterEnable(VideoCommon::QueryType::ZPassPixelCount64, maxwell3d->regs.zpass_pixel_count_enable);
     u32 up_scale = 1;
     u32 down_shift = 0;
     if (texture_cache.IsRescaling()) {
         up_scale = Settings::values.resolution_info.up_scale;
         down_shift = Settings::values.resolution_info.down_shift;
     }
-    UpdateViewportsState(regs);
-
     VkRect2D default_scissor{};
     default_scissor.offset.x = 0;
     default_scissor.offset.y = 0;
@@ -476,6 +475,74 @@ void RasterizerVulkan::Clear(u32 layer_count) {
     if (!clamp_rect_to_render_area(clear_rect.rect)) {
         return;
     }
+
+    // A clear that covers the whole render target and happens before anything else touches it can
+    // be expressed as the pass's own load operation. The loading variant would fetch every tile
+    // from DRAM first only for this clear to discard that data, which is the largest single waste
+    // on a tiler. The clear pass defines every aspect it has, so it may only be used when the guest
+    // is clearing exactly the aspects the framebuffer carries.
+    const bool clears_all_aspects =
+        (framebuffer->NumColorBuffers() != 0) == (use_color != 0) &&
+        framebuffer->HasAspectDepthBit() == (use_depth != 0) &&
+        framebuffer->HasAspectStencilBit() == (use_stencil != 0);
+    bool single_layer = true;
+    for (u32 index = 0; index < framebuffer->NumImages(); ++index) {
+        if (framebuffer->ImageRanges()[index].layerCount != 1) {
+            single_layer = false;
+            break;
+        }
+    }
+    if (Settings::values.renderer_clear_loadop.GetValue() && clears_all_aspects &&
+        single_layer && regs.clear_surface.layer == 0 && layer_count == 1 &&
+        !regs.clear_control.use_scissor && clear_rect.rect.offset.x == 0 &&
+        clear_rect.rect.offset.y == 0 && clear_rect.rect.extent.width == render_area.width &&
+        clear_rect.rect.extent.height == render_area.height &&
+        (!use_color || (framebuffer->NumColorBuffers() == 1 && regs.clear_surface.RT == 0 &&
+                        regs.clear_surface.R && regs.clear_surface.G && regs.clear_surface.B &&
+                        regs.clear_surface.A))) {
+        std::array<VkClearValue, 9> clear_values{};
+        if (use_color) {
+            const auto color_format = VideoCore::Surface::PixelFormatFromRenderTargetFormat(
+                regs.rt[0].format);
+            VkClearValue& value = clear_values[0];
+            const bool is_integer = IsPixelFormatInteger(color_format);
+            const bool is_signed = IsPixelFormatSignedInteger(color_format);
+            const size_t int_size = PixelComponentSizeBitsInteger(color_format);
+            if (!is_integer) {
+                std::memcpy(value.color.float32, regs.clear_color.data(),
+                            regs.clear_color.size() * sizeof(f32));
+            } else if (!is_signed) {
+                for (size_t i = 0; i < 4; ++i) {
+                    value.color.uint32[i] = u32(f32(u64(int_size) << 1U) * regs.clear_color[i]);
+                }
+            } else {
+                for (size_t i = 0; i < 4; ++i) {
+                    value.color.int32[i] =
+                        s32(f32(s64(int_size - 1) << 1) * (regs.clear_color[i] - 0.5f));
+                }
+            }
+        }
+        if (use_depth || use_stencil) {
+            VkClearValue& value = clear_values[framebuffer->NumColorBuffers()];
+            value.depthStencil.depth = regs.clear_depth;
+            value.depthStencil.stencil = use_stencil ? regs.clear_stencil : 0;
+        }
+        const size_t value_count = framebuffer->NumImages();
+        if (scheduler.RequestRenderpassClear(framebuffer,
+                                             std::span(clear_values.data(), value_count))) {
+            // Same bookkeeping as the explicit path below, minus the clear itself.
+            query_cache.NotifySegment(true);
+            query_cache.CounterEnable(VideoCommon::QueryType::ZPassPixelCount64,
+                                      maxwell3d->regs.zpass_pixel_count_enable);
+            UpdateViewportsState(regs);
+            return;
+        }
+    }
+    scheduler.RequestRenderpass(framebuffer);
+    query_cache.NotifySegment(true);
+    query_cache.CounterEnable(VideoCommon::QueryType::ZPassPixelCount64,
+                             maxwell3d->regs.zpass_pixel_count_enable);
+    UpdateViewportsState(regs);
 
     const u32 color_attachment = regs.clear_surface.RT;
     if (use_color && framebuffer->HasAspectColorBit(color_attachment)) {
@@ -932,21 +999,33 @@ void RasterizerVulkan::LoadDiskResources(u64 title_id, std::stop_token stop_load
 
 void RasterizerVulkan::FlushWork() {
 #ifdef __ANDROID__
-    // Malikan records larger batches before handing a chunk to the worker. This halves the number
-    // of queue wakeups and command-chunk allocations per frame without starving the worker.
     const bool malikan = device.IsMalikanMode();
-    const u32 draws_to_dispatch = malikan ? 1024U : 512U;
     const u32 check_mask = malikan ? 7U : 3U;
 #else
-    const u32 draws_to_dispatch = 4096U;
     const u32 check_mask = 7U;
 #endif // __ANDROID__
 
-    if ((++draw_counter & check_mask) != check_mask) {
+    // Count every draw, but check worker starvation and the live setting only once per group.
+    if ((++draw_counter & check_mask) != 0) {
         return;
     }
+#ifdef __ANDROID__
+    const u32 draws_to_dispatch = malikan
+        ? static_cast<u32>(std::clamp(AndroidSettings::values.draw_batch_size.GetValue(),
+                                      1024, 16384))
+        : 512U;
+#else
+    const u32 draws_to_dispatch = 4096U;
+#endif
+    // The threshold is already in draws, not groups of (check_mask + 1) draws.
     if (draw_counter < draws_to_dispatch) {
-        scheduler.DispatchWork();
+        // Only hand a chunk over when the worker is actually starved. If it still has work queued,
+        // dispatching here buys no overlap at all: it just takes the queue lock, wakes every waiter
+        // and swaps chunks, up to a couple of hundred times per frame. The chunk keeps filling
+        // locally instead and dispatches by itself when it runs out of room.
+        if (!scheduler.HasPendingWork()) {
+            scheduler.DispatchWork();
+        }
         return;
     }
     scheduler.Flush();
@@ -1012,7 +1091,7 @@ bool AccelerateDMA::BufferToImage(const Tegra::DMA::ImageCopy& copy_info,
     return DmaBufferImageCopy<true>(copy_info, buffer_operand, image_operand);
 }
 
-void RasterizerVulkan::UpdateDynamicStates() {
+void RasterizerVulkan::UpdateDynamicStates(GraphicsPipeline* pipeline) {
     auto& regs = maxwell3d->regs;
     auto& flags = maxwell3d->dirty.flags;
     const auto topology = maxwell3d->draw_manager.draw_state.topology;
@@ -1090,7 +1169,10 @@ void RasterizerVulkan::UpdateDynamicStates() {
     }
 
     if (device.IsExtVertexInputDynamicStateSupported()) {
-        if (auto* gp = pipeline_cache.CurrentGraphicsPipeline(); gp && gp->HasDynamicVertexInput()) {
+        if (!pipeline) {
+            pipeline = pipeline_cache.CurrentGraphicsPipeline();
+        }
+        if (pipeline && pipeline->HasDynamicVertexInput()) {
             UpdateVertexInput(regs);
         }
     }
@@ -1160,18 +1242,15 @@ void RasterizerVulkan::UpdateViewportsState(Tegra::Engines::Maxwell3D::Regs& reg
     }
     const bool is_rescaling{texture_cache.IsRescaling()};
     const float scale = is_rescaling ? Settings::values.resolution_info.up_factor : 1.0f;
-    const std::array viewport_list{
-        GetViewportState(device, regs, 0, scale),  GetViewportState(device, regs, 1, scale),
-        GetViewportState(device, regs, 2, scale),  GetViewportState(device, regs, 3, scale),
-        GetViewportState(device, regs, 4, scale),  GetViewportState(device, regs, 5, scale),
-        GetViewportState(device, regs, 6, scale),  GetViewportState(device, regs, 7, scale),
-        GetViewportState(device, regs, 8, scale),  GetViewportState(device, regs, 9, scale),
-        GetViewportState(device, regs, 10, scale), GetViewportState(device, regs, 11, scale),
-        GetViewportState(device, regs, 12, scale), GetViewportState(device, regs, 13, scale),
-        GetViewportState(device, regs, 14, scale), GetViewportState(device, regs, 15, scale),
-    };
-    scheduler.Record([this, viewport_list](vk::CommandBuffer cmdbuf) {
-        const u32 num_viewports = std::min<u32>(device.GetMaxViewports(), Maxwell::NumViewports);
+    // Only build the viewports the device can actually consume. Mobile drivers commonly expose a
+    // single viewport, so filling all 16 unconditionally computed 15 states that never reached a
+    // command buffer.
+    const u32 num_viewports = std::min<u32>(device.GetMaxViewports(), Maxwell::NumViewports);
+    std::array<VkViewport, Maxwell::NumViewports> viewport_list{};
+    for (u32 index = 0; index < num_viewports; ++index) {
+        viewport_list[index] = GetViewportState(device, regs, index, scale);
+    }
+    scheduler.Record([viewport_list, num_viewports](vk::CommandBuffer cmdbuf) {
         const vk::Span<VkViewport> viewports(viewport_list.data(), num_viewports);
         cmdbuf.SetViewport(0, viewports);
     });
@@ -1209,26 +1288,12 @@ void RasterizerVulkan::UpdateScissorsState(Tegra::Engines::Maxwell3D::Regs& regs
         up_scale = Settings::values.resolution_info.up_scale;
         down_shift = Settings::values.resolution_info.down_shift;
     }
-    const std::array scissor_list{
-        GetScissorState(regs, 0, up_scale, down_shift),
-        GetScissorState(regs, 1, up_scale, down_shift),
-        GetScissorState(regs, 2, up_scale, down_shift),
-        GetScissorState(regs, 3, up_scale, down_shift),
-        GetScissorState(regs, 4, up_scale, down_shift),
-        GetScissorState(regs, 5, up_scale, down_shift),
-        GetScissorState(regs, 6, up_scale, down_shift),
-        GetScissorState(regs, 7, up_scale, down_shift),
-        GetScissorState(regs, 8, up_scale, down_shift),
-        GetScissorState(regs, 9, up_scale, down_shift),
-        GetScissorState(regs, 10, up_scale, down_shift),
-        GetScissorState(regs, 11, up_scale, down_shift),
-        GetScissorState(regs, 12, up_scale, down_shift),
-        GetScissorState(regs, 13, up_scale, down_shift),
-        GetScissorState(regs, 14, up_scale, down_shift),
-        GetScissorState(regs, 15, up_scale, down_shift),
-    };
-    scheduler.Record([this, scissor_list](vk::CommandBuffer cmdbuf) {
-        const u32 num_scissors = std::min<u32>(device.GetMaxViewports(), Maxwell::NumViewports);
+    const u32 num_scissors = std::min<u32>(device.GetMaxViewports(), Maxwell::NumViewports);
+    std::array<VkRect2D, Maxwell::NumViewports> scissor_list{};
+    for (u32 index = 0; index < num_scissors; ++index) {
+        scissor_list[index] = GetScissorState(regs, index, up_scale, down_shift);
+    }
+    scheduler.Record([scissor_list, num_scissors](vk::CommandBuffer cmdbuf) {
         const vk::Span<VkRect2D> scissors(scissor_list.data(), num_scissors);
         cmdbuf.SetScissor(0, scissors);
     });

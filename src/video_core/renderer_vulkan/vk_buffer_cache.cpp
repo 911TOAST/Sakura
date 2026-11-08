@@ -103,8 +103,21 @@ Buffer::Buffer(BufferCacheRuntime& runtime, DAddr cpu_addr_, u64 size_bytes_)
 }
 
 void Buffer::MarkUsage(u64 offset, u64 size) noexcept {
+    const u64 tick = scheduler->CurrentTick();
+    if (last_usage_tick != tick) {
+        tracker.Reset();
+    }
     tracker.Track(offset, size);
-    last_usage_tick = scheduler->CurrentTick();
+    last_usage_tick = tick;
+}
+
+bool Buffer::IsRegionUsed(u64 offset, u64 size) const noexcept {
+    // The upload command buffer starts with a dependency on earlier submissions. Only accesses
+    // in this submission can be overtaken by a deferred upload, so only these block reordering.
+    if (last_usage_tick != scheduler->CurrentTick()) {
+        return false;
+    }
+    return tracker.IsUsed(offset, size);
 }
 
 VkBufferView Buffer::View(u32 offset, u32 size, VideoCore::Surface::PixelFormat format) {
@@ -415,22 +428,24 @@ void BufferCacheRuntime::Finish() {
     scheduler.Finish();
 }
 
-bool BufferCacheRuntime::CanReorderUpload(const Buffer& buffer,
+bool BufferCacheRuntime::CanReorderUpload(Buffer& buffer,
                                           std::span<const VideoCommon::BufferCopy> copies) {
-    if (Settings::values.disable_buffer_reorder) {
-        return false;
-    }
-    const bool can_use_upload_cmdbuf =
+    const bool can_use_upload_cmdbuf = !Settings::values.disable_buffer_reorder &&
         std::ranges::all_of(copies, [&](const VideoCommon::BufferCopy& copy) {
             return !buffer.IsRegionUsed(copy.dst_offset, copy.size);
         });
+    // Uploads are writes too. A later overlapping upload must not move ahead of this one,
+    // including inline updates that are not immediately followed by a buffer binding.
+    for (const auto& copy : copies) {
+        buffer.MarkUsage(copy.dst_offset, copy.size);
+    }
     return can_use_upload_cmdbuf;
 }
 
 void BufferCacheRuntime::CopyBuffer(VkBuffer dst_buffer, VkBuffer src_buffer,
                                     std::span<const VideoCommon::BufferCopy> copies, bool barrier,
                                     bool can_reorder_upload) {
-    if (dst_buffer == VK_NULL_HANDLE || src_buffer == VK_NULL_HANDLE) {
+    if (dst_buffer == VK_NULL_HANDLE || src_buffer == VK_NULL_HANDLE || copies.empty()) {
         return;
     }
     static constexpr VkMemoryBarrier READ_BARRIER{
@@ -459,6 +474,7 @@ void BufferCacheRuntime::CopyBuffer(VkBuffer dst_buffer, VkBuffer src_buffer,
         return;
     }
 
+    pending_copy_barrier |= !barrier;
     scheduler.RequestOutsideRenderPassOperationContext();
     scheduler.Record([src_buffer, dst_buffer, vk_copies, barrier](vk::CommandBuffer cmdbuf) {
         if (barrier) {
@@ -468,7 +484,7 @@ void BufferCacheRuntime::CopyBuffer(VkBuffer dst_buffer, VkBuffer src_buffer,
         cmdbuf.CopyBuffer(src_buffer, dst_buffer, VideoCommon::FixSmallVectorADL(vk_copies));
         if (barrier) {
             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                   vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, 0, WRITE_BARRIER);
+                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
         }
     });
 }
@@ -488,16 +504,23 @@ void BufferCacheRuntime::PreCopyBarrier() {
 }
 
 void BufferCacheRuntime::PostCopyBarrier() {
+    // Deferred uploads are synchronized in the upload command buffer, and barrier=true copies
+    // already synchronize themselves. Neither needs a per-draw barrier or a render-pass break.
+    if (!pending_copy_barrier) {
+        return;
+    }
+    pending_copy_barrier = false;
     static constexpr VkMemoryBarrier WRITE_BARRIER{
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
         .pNext = nullptr,
         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
         .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
     };
+    // Transfer stages are not legal in an in-render-pass pipeline barrier (VUID 07892).
     scheduler.RequestOutsideRenderPassOperationContext();
     scheduler.Record([](vk::CommandBuffer cmdbuf) {
-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
-                               0, WRITE_BARRIER);
+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
+                               VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
     });
 }
 
@@ -702,7 +725,15 @@ vk::Buffer BufferCacheRuntime::CreateNullBuffer() {
 
     scheduler.RequestOutsideRenderPassOperationContext();
     scheduler.Record([buffer = *ret](vk::CommandBuffer cmdbuf) {
+        static constexpr VkMemoryBarrier WRITE_BARRIER{
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+        };
         cmdbuf.FillBuffer(buffer, 0, VK_WHOLE_SIZE, 0);
+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
+                               VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
     });
 
     return ret;

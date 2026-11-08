@@ -1,0 +1,85 @@
+name: Android CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      flavors:
+        description: 'Gradle tasks to run'
+        required: false
+        default: 'assembleMainlineRelease'
+        type: choice
+        options:
+          - assembleMainlineRelease
+          - assembleLegacyRelease
+          - 'assembleMainlineRelease assembleLegacyRelease'
+          - 'assembleMainlineRelease assembleLegacyRelease assembleChromeOSRelease assembleGenshinSpoofRelease'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'CMakeModules/**'
+      - '.github/workflows/android-ci.yml'
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    name: Build Android APKs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Init submodules
+        run: |
+          git -c submodule."externals/ownfoil".update=none \
+              -c submodule."externals/nxdumptool".update=none \
+              -c submodule."externals/nxapi".update=none \
+              -c submodule."externals/nx-optimizer".update=none \
+              submodule update --init --recursive --depth=1
+
+      - name: Fix submodule headers
+        run: |
+          f="externals/dynarmic/externals/mcl/include/boost/variant.hpp"
+          if [ -f "$f" ] && grep -q 'C:/Users' "$f"; then
+            printf '// Forwarding header\n#include <boost/variant/variant.hpp>\n#include <boost/variant/recursive_variant.hpp>\n#include <boost/variant/recursive_wrapper.hpp>\n#include <boost/variant/get.hpp>\n#include <boost/variant/apply_visitor.hpp>\n#include <boost/variant/static_visitor.hpp>\n#include <boost/variant/visitor_ptr.hpp>\n' > "$f"
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: '17'
+          cache: gradle
+
+      - name: Install native deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build glslang-tools
+
+      - name: Build APKs
+        working-directory: src/android
+        run: |
+          chmod +x gradlew
+          ./gradlew ${{ inputs.flavors || 'assembleMainlineRelease' }} --stacktrace
+
+      - name: Collect APKs
+        if: always()
+        run: |
+          rm -rf _pkg && mkdir -p _pkg
+          find src/android -name '*.apk' -exec cp {} _pkg/ \;
+          ls -lh _pkg
+
+      - name: Upload APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-${{ github.run_number }}
+          path: _pkg/*.apk
+          if-no-files-found: warn
+          retention-days: 14

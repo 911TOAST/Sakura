@@ -5,17 +5,22 @@
     android:id="@+id/home_navigation"
     app:startDestination="@id/gamesFragment">
 
+    <!-- The start destination must not carry enter animations: when the activity is
+         recreated (home -> reopen) the NavHost re-applies them and the library replays
+         its entrance over the returning window. Motion lives in the fragment itself. -->
     <fragment
         android:id="@+id/gamesFragment"
         android:name="org.yuzu.yuzu_emu.ui.GamesFragment"
         android:label="PlatformGamesFragment" />
+        <!-- Shared-axis X: the settings panel slides in over the library, and the library
+             settles back to the left instead of being swapped out instantly. -->
         <action
             android:id="@+id/action_gamesFragment_to_homeSettingsFragment"
             app:destination="@id/homeSettingsFragment"
-            app:enterAnim="@anim/sakura_push_in_left"
-            app:exitAnim="@anim/sakura_push_out_right"
-            app:popEnterAnim="@anim/sakura_push_in_left"
-            app:popExitAnim="@anim/sakura_push_out_right" />
+            app:enterAnim="@anim/settings_panel_in"
+            app:exitAnim="@anim/settings_panel_out"
+            app:popEnterAnim="@anim/settings_panel_pop_in"
+            app:popExitAnim="@anim/settings_panel_pop_out" />
 
     <fragment
         android:id="@+id/homeSettingsFragment"
@@ -25,7 +30,11 @@
     <fragment
         android:id="@+id/firstTimeSetupFragment"
         android:name="org.yuzu.yuzu_emu.fragments.SetupFragment"
-        android:label="FirstTimeSetupFragment" >
+        android:label="FirstTimeSetupFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out">
         <action
             android:id="@+id/action_firstTimeSetupFragment_to_gamesFragment"
             app:destination="@id/gamesFragment"
@@ -36,12 +45,20 @@
     <fragment
         android:id="@+id/aboutFragment"
         android:name="org.yuzu.yuzu_emu.fragments.AboutFragment"
-        android:label="AboutFragment" />
+        android:label="AboutFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out" />
 
     <fragment
         android:id="@+id/licensesFragment"
         android:name="org.yuzu.yuzu_emu.fragments.LicensesFragment"
-        android:label="LicensesFragment" />
+        android:label="LicensesFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out" />
 
     <activity
         android:id="@+id/emulationActivity"
@@ -98,11 +115,19 @@
     <fragment
         android:id="@+id/installableFragment"
         android:name="org.yuzu.yuzu_emu.fragments.InstallableFragment"
-        android:label="InstallableFragment" />
+        android:label="InstallableFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out" />
     <fragment
         android:id="@+id/driverManagerFragment"
         android:name="org.yuzu.yuzu_emu.fragments.DriverManagerFragment"
-        android:label="DriverManagerFragment" >
+        android:label="DriverManagerFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out">
         <argument
             android:name="game"
             app:argType="org.yuzu.yuzu_emu.model.Game"
@@ -112,7 +137,11 @@
     <fragment
         android:id="@+id/appletLauncherFragment"
         android:name="org.yuzu.yuzu_emu.fragments.AppletLauncherFragment"
-        android:label="AppletLauncherFragment" >
+        android:label="AppletLauncherFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out">
         <action
             android:id="@+id/action_appletLauncherFragment_to_cabinetLauncherDialogFragment"
             app:destination="@id/cabinetLauncherDialogFragment" />
@@ -124,15 +153,15 @@
     <fragment
         android:id="@+id/gameFoldersFragment"
         android:name="org.yuzu.yuzu_emu.fragments.GameFoldersFragment"
-        android:label="GameFoldersFragment" />
+        android:label="GameFoldersFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out" />
     <fragment
         android:id="@+id/perGamePropertiesFragment"
         android:name="org.yuzu.yuzu_emu.fragments.GamePropertiesFragment"
-        android:label="PerGamePropertiesFragment"
-        app:enterAnim="@anim/sakura_slide_in_right"
-        app:exitAnim="@anim/sakura_slide_out_left"
-        app:popEnterAnim="@anim/sakura_slide_in_left"
-        app:popExitAnim="@anim/sakura_slide_out_right">
+        android:label="PerGamePropertiesFragment">
         <argument
             android:name="game"
             app:argType="org.yuzu.yuzu_emu.model.Game" />
@@ -155,7 +184,11 @@
     <fragment
         android:id="@+id/gameInfoFragment"
         android:name="org.yuzu.yuzu_emu.fragments.GameInfoFragment"
-        android:label="GameInfoFragment" >
+        android:label="GameInfoFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out">
         <argument
             android:name="game"
             app:argType="org.yuzu.yuzu_emu.model.Game" />
@@ -163,7 +196,11 @@
     <fragment
         android:id="@+id/addonsFragment"
         android:name="org.yuzu.yuzu_emu.fragments.AddonsFragment"
-        android:label="AddonsFragment" >
+        android:label="AddonsFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out">
         <argument
             android:name="game"
             app:argType="org.yuzu.yuzu_emu.model.Game" />
@@ -172,7 +209,11 @@
         android:id="@+id/driverFetcherFragment"
         android:name="org.yuzu.yuzu_emu.fragments.DriverFetcherFragment"
         android:label="fragment_driver_fetcher"
-        tools:layout="@layout/fragment_driver_fetcher" />
+        tools:layout="@layout/fragment_driver_fetcher"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out" />
     <fragment
         android:id="@+id/freedrenoSettingsFragment"
         android:name="org.yuzu.yuzu_emu.fragments.FreedrenoSettingsFragment"
@@ -186,7 +227,11 @@
     <fragment
         android:id="@+id/profileManagerFragment"
         android:name="org.yuzu.yuzu_emu.fragments.ProfileManagerFragment"
-        android:label="ProfileManagerFragment" >
+        android:label="ProfileManagerFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out">
         <action
             android:id="@+id/action_profileManagerFragment_to_newUserDialog"
             app:destination="@id/newUserDialogFragment" />
@@ -194,6 +239,10 @@
     <fragment
         android:id="@+id/newUserDialogFragment"
         android:name="org.yuzu.yuzu_emu.fragments.EditUserDialogFragment"
-        android:label="NewUserDialogFragment" />
+        android:label="NewUserDialogFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out" />
 
 </navigation>

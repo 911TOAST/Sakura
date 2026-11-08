@@ -19,4 +19,9 @@
     <dimen name="elevated_app_bar">3dp</dimen>
 
     <dimen name="mapping_anim_size">75dp</dimen>
+
+    <dimen name="m3_touch_target_size">48dp</dimen>
+    <dimen name="m3_icon_size">24dp</dimen>
+    <dimen name="m3_chip_height">32dp</dimen>
+    <dimen name="m3_search_height">56dp</dimen>
 </resources>

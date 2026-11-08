@@ -3156,6 +3156,16 @@ public:
         Tables tables{};
     } dirty;
 
+    /// Dirty flags whose write can change the fixed-function graphics pipeline. The renderer fills
+    /// this in once at startup. Every other register (per-draw bounds, constant buffer addresses,
+    /// sync objects) leaves the pipeline key alone and must not bump the epoch below.
+    DirtyState::Flags pipeline_state_watch{};
+
+    /// Incremented on every write of a watched register. A renderer that caches its translated
+    /// pipeline state compares this against the epoch it last derived that state from and skips
+    /// the derivation when nothing it depends on was written.
+    u64 pipeline_state_epoch{};
+
     DrawManager draw_manager;
 
     GPUVAddr GetMacroAddress(size_t index) const {

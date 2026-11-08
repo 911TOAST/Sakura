@@ -5,12 +5,17 @@ package org.yuzu.yuzu_emu.ui.main
 
 import android.content.Intent
 import android.content.Context
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup.MarginLayoutParams
 import android.view.WindowManager
 import android.view.animation.PathInterpolator
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -23,7 +28,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 import androidx.preference.PreferenceManager
-import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 import org.yuzu.yuzu_emu.NativeLibrary
@@ -60,6 +64,8 @@ import androidx.documentfile.provider.DocumentFile
 class MainActivity : AppCompatActivity(), ThemeProvider {
     private lateinit var binding: ActivityMainBinding
 
+
+
     private val homeViewModel: HomeViewModel by viewModels()
     private val gamesViewModel: GamesViewModel by viewModels()
     private val taskViewModel: TaskViewModel by viewModels()
@@ -77,7 +83,10 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
-        splashScreen.setKeepOnScreenCondition { !DirectoryInitialization.areDirectoriesReady }
+        // Hold the branded sakura splash only until the storage directories are ready.
+        splashScreen.setKeepOnScreenCondition {
+            !DirectoryInitialization.areDirectoriesReady
+        }
 
         ThemeHelper.ThemeChangeListener(this)
         ThemeHelper.setTheme(this)
@@ -85,17 +94,6 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
         NativeLibrary.initMultiplayer()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
-
-        display?.let {
-            val supportedModes = it.supportedModes
-            val maxRefreshRate = supportedModes.maxByOrNull { mode -> mode.refreshRate }
-
-            if (maxRefreshRate != null) {
-                val layoutParams = window.attributes
-                layoutParams.preferredDisplayModeId = maxRefreshRate.modeId
-                window.attributes = layoutParams
-            }
-        }
 
         setContentView(binding.root)
 
@@ -121,20 +119,14 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
 
         binding.statusBarShade.setBackgroundColor(
             ThemeHelper.getColorWithOpacity(
-                MaterialColors.getColor(
-                    binding.root,
-                    com.google.android.material.R.attr.colorSurface
-                ),
+                ThemeHelper.getLauncherSurfaceColor(applicationContext),
                 ThemeHelper.SYSTEM_BAR_ALPHA
             )
         )
         if (InsetsHelper.getSystemGestureType(applicationContext) != InsetsHelper.GESTURE_NAVIGATION) {
             binding.navigationBarShade.setBackgroundColor(
                 ThemeHelper.getColorWithOpacity(
-                    MaterialColors.getColor(
-                        binding.root,
-                        com.google.android.material.R.attr.colorSurface
-                    ),
+                    ThemeHelper.getLauncherSurfaceColor(applicationContext),
                     ThemeHelper.SYSTEM_BAR_ALPHA
                 )
             )
@@ -168,6 +160,39 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
         }
         setInsets()
         applyFullscreenPreference()
+
+        // Surface the previous session's crash (if any) once the UI is attached.
+        binding.root.post { showLastCrashReport() }
+    }
+
+    private fun showLastCrashReport() {
+        if (isFinishing || isDestroyed) return
+        val report = CrashReporter.peek(applicationContext) ?: return
+
+        val padding = (16 * resources.displayMetrics.density).toInt()
+        val reportView = TextView(this).apply {
+            text = getString(R.string.crash_report_message) + "\n\n" + report
+            typeface = Typeface.MONOSPACE
+            textSize = 10f
+            setTextIsSelectable(true)
+            setPadding(padding, padding, padding, padding)
+        }
+        val scroller = ScrollView(this).apply {
+            addView(reportView)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.crash_report_title)
+            .setView(scroller)
+            .setPositiveButton(R.string.copy) { _, _ ->
+                val clipboard = getSystemService(ClipboardManager::class.java)
+                clipboard?.setPrimaryClip(
+                    ClipData.newPlainText(getString(R.string.crash_report_title), report)
+                )
+                Toast.makeText(this, R.string.copy, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.close) { _, _ -> }
+            .setOnDismissListener { CrashReporter.clear(applicationContext) }
+            .show()
     }
 
     private fun checkForUpdates() {
@@ -348,8 +373,10 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
     }
 
     override fun onResume() {
-        ThemeHelper.setCorrectTheme(this)
         super.onResume()
+        // After super.onResume: a theme change relaunches the activity, and asking for that while
+        // the activity is still half-resumed is what made switching the Sakura theme crash.
+        ThemeHelper.setCorrectTheme(this)
         applyFullscreenPreference()
     }
 

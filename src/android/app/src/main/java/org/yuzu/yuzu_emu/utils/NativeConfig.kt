@@ -36,6 +36,10 @@ object NativeConfig {
     @Synchronized
     external fun saveGlobalConfig()
 
+    /** Atomically saves UI settings; false leaves the previous config file intact. */
+    @Synchronized
+    external fun saveWallpaperConfig(): Boolean
+
     /**
      * Creates per-game config for the specified parameters. Must be unloaded once per-game config
      * is closed with [unloadPerGameConfig]. All switchable values that [NativeConfig] gets/sets

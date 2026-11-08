@@ -988,7 +988,11 @@ bool Device::ShouldBoostClocks() const {
 }
 
 bool Device::HasTimelineSemaphore() const {
-    if (GetDriverID() == VK_DRIVER_ID_MESA_TURNIP) {
+    // Turnip only got this right in 23.2; older builds deadlock or drop fences, so they keep the
+    // fence-based submission path. Newer builds take the timeline path, which skips a fence
+    // allocation and a wait-thread round trip per submission.
+    if (GetDriverID() == VK_DRIVER_ID_MESA_TURNIP &&
+        properties.properties.driverVersion < VK_MAKE_API_VERSION(0, 23, 2, 0)) {
         return false;
     }
     return features.timeline_semaphore.timelineSemaphore;

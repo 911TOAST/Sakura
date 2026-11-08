@@ -257,6 +257,22 @@ class SettingsFragmentPresenter(
                 add(HeaderSetting(R.string.network))
                 add(StringSetting.WEB_TOKEN.key)
                 add(StringSetting.WEB_USERNAME.key)
+
+                add(HeaderSetting(R.string.discord))
+                // Mode, credentials and the activity customiser all live on one page: three
+                // transports plus a dozen activity fields do not belong in a list that has to
+                // stay scannable.
+                add(
+                    LaunchableSetting(
+                        titleId = R.string.discord_rich_presence,
+                        descriptionId = R.string.discord_rich_presence_page_description
+                    ) { context ->
+                        android.content.Intent(
+                            context,
+                            org.yuzu.yuzu_emu.activities.DiscordPresenceActivity::class.java
+                        )
+                    }
+                )
             }
         }
     }
@@ -269,6 +285,8 @@ class SettingsFragmentPresenter(
             // add(IntSetting.RENDERER_NVDEC_EMULATION.key)
 
             add(SettingsItem.DEAD_PERFORMANCE_COMBINED)
+            add(BooleanSetting.HLE_PERFORMANCE_PRESET.key)
+            add(BooleanSetting.FAKE_SYSTEM_APPLETS.key)
 
             add(IntSetting.RENDERER_RESOLUTION.key)
             add(IntSetting.RENDERER_VSYNC.key)
@@ -334,8 +352,12 @@ class SettingsFragmentPresenter(
             add(IntSetting.ANDROID_PIPELINE_WORKERS.key)
             add(IntSetting.MALI_STREAM_BUFFER.key)
             add(IntSetting.ANDROID_VRAM_BUDGET.key)
+            add(IntSetting.ANDROID_DRAW_BATCH.key)
             add(BooleanSetting.RENDERER_ASYNCHRONOUS_GPU_EMULATION.key)
             add(BooleanSetting.RENDERER_ASYNC_PRESENTATION.key)
+            add(BooleanSetting.RENDERER_ASYNC_DIRECT_PRESENT.key)
+            add(BooleanSetting.RENDERER_MAXWELL_BYPASS.key)
+            add(BooleanSetting.RENDERER_CLEAR_LOADOP.key)
             add(SettingsItem.GPU_UNSWIZZLE_COMBINED)
 
             add(HeaderSetting(R.string.extensions))

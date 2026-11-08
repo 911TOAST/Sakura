@@ -56,29 +56,13 @@ class GamePropertiesAdapter(
         }
     }
 
-    private var entranceRemaining = 12
-
     override fun onBindViewHolder(
         holder: AbstractViewHolder<GameProperty>,
         position: Int
     ) {
+        // The staggered entrance lives in AbstractViewHolder now; this override only exists to
+        // keep the shared binding path.
         super.onBindViewHolder(holder, position)
-        // Raw M3 entrance: the property list settles in with a short stagger.
-        if (entranceRemaining > 0) {
-            entranceRemaining--
-            val itemView = holder.itemView
-            val context = itemView.context
-            itemView.alpha = 0f
-            itemView.translationY =
-                itemView.resources.getDimensionPixelSize(R.dimen.spacing_medlarge).toFloat()
-            itemView.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setStartDelay(position.coerceAtMost(12) * 24L)
-                .setDuration(SuyuMotion.durationMedium2(context))
-                .setInterpolator(SuyuMotion.emphasizedDecelerate(context))
-                .start()
-        }
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -166,6 +150,8 @@ class GamePropertiesAdapter(
         AbstractViewHolder<GameProperty>(binding) {
         override fun bind(model: GameProperty) {
             val installableProperty = model as InstallableProperty
+
+            SuyuMotion.installPressFeedback(binding.root)
 
             binding.title.setText(installableProperty.titleId)
             binding.description.setText(installableProperty.descriptionId)

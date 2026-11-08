@@ -71,6 +71,10 @@ enum : u8 {
     ColorMask,
     ViewportSwizzles,
 
+    // Registers that reach FixedPipelineState but that no other flag above covers. Kept separate
+    // so the pipeline cache can watch exactly the writes that can change its key.
+    PipelineState,
+
     Last,
 };
 static_assert(Last <= (std::numeric_limits<u8>::max)());

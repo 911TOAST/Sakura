@@ -39,6 +39,13 @@ using Maxwell3D = Engines::Maxwell3D;
 
 namespace {
 
+// The HLE performance preset forces the HLE implementation of every known macro program, even if
+// the user had switched macro HLE off for accuracy testing.
+bool IsMacroHleDisabled() {
+    return Settings::values.disable_macro_hle.GetValue() &&
+           !Settings::IsHlePerformancePresetEnabled();
+}
+
 bool IsTopologySafe(Maxwell3D::Regs::PrimitiveTopology topology) {
     switch (topology) {
     case Maxwell3D::Regs::PrimitiveTopology::Points:
@@ -1378,7 +1385,7 @@ void MacroEngine::Execute(Core::System& system, Engines::Maxwell3D& maxwell3d, u
     };
     if (auto const it = macro_cache.find(method); it != macro_cache.end()) {
         auto& ci = it->second;
-        if (!CanBeHLEProgram(ci.hash) || Settings::values.disable_macro_hle)
+        if (!CanBeHLEProgram(ci.hash) || IsMacroHleDisabled())
             maxwell3d.RefreshParameters(); //LLE must reload parameters
         execute_variant(ci.program);
     } else {
@@ -1410,7 +1417,7 @@ void MacroEngine::Execute(Core::System& system, Engines::Maxwell3D& maxwell3d, u
             ci.program = Compile(system, maxwell3d, macro_code->second);
             ci.hash = Common::HashValue(macro_code->second);
         }
-        if (CanBeHLEProgram(ci.hash) && !Settings::values.disable_macro_hle) {
+        if (CanBeHLEProgram(ci.hash) && !IsMacroHleDisabled()) {
             ci.program = GetHLEProgram(ci.hash);
         } else {
             maxwell3d.RefreshParameters();

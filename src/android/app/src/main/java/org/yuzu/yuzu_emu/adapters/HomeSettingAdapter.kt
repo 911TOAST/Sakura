@@ -6,18 +6,14 @@
 
 package org.yuzu.yuzu_emu.adapters
 
-import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.res.ResourcesCompat
 import androidx.lifecycle.LifecycleOwner
-import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.databinding.CardHomeOptionBinding
 import org.yuzu.yuzu_emu.fragments.MessageDialogFragment
 import org.yuzu.yuzu_emu.model.HomeSetting
-import org.yuzu.yuzu_emu.utils.SuyuMotion
 import org.yuzu.yuzu_emu.utils.ViewUtils.marquee
 import org.yuzu.yuzu_emu.utils.ViewUtils.setVisible
 import org.yuzu.yuzu_emu.utils.collect
@@ -31,28 +27,6 @@ class HomeSettingAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): HomeOptionViewHolder {
         CardHomeOptionBinding.inflate(LayoutInflater.from(parent.context), parent, false)
             .also { return HomeOptionViewHolder(it) }
-    }
-
-    private var entranceRemaining = 16
-
-    override fun onBindViewHolder(holder: HomeOptionViewHolder, position: Int) {
-        super.onBindViewHolder(holder, position)
-        // Staggered hub entrance on the emphasized curve.
-        if (entranceRemaining > 0) {
-            entranceRemaining--
-            val itemView = holder.itemView
-            val context = itemView.context
-            itemView.alpha = 0f
-            itemView.translationY =
-                itemView.resources.getDimensionPixelSize(R.dimen.spacing_medlarge).toFloat()
-            itemView.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setStartDelay(position.coerceAtMost(16) * 32L)
-                .setDuration(SuyuMotion.durationMedium2(context))
-                .setInterpolator(SuyuMotion.emphasizedDecelerate(context))
-                .start()
-        }
     }
 
     inner class HomeOptionViewHolder(val binding: CardHomeOptionBinding) :
@@ -78,17 +52,6 @@ class HomeSettingAdapter(
             binding.optionDetail.marquee()
 
             binding.root.setOnClickListener { onClick(model) }
-            binding.root.setOnTouchListener { view, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                        SuyuMotion.pressDown(view)
-                    }
-
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> SuyuMotion.pressUp(view)
-                }
-                false
-            }
         }
 
         private fun onClick(model: HomeSetting) {

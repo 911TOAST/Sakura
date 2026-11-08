@@ -6,6 +6,7 @@
 #include "qt_common/util/game.h"
 
 #include "common/fs/fs.h"
+#include "common/settings.h"
 #include "core/hle/service/acc/profile_manager.h"
 #include "frontend_common/content_manager.h"
 #include "frontend_common/data_manager.h"
@@ -24,8 +25,12 @@
 namespace QtCommon::Content {
 
 bool CheckGameFirmware(u64 program_id) {
+    // The HLE applet fallback makes firmware optional: with fake_system_applets on there is
+    // nothing to warn about, because missing library applets are served by the emulator instead
+    // of being launched from system files.
     if (FirmwareManager::GameRequiresFirmware(program_id) &&
-        !FirmwareManager::CheckFirmwarePresence(*system)) {
+        !FirmwareManager::CheckFirmwarePresence(*system) &&
+        !Settings::values.fake_system_applets.GetValue()) {
         auto result = QtCommon::Frontend::Warning(
             tr("Game Requires Firmware"),
             tr("The game you are trying to launch requires firmware to boot or to get past the "

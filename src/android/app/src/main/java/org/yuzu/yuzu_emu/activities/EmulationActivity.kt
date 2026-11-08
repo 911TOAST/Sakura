@@ -56,6 +56,7 @@ import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.features.settings.model.Settings
 import org.yuzu.yuzu_emu.model.EmulationViewModel
 import org.yuzu.yuzu_emu.model.Game
+import org.yuzu.yuzu_emu.network.DiscordPresence
 import org.yuzu.yuzu_emu.network.NetPlayManager
 import org.yuzu.yuzu_emu.utils.InputHandler
 import org.yuzu.yuzu_emu.utils.Log
@@ -63,6 +64,7 @@ import org.yuzu.yuzu_emu.utils.MemoryUtil
 import org.yuzu.yuzu_emu.utils.NativeConfig
 import org.yuzu.yuzu_emu.utils.NfcReader
 import org.yuzu.yuzu_emu.utils.ParamPackage
+import org.yuzu.yuzu_emu.utils.SuyuMotion
 import org.yuzu.yuzu_emu.utils.ThemeHelper
 import java.text.NumberFormat
 import kotlin.math.roundToInt
@@ -156,6 +158,10 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
 
         binding = ActivityEmulationBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Launch is a fade-through: the game surface grows out of the library and the library
+        // recedes behind it, instead of the window appearing in a single frame.
+        SuyuMotion.applyEnterTransition(this)
 
         val launchIntent = Intent(intent)
         val shouldDeferLaunchForSwap = hasEmulationSession && isSwapIntent(launchIntent)
@@ -786,16 +792,19 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
             Log.info("[EmulationActivity] ROM swap native stop acknowledged")
             launchPendingRomSwap(force = false)
         } else if (status == 0 && emulationViewModel.programChanged.value == -1) {
-            processSessionGame = null
+            updateSessionGame(null)
             finish()
         } else if (!isWaitingForRomSwapStop) {
-            processSessionGame = null
+            updateSessionGame(null)
         }
         emulationViewModel.setEmulationStopped(true)
     }
 
     fun updateSessionGame(game: Game?) {
         processSessionGame = game
+        // Presence follows the session, not the activity: it has to survive an activity restart
+        // and it has to stop the moment the emulated game is torn down.
+        DiscordPresence.onSessionGameChanged(game?.title)
     }
 
     fun onProgramChanged(programIndex: Int) {

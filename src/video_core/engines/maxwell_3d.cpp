@@ -300,8 +300,13 @@ void Maxwell3D::ConsumeSinkImpl(Core::System& system) {
 
 void Maxwell3D::ProcessDirtyRegisters(u32 method, u32 argument) {
     regs.reg_array[method] = argument;
-    for (auto const& table : dirty.tables)
-        dirty.flags[table[method]] = true;
+    for (auto const& table : dirty.tables) {
+        const u8 flag = table[method];
+        dirty.flags[flag] = true;
+        if (pipeline_state_watch[flag]) {
+            ++pipeline_state_epoch;
+        }
+    }
 }
 
 void Maxwell3D::ProcessMethodCall(u32 method, u32 argument, u32 nonshadow_argument, bool is_last_call) {

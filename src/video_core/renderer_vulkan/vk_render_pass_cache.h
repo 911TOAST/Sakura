@@ -20,6 +20,12 @@ struct RenderPassKey {
     std::array<VideoCore::Surface::PixelFormat, 8> color_formats;
     VideoCore::Surface::PixelFormat depth_format;
     VkSampleCountFlagBits samples;
+    /// Define the attachment instead of loading it at pass begin. The clear variant is used when
+    /// the guest's first use of a render target is a clear that covers the whole surface: on a
+    /// tiler the load would fetch every tile from DRAM and the clear would immediately discard it.
+    bool color_clear{};
+    bool depth_clear{};
+    bool stencil_clear{};
 };
 
 } // namespace Vulkan
@@ -33,6 +39,9 @@ struct hash<Vulkan::RenderPassKey> {
         for (size_t i = 0; i < key.color_formats.size(); ++i) {
             value ^= static_cast<size_t>(key.color_formats[i]) << (i * 6);
         }
+        value ^= static_cast<size_t>(key.color_clear) << 58;
+        value ^= static_cast<size_t>(key.depth_clear) << 59;
+        value ^= static_cast<size_t>(key.stencil_clear) << 60;
         return value;
     }
 };

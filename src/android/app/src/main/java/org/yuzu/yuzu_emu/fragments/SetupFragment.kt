@@ -228,8 +228,9 @@ class SetupFragment : Fragment() {
                         val file = File(
                             DirectoryInitialization.userDirectory + "/keys/prod.keys"
                         )
-                        if (file.exists() && NativeLibrary.areKeysPresent() &&
-                            NativeLibrary.isFirmwareAvailable() && NativeConfig.getGameDirs()
+                        // Firmware is optional: keys plus a game folder are enough to boot, and
+                        // missing system applets are faked by the emulator when that is enabled.
+                        if (file.exists() && NativeLibrary.areKeysPresent() && NativeConfig.getGameDirs()
                                 .isNotEmpty()
                         ) {
                             PageState.COMPLETE

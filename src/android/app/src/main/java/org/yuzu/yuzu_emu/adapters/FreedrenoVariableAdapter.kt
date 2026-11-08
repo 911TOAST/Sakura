@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import org.yuzu.yuzu_emu.databinding.ListItemFreedrenoVariableBinding
+import org.yuzu.yuzu_emu.viewholder.revealItemOnce
 import org.yuzu.yuzu_emu.fragments.FreedrenoVariable
 import org.yuzu.yuzu_emu.utils.NativeFreedrenoConfig
 
@@ -32,6 +33,7 @@ class FreedrenoVariableAdapter(
 
     override fun onBindViewHolder(holder: VariableViewHolder, position: Int) {
         holder.bind(getItem(position))
+        revealItemOnce(holder.itemView, position)
     }
 
     inner class VariableViewHolder(private val binding: ListItemFreedrenoVariableBinding) :

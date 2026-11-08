@@ -8,6 +8,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import org.yuzu.yuzu_emu.databinding.ItemFirmwareAvatarBinding
+import org.yuzu.yuzu_emu.viewholder.revealItemOnce
 
 class FirmwareAvatarAdapter(
     private val avatars: List<Bitmap>,
@@ -27,6 +28,7 @@ class FirmwareAvatarAdapter(
 
     override fun onBindViewHolder(holder: AvatarViewHolder, position: Int) {
         holder.bind(avatars[position], position == selectedPosition)
+        revealItemOnce(holder.itemView, position)
     }
 
     override fun getItemCount(): Int = avatars.size

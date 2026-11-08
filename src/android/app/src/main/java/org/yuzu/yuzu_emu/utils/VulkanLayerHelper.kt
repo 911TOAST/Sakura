@@ -41,8 +41,12 @@ object VulkanLayerHelper {
 
     /** Reapplies saved names after game-specific settings have been loaded. */
     fun applyStoredLayers() {
-        val layers = NativeConfig.getString(SETTING_KEY, true)
-        NativeLibrary.setVulkanLayers(layers)
+        // Only hand over layers the loader actually reports. A stored name can outlive the layer
+        // that provided it (a removed APK layer, a driver update, an uninstalled shim), and
+        // vkCreateInstance fails outright with VK_ERROR_LAYER_NOT_PRESENT instead of ignoring it.
+        val available = getLayers().mapTo(mutableSetOf()) { it.name }
+        val layers = parse(NativeConfig.getString(SETTING_KEY, true)).filter { it in available }
+        NativeLibrary.setVulkanLayers(layers.joinToString(","))
     }
 
     private fun parse(value: String?): List<String> =

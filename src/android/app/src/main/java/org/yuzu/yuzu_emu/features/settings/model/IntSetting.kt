@@ -71,7 +71,15 @@ enum class IntSetting(override val key: String) : AbstractIntSetting {
     GPU_LOG_RING_BUFFER_SIZE("gpu_log_ring_buffer_size"),
     ANDROID_PIPELINE_WORKERS("pipeline_worker_count"),
     MALI_STREAM_BUFFER("mali_stream_buffer_mib"),
-    ANDROID_VRAM_BUDGET("vram_budget_mib")
+    ANDROID_VRAM_BUDGET("vram_budget_mib"),
+    ANDROID_DRAW_BATCH("draw_batch_size"),
+    LIBRARY_BACKGROUND_BLUR("library_background_blur"),
+    LIBRARY_BACKGROUND_FIT("library_background_fit"),
+    LIBRARY_BACKGROUND_DIM("library_background_dim"),
+    LIBRARY_BACKGROUND_ZOOM("library_background_zoom"),
+    LIBRARY_BACKGROUND_X("library_background_x"),
+    LIBRARY_BACKGROUND_Y("library_background_y"),
+    DISCORD_PRESENCE_MODE("discord_presence_mode")
     ;
 
     override fun getInt(needsGlobal: Boolean): Int = NativeConfig.getInt(key, needsGlobal)

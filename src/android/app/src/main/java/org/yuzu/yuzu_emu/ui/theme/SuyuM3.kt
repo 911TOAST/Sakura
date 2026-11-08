@@ -3,6 +3,7 @@
 
 package org.yuzu.yuzu_emu.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
@@ -10,15 +11,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.yuzu.yuzu_emu.R
+import org.yuzu.yuzu_emu.features.settings.model.IntSetting
+import org.yuzu.yuzu_emu.utils.ArtworkColors
+import org.yuzu.yuzu_emu.utils.Theme
 
 // =============================================================================
 // Sakura Rose — Material 3 Expressive palette
@@ -97,23 +105,14 @@ private val RoseDark = darkColorScheme(
     surfaceTint = Color(0xFFFFB1CB),
 )
 
-// =============================================================================
-// M3 Expressive shape scale
-// Larger radii are perceived as more modern, energetic, and friendly
-// (Google I/O 2025 research, 18,000+ participants).
-// extraSmall : 16dp  — chips, input fields, snackbars
-// small      : 20dp  — FAB secondary, small cards
-// medium     : 28dp  — cards, dialogs, search bars
-// large      : 36dp  — bottom sheets, nav drawers
-// extraLarge : 48dp  — hero cards, full-width sheets
-// Mirrors ShapeAppearance.Suyu.* in res/values/suyu_shapes.xml.
-// =============================================================================
+// Material 3 Expressive shape scale: bigger, rounder, more confident than baseline M3. The
+// extra-large corner is the one dialogs, sheets and hero cards ride on.
 private val SuyuShapes = Shapes(
-    extraSmall = RoundedCornerShape(16.dp),
-    small = RoundedCornerShape(20.dp),
-    medium = RoundedCornerShape(28.dp),
-    large = RoundedCornerShape(36.dp),
-    extraLarge = RoundedCornerShape(48.dp),
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(22.dp),
+    extraLarge = RoundedCornerShape(32.dp),
 )
 
 // Google Sans (OFL-1.1), Latin subset, mirrors res/font/google_sans.xml.
@@ -137,47 +136,47 @@ private val SuyuTypography = run {
     Typography(
         displayLarge = base.displayLarge.copy(
             fontFamily = GoogleSans,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = (-0.4).sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.5).sp,
         ),
         displayMedium = base.displayMedium.copy(
             fontFamily = GoogleSans,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = (-0.25).sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.35).sp,
         ),
         displaySmall = base.displaySmall.copy(
             fontFamily = GoogleSans,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 0.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.2).sp,
         ),
         headlineLarge = base.headlineLarge.copy(
             fontFamily = GoogleSans,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = (-0.1).sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = (-0.2).sp,
         ),
         headlineMedium = base.headlineMedium.copy(
             fontFamily = GoogleSans,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = (-0.1).sp,
         ),
         headlineSmall = base.headlineSmall.copy(
             fontFamily = GoogleSans,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.sp,
         ),
         titleLarge = base.titleLarge.copy(
             fontFamily = GoogleSans,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.sp,
         ),
         titleMedium = base.titleMedium.copy(
             fontFamily = GoogleSans,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.05.sp,
         ),
         titleSmall = base.titleSmall.copy(
             fontFamily = GoogleSans,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.05.sp,
         ),
         bodyLarge = base.bodyLarge.copy(
@@ -211,12 +210,35 @@ private val SuyuTypography = run {
 }
 
 @Composable
-fun suyuScheme(): ColorScheme = if (isSystemInDarkTheme()) RoseDark else RoseLight
+fun suyuScheme(artworkSeed: Int? = null): ColorScheme {
+    val darkTheme = isSystemInDarkTheme()
+    // Material You is the only mode allowed to follow the wallpaper. Everything else renders the
+    // Sakura Rose expressive palette, which is what ThemeHelper puts on the XML windows: a Compose
+    // screen silently turning into stock dynamic colour broke the app's identity on every Pixel.
+    // Cached for this composition: the theme is applied when the activity is created, and the
+    // dashboard recomposes every frame, so this must not reach into the native config each time.
+    val materialYou = remember {
+        runCatching { Theme.from(IntSetting.THEME.getInt()) == Theme.MaterialYou }
+            .getOrDefault(false)
+    }
+    if (materialYou && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val context = LocalContext.current
+        return runCatching {
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }.getOrElse { if (darkTheme) RoseDark else RoseLight }
+    }
+    // Otherwise the library's cover art wins, the way a music player colours itself from the
+    // album on screen. Rose is the fallback until a cover has been sampled.
+    if (artworkSeed != null) {
+        return ArtworkColors.schemeFromSeed(artworkSeed, darkTheme)
+    }
+    return if (darkTheme) RoseDark else RoseLight
+}
 
 @Composable
-fun SuyuM3Theme(content: @Composable () -> Unit) {
+fun SuyuM3Theme(artworkSeed: Int? = null, content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = suyuScheme(),
+        colorScheme = suyuScheme(artworkSeed),
         shapes = SuyuShapes,
         typography = SuyuTypography,
         content = content

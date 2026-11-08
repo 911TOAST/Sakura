@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <thread>
 #include <utility>
 
@@ -83,11 +84,25 @@ void Scheduler::WaitWorker() {
     std::scoped_lock el{execution_mutex};
 }
 
+void Scheduler::WaitSerial(u64 serial) {
+    if (serial == 0) {
+        return;
+    }
+
+    std::unique_lock lock{serial_mutex};
+    serial_cv.wait(lock, [this, serial] {
+        return executed_serial.load(std::memory_order_acquire) >= serial;
+    });
+}
+
 void Scheduler::DispatchWork() {
     if (chunk && !chunk->Empty()) {
         {
             std::scoped_lock ql{queue_mutex};
             work_queue.push(std::move(chunk));
+            // Publish the chunk before the worker can pop it, so a presenter waiting for this
+            // serial never observes an execution it has not been handed yet.
+            issued_serial.fetch_add(1, std::memory_order_release);
         }
         event_cv.notify_all();
         AcquireNewChunk();
@@ -103,10 +118,18 @@ void Scheduler::RequestRenderpass(const Framebuffer* framebuffer) {
         render_area.height == state.render_area.height) {
         return;
     }
+    // The pass that is already open for this framebuffer defines its attachments at begin. Ending it
+    // to reopen the loading variant would store the tile and read it straight back.
+    if (state.renderpass_is_clear && framebuffer_handle == state.framebuffer &&
+        render_area.width == state.render_area.width &&
+        render_area.height == state.render_area.height) {
+        return;
+    }
     EndRenderPass();
     state.renderpass = renderpass;
     state.framebuffer = framebuffer_handle;
     state.render_area = render_area;
+    state.renderpass_is_clear = false;
 
     // Log render pass begin
     if (GPU::Logging::IsActive() &&
@@ -136,6 +159,53 @@ void Scheduler::RequestRenderpass(const Framebuffer* framebuffer) {
     num_renderpass_images = framebuffer->NumImages();
     renderpass_images = framebuffer->Images();
     renderpass_image_ranges = framebuffer->ImageRanges();
+}
+
+bool Scheduler::RequestRenderpassClear(const Framebuffer* framebuffer,
+                                      std::span<const VkClearValue> clear_values) {
+    const VkRenderPass renderpass = framebuffer->ClearRenderPass();
+    if (renderpass == VK_NULL_HANDLE || renderpass == framebuffer->RenderPass()) {
+        return false;
+    }
+    const VkFramebuffer framebuffer_handle = framebuffer->Handle();
+    const VkExtent2D render_area = framebuffer->RenderArea();
+    if (renderpass == state.renderpass && framebuffer_handle == state.framebuffer) {
+        // Already open: the clear-values of a begin that happened before this call do not describe
+        // what the guest is asking for now, so the caller has to clear explicitly.
+        return false;
+    }
+    EndRenderPass();
+    state.renderpass = renderpass;
+    state.framebuffer = framebuffer_handle;
+    state.render_area = render_area;
+    state.renderpass_is_clear = true;
+
+    std::array<VkClearValue, 9> values{};
+    const size_t count = std::min<size_t>(clear_values.size(), values.size());
+    for (size_t index = 0; index < count; ++index) {
+        values[index] = clear_values[index];
+    }
+
+    Record([renderpass, framebuffer_handle, render_area, values, count](vk::CommandBuffer cmdbuf) {
+        const VkRenderPassBeginInfo renderpass_bi{
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .pNext = nullptr,
+            .renderPass = renderpass,
+            .framebuffer = framebuffer_handle,
+            .renderArea =
+                {
+                    .offset = {.x = 0, .y = 0},
+                    .extent = render_area,
+                },
+            .clearValueCount = static_cast<u32>(count),
+            .pClearValues = count != 0 ? values.data() : nullptr,
+        };
+        cmdbuf.BeginRenderPass(renderpass_bi, VK_SUBPASS_CONTENTS_INLINE);
+    });
+    num_renderpass_images = framebuffer->NumImages();
+    renderpass_images = framebuffer->Images();
+    renderpass_image_ranges = framebuffer->ImageRanges();
+    return true;
 }
 
 void Scheduler::RequestOutsideRenderPassOperationContext() {
@@ -224,6 +294,14 @@ void Scheduler::WorkerThread(std::stop_token stop_token) {
             }
         }
 
+        // The chunk (and any queue submission inside it) is now visible to the WSI. Publish the
+        // serial so a presenter waiting on it can hand the frame to the display.
+        {
+            std::scoped_lock serial_lock{serial_mutex};
+            executed_serial.fetch_add(1, std::memory_order_release);
+        }
+        serial_cv.notify_all();
+
         {
             std::scoped_lock rl{reserve_mutex};
 
@@ -250,10 +328,36 @@ void Scheduler::AllocateWorkerCommandBuffer() {
     });
 }
 
-void Scheduler::RegisterUploadBuffer(VkBuffer buffer) {
-    if (std::ranges::find(pending_upload_buffers, buffer) == pending_upload_buffers.end()) {
-        pending_upload_buffers.push_back(buffer);
+void Scheduler::RegisterUploadBuffer(VkBuffer buffer, vk::CommandBuffer upload_cmdbuf) {
+    if (num_pending_upload_buffers == 0 && !use_global_upload_barrier) {
+        // Queue submission order alone is not an execution dependency. Finish earlier submissions'
+        // reads/writes before reusing their buffers, once per upload batch and outside render passes.
+        static constexpr VkMemoryBarrier READ_BARRIER{
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        };
+        upload_cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                     VK_PIPELINE_STAGE_TRANSFER_BIT, 0, READ_BARRIER);
     }
+    if (use_global_upload_barrier) {
+        return;
+    }
+    if (!device.IsMali()) {
+        use_global_upload_barrier = true;
+        return;
+    }
+    const std::span buffers{pending_upload_buffers.data(), num_pending_upload_buffers};
+    if (std::ranges::find(buffers, buffer) != buffers.end()) {
+        return;
+    }
+    if (num_pending_upload_buffers == pending_upload_buffers.size()) {
+        // Further identities do not matter once submission uses the global fallback.
+        use_global_upload_barrier = true;
+        return;
+    }
+    pending_upload_buffers[num_pending_upload_buffers++] = buffer;
 }
 
 u64 Scheduler::SubmitExecution(VkSemaphore signal_semaphore, VkSemaphore wait_semaphore) {
@@ -263,30 +367,29 @@ u64 Scheduler::SubmitExecution(VkSemaphore signal_semaphore, VkSemaphore wait_se
     const u64 signal_value = master_semaphore->NextTick();
     RecordWithUploadBuffer([signal_semaphore, wait_semaphore, signal_value,
                             this](vk::CommandBuffer cmdbuf, vk::CommandBuffer upload_cmdbuf) {
-        if (!pending_upload_buffers.empty()) {
-            if (device.IsMali() && pending_upload_buffers.size() <= 8) {
-                pending_upload_barriers.clear();
-                for (const VkBuffer buffer : pending_upload_buffers) {
-                    pending_upload_barriers.push_back(VkBufferMemoryBarrier{
+        if (num_pending_upload_buffers != 0 || use_global_upload_barrier) {
+            if (!use_global_upload_barrier) {
+                std::array<VkBufferMemoryBarrier, MAX_TRACKED_UPLOAD_BUFFERS> barriers;
+                for (size_t i = 0; i < num_pending_upload_buffers; ++i) {
+                    barriers[i] = VkBufferMemoryBarrier{
                         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
                         .pNext = nullptr,
                         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
                         .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
                         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .buffer = buffer,
+                        .buffer = pending_upload_buffers[i],
                         .offset = 0,
                         .size = VK_WHOLE_SIZE,
-                    });
+                    };
                 }
                 upload_cmdbuf.PipelineBarrier(
                     VK_PIPELINE_STAGE_TRANSFER_BIT,
                     vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER |
                         VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
                     0, vk::Span<VkMemoryBarrier>{},
-                    vk::Span<VkBufferMemoryBarrier>{pending_upload_barriers},
+                    vk::Span(barriers.data(), num_pending_upload_buffers),
                     vk::Span<VkImageMemoryBarrier>{});
-                pending_upload_barriers.clear();
             } else {
                 static constexpr VkMemoryBarrier WRITE_BARRIER{
                     .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
@@ -301,7 +404,8 @@ u64 Scheduler::SubmitExecution(VkSemaphore signal_semaphore, VkSemaphore wait_se
                                     : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                     0, WRITE_BARRIER);
             }
-            pending_upload_buffers.clear();
+            num_pending_upload_buffers = 0;
+            use_global_upload_barrier = false;
         }
         upload_cmdbuf.End();
         cmdbuf.End();
@@ -424,6 +528,7 @@ void Scheduler::EndRenderPass()
         });
 
         state.renderpass = VkRenderPass{};
+        state.renderpass_is_clear = false;
         num_renderpass_images = 0;
     }
 

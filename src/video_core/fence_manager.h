@@ -72,8 +72,16 @@ public:
     }
 
     void SignalFence(std::function<void()>&& func) {
-        const bool delay_fence = Settings::IsGPUFenceBehaviorDefault() ? Settings::IsGPULevelHigh() : Settings::IsGPUFenceBehaviorBalanced() || Settings::IsGPUFenceBehaviorAccurate() || Settings::IsGPUFenceBehaviorStrict();
         const bool should_flush = ShouldFlush();
+        // A pending async flush means the sync below cannot be satisfied yet. Running it inline
+        // just stalls against work that is about to be submitted anyway, so defer it to the fence
+        // release path once the flush is out. Upstream measured this as both a flicker fix and a
+        // 1% low win on normal accuracy.
+        const bool delay_fence = Settings::IsGPUFenceBehaviorDefault()
+                                     ? (Settings::IsGPULevelHigh() || should_flush)
+                                     : Settings::IsGPUFenceBehaviorBalanced() ||
+                                           Settings::IsGPUFenceBehaviorAccurate() ||
+                                           Settings::IsGPUFenceBehaviorStrict();
         if constexpr (!can_async_check) {
             TryReleasePendingFences<false>();
         }

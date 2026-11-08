@@ -30,21 +30,21 @@
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/text_setting_name"
-                    style="@style/TextAppearance.Material3.HeadlineMedium"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textAlignment="viewStart"
-                    android:textSize="17sp"
-                    app:lineHeight="28dp"
+                    android:textColor="?attr/colorOnSurface"
                     tools:text="@string/frame_limit_enable" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/text_setting_description"
-                    style="@style/TextAppearance.Material3.BodySmall"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_small"
                     android:textAlignment="viewStart"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     tools:text="@string/frame_limit_enable_description" />
 
             </LinearLayout>
@@ -59,7 +59,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/button_clear"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/SuyuButton.Tonal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"

@@ -39,9 +39,9 @@ public:
         return *buffer;
     }
 
-    [[nodiscard]] bool IsRegionUsed(u64 offset, u64 size) const noexcept {
-        return tracker.IsUsed(offset, size);
-    }
+    /// True when the region was already accessed by work in the submission still being built.
+    /// Such uploads must stay in place instead of moving ahead of earlier reads or writes.
+    [[nodiscard]] bool IsRegionUsed(u64 offset, u64 size) const noexcept;
 
     void MarkUsage(u64 offset, u64 size) noexcept;
 
@@ -75,6 +75,8 @@ private:
     vk::Buffer buffer;
     std::vector<BufferView> views;
     VideoCommon::UsageTracker tracker;
+    /// Logical tick (submission counter) of the last recorded use of this buffer. Also used to skip
+    /// the whole usage bitmap once the submission that recorded it has completed.
     u64 last_usage_tick{};
     bool is_null{};
 };
@@ -119,7 +121,7 @@ public:
 
     [[nodiscard]] StagingBufferRef DownloadStagingBuffer(size_t size, bool deferred = false);
 
-    bool CanReorderUpload(const Buffer& buffer, std::span<const VideoCommon::BufferCopy> copies);
+    bool CanReorderUpload(Buffer& buffer, std::span<const VideoCommon::BufferCopy> copies);
 
     void FreeDeferredStagingBuffer(StagingBufferRef& ref);
 
@@ -202,6 +204,8 @@ private:
     std::unique_ptr<Uint8Pass> uint8_pass;
     QuadIndexedPass quad_index_pass;
 
+    // Render-thread state for copies that deliberately omit their own post-copy barrier.
+    bool pending_copy_barrier = false;
     bool limit_dynamic_storage_buffers = false;
     u32 max_dynamic_storage_buffers = (std::numeric_limits<u32>::max)();
 };

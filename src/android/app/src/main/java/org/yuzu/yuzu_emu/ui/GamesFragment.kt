@@ -3,12 +3,13 @@
 
 package org.yuzu.yuzu_emu.ui
 
+import android.animation.Animator
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
-import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -22,9 +23,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.core.widget.doOnTextChanged
-import androidx.dynamicanimation.animation.DynamicAnimation
-import androidx.dynamicanimation.animation.SpringAnimation
-import androidx.dynamicanimation.animation.SpringForce
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
@@ -32,6 +30,7 @@ import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import org.yuzu.yuzu_emu.HomeNavigationDirections
 import org.yuzu.yuzu_emu.NativeLibrary
@@ -53,6 +52,11 @@ import info.debatty.java.stringsimilarity.JaroWinkler
 import java.util.Locale
 import androidx.core.content.edit
 import androidx.core.view.doOnNextLayout
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import org.yuzu.yuzu_emu.utils.ArtworkColors
+import org.yuzu.yuzu_emu.utils.BrandAnimation
+import org.yuzu.yuzu_emu.utils.LibraryBackgroundApplier
 
 class GamesFragment : Fragment() {
     private var _binding: FragmentGamesBinding? = null
@@ -65,6 +69,16 @@ class GamesFragment : Fragment() {
     private var isLoadingGames: Boolean = false
     private var hasAnimatedEntrance: Boolean = false
     private var emptyStateShown: Boolean = false
+
+    // Looping brand decorators for this screen, cancelled in onDestroyView.
+    private val brandAnimators = mutableListOf<Animator>()
+
+    // Set while the settings panel is on top so the pill drops on the way in and rises on the
+    // way back instead of replaying the whole library entrance underneath the sliding panel.
+    private var pillDroppedForSettings: Boolean = false
+
+    /** Tracks the last title-visibility state so returning from settings only rebinds on change. */
+    private var appliedHideTitles: Boolean = false
 
     companion object {
         private const val SEARCH_TEXT = "SearchText"
@@ -114,6 +128,13 @@ class GamesFragment : Fragment() {
         mainActivity = requireActivity() as MainActivity
         navigatingToSettings = false
 
+        val returningFromSettings = pillDroppedForSettings
+        pillDroppedForSettings = false
+        if (returningFromSettings) {
+            // The library is already laid out behind the panel, so skip the tile stagger.
+            hasAnimatedEntrance = true
+        }
+
         if (savedInstanceState != null) {
             binding.searchText.setText(savedInstanceState.getString(SEARCH_TEXT))
         }
@@ -156,6 +177,7 @@ class GamesFragment : Fragment() {
         gamesViewModel.games.collect(viewLifecycleOwner) {
             if (it.isNotEmpty()) {
                 setAdapter(it)
+                themeFromCoverArt()
             } else {
                 gameAdapter.submitList(emptyList())
                 gamesViewModel.setFilteredGames(emptyList())
@@ -204,84 +226,127 @@ class GamesFragment : Fragment() {
             }
         }
 
-        // The floating pill handles system bars with margins, so swallow the
-        // insets the widget would otherwise convert into internal padding.
         ViewCompat.setOnApplyWindowInsetsListener(binding.navBar) { _, _ ->
             WindowInsetsCompat.CONSUMED
         }
 
         setInsets()
-        animateScreenEntrance()
+        LibraryBackgroundApplier.applyTo(binding.root, viewLifecycleOwner)
+        appliedHideTitles = BooleanSetting.HIDE_GAME_TITLES.getBoolean()
+        if (returningFromSettings) {
+            raisePill()
+        } else {
+            animateScreenEntrance()
+        }
+
+        themeFromCoverArt()
     }
 
     /**
-     * Raw M3 screen entrance: brand, search, filters and nav settle in with a
-     * short top-down cascade on the emphasized curve.
+     * Samples the first cover so the Compose surfaces (dashboard, quick tweaks) take their colours
+     * from the library. Deliberately does not tint this screen: a full-bleed wash of one cover's
+     * colour fought the theme instead of complementing it.
      */
-    private fun animateScreenEntrance() {
-        val context = requireContext()
-        val decelerate = SuyuMotion.emphasizedDecelerate(context)
-        val duration = SuyuMotion.durationMedium2(context)
-        val rise = resources.getDimensionPixelSize(R.dimen.spacing_med).toFloat()
+    private fun themeFromCoverArt() {
+        if (ArtworkColors.seed.value != null) {
+            return
+        }
+        val game = gamesViewModel.games.value.firstOrNull() ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            ArtworkColors.applyFromArtwork(viewLifecycleOwner, game)
+        }
+    }
 
+    /** Distance the pill travels to clear the screen, including its inset margin. */
+    private fun pillDropDistance(): Float {
+        val navBar = binding.navBar
+        val margin = (navBar.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
+        val height = if (navBar.height > 0) {
+            navBar.height
+        } else {
+            // Not laid out yet: fall back to the standard navigation bar height.
+            (56 * resources.displayMetrics.density).toInt()
+        }
+        return (height + margin + resources.getDimensionPixelSize(R.dimen.spacing_med)).toFloat()
+    }
+
+    /** Sinks the pill off the bottom edge before the settings panel slides over it. */
+    private fun dropPill() {
+        val navBar = binding.navBar
+        navBar.animate().cancel()
+        navBar.animate()
+            .translationY(pillDropDistance())
+            .alpha(0f)
+            .setDuration(SuyuMotion.durationShort4(requireContext()))
+            .setInterpolator(SuyuMotion.emphasizedAccelerate(requireContext()))
+            .start()
+    }
+
+    /** Brings the pill back up once the library is visible again. */
+    private fun raisePill() {
+        val navBar = binding.navBar
+        navBar.animate().cancel()
+        navBar.translationY = pillDropDistance()
+        navBar.alpha = 0f
+        navBar.animate()
+            .translationY(0f)
+            .alpha(1f)
+            .setStartDelay(80L)
+            .setDuration(SuyuMotion.durationMedium4(requireContext()))
+            .setInterpolator(SuyuMotion.emphasizedDecelerate(requireContext()))
+            .start()
+    }
+
+    private fun animateScreenEntrance() {
+        val decelerate = SuyuMotion.emphasizedDecelerate(requireContext())
+        val duration = SuyuMotion.durationMedium2(requireContext())
+        val rise = resources.getDimensionPixelSize(R.dimen.spacing_med).toFloat()
         val targets = listOf(
-            Triple(binding.header, 0L, rise),
-            Triple(binding.frameSearch, 70L, rise),
-            Triple(binding.filterScroll, 130L, rise)
+            binding.header,
+            binding.libraryHeader,
+            binding.frameSearch,
+            binding.filterScroll,
+            binding.navBar
         )
-        targets.forEach { (view, delay, offset) ->
-            view.animate().cancel()
-            view.alpha = 0f
-            view.translationY = offset
-            view.animate()
+
+        targets.forEachIndexed { index, target ->
+            target.animate().cancel()
+            target.alpha = 0f
+            target.translationY = rise
+            target.animate()
                 .alpha(1f)
                 .translationY(0f)
-                .setStartDelay(delay)
+                .setStartDelay(index * 40L)
                 .setDuration(duration)
                 .setInterpolator(decelerate)
                 .start()
         }
 
-        // The pill rises on a real spring so the bar lands with physical weight.
-        binding.navBar.animate().cancel()
-        binding.navBar.alpha = 0f
-        binding.navBar.translationY = rise * 3
-        binding.navBar.animate()
+        binding.brandMark.animate().cancel()
+        binding.brandMark.alpha = 0f
+        binding.brandMark.scaleX = 0.55f
+        binding.brandMark.scaleY = 0.55f
+        binding.brandMark.rotation = -72f
+        binding.brandMark.animate()
             .alpha(1f)
-            .setStartDelay(180L)
-            .setDuration(220L)
+            .scaleX(1f)
+            .scaleY(1f)
+            .rotation(0f)
+            .setStartDelay(60L)
+            .setDuration(700L)
             .setInterpolator(decelerate)
             .start()
-        SpringAnimation(binding.navBar, DynamicAnimation.TRANSLATION_Y, 0f).apply {
-            spring = SpringForce(0f).apply {
-                dampingRatio = SpringForce.DAMPING_RATIO_LOW_BOUNCY
-                stiffness = SpringForce.STIFFNESS_LOW
-            }
-            start()
-        }
-    }
 
-    /**
-     * Spring pop on the newly selected pill destination.
-     */
-    private fun animateNavSelection(itemId: Int) {
-        val index = (0 until binding.navBar.menu.size())
-            .firstOrNull { binding.navBar.menu.getItem(it).itemId == itemId } ?: return
-        val menuView = binding.navBar.getChildAt(0) as? ViewGroup ?: return
-        val itemView = menuView.getChildAt(index) ?: return
-
-        itemView.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-        itemView.scaleX = 0.82f
-        itemView.scaleY = 0.82f
-        listOf(DynamicAnimation.SCALE_X, DynamicAnimation.SCALE_Y).forEach { property ->
-            SpringAnimation(itemView, property, 1f).apply {
-                spring = SpringForce(1f).apply {
-                    dampingRatio = SpringForce.DAMPING_RATIO_LOW_BOUNCY
-                    stiffness = SpringForce.STIFFNESS_MEDIUM
-                }
-                start()
+        // Ambient brand motion once the entrance settles: a light sweep across the wordmark,
+        // width-only breathing, and a slow rock on the mark. Transforms and paint only.
+        binding.root.postDelayed({
+            if (_binding == null || !ValueAnimator.areAnimatorsEnabled()) {
+                return@postDelayed
             }
-        }
+            BrandAnimation.startShimmer(binding.brandWordmarkText, 3000L)
+            brandAnimators += BrandAnimation.breathe(binding.brandWordmarkText, 1.025f)
+            brandAnimators += BrandAnimation.sway(binding.brandMark, 3f, 4200L)
+        }, 900L)
     }
 
     val applyGridGamesBinding = {
@@ -348,6 +413,15 @@ class GamesFragment : Fragment() {
             adapter = gameAdapter
             lastViewType = savedViewType
 
+            // M3 list motion: reorders and filter changes settle on the same durations as the
+            // rest of the app instead of the framework defaults.
+            itemAnimator = DefaultItemAnimator().apply {
+                addDuration = SuyuMotion.durationMedium2(context)
+                changeDuration = SuyuMotion.durationMedium2(context)
+                moveDuration = SuyuMotion.durationMedium2(context)
+                removeDuration = SuyuMotion.durationShort4(context)
+            }
+
             // Replay the staggered M3 entrance whenever the user rebinds with another view mode.
             if (savedViewType != GameAdapter.VIEW_TYPE_CAROUSEL) {
                 gameAdapter.playEntranceAnimation()
@@ -371,9 +445,17 @@ class GamesFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        navigatingToSettings = false
         if (_binding != null) {
             updateButtonsVisibility()
             updateEmptyState()
+            // Appearance settings can change while this screen is in the back stack.
+            LibraryBackgroundApplier.applyTo(binding.root, viewLifecycleOwner)
+            val hideTitles = BooleanSetting.HIDE_GAME_TITLES.getBoolean()
+            if (hideTitles != appliedHideTitles) {
+                appliedHideTitles = hideTitles
+                gameAdapter.notifyDataSetChanged()
+            }
         }
         if (getCurrentViewType() == GameAdapter.VIEW_TYPE_CAROUSEL) {
             (binding.gridGames as? CarouselRecyclerView)?.setupCarousel(true)
@@ -466,10 +548,7 @@ class GamesFragment : Fragment() {
                     false
                 }
 
-                else -> {
-                    animateNavSelection(item.itemId)
-                    true
-                }
+                else -> true
             }
         }
     }
@@ -489,22 +568,15 @@ class GamesFragment : Fragment() {
     private fun navigateToSettings() {
         if (navigatingToSettings) return
         navigatingToSettings = true
-
-        // The pill drops out of the way first, then the settings panel swipes in from the left.
-        binding.navBar.animate().cancel()
-        binding.navBar.animate()
-            .translationY(
-                binding.navBar.height.toFloat() +
-                    resources.getDimensionPixelSize(R.dimen.spacing_medlarge)
-            )
-            .alpha(0f)
-            .setDuration(SuyuMotion.durationShort4(requireContext()))
-            .setInterpolator(SuyuMotion.emphasizedAccelerate(requireContext()))
-            .withEndAction {
-                findNavController()
-                    .navigate(R.id.action_gamesFragment_to_homeSettingsFragment)
+        pillDroppedForSettings = true
+        // Let the pill visibly sink first, then hand over to the panel transition. The short
+        // 160 ms beat is what makes the two motions read as one gesture instead of a cut.
+        dropPill()
+        binding.navBar.postDelayed({
+            if (_binding != null && isAdded) {
+                findNavController().navigate(R.id.action_gamesFragment_to_homeSettingsFragment)
             }
-            .start()
+        }, 160L)
     }
 
     private fun showViewMenu(anchor: View) {
@@ -570,41 +642,52 @@ class GamesFragment : Fragment() {
     private var currentFilter = View.NO_ID
 
     private fun filterAndSearch(baseList: List<Game> = gamesViewModel.games.value) {
+        val recentCutoff = System.currentTimeMillis() - 24L * 60L * 60L * 1000L
         val filteredList: List<Game> = when (currentFilter) {
             R.id.alphabetical -> baseList.sortedBy { it.title }
             R.id.filter_recently_played -> {
                 baseList.filter {
-                    val lastPlayedTime = preferences.getLong(it.keyLastPlayedTime, 0L)
-                    lastPlayedTime > (System.currentTimeMillis() - 24 * 60 * 60 * 1000)
+                    preferences.getLong(it.keyLastPlayedTime, 0L) > recentCutoff
                 }.sortedByDescending { preferences.getLong(it.keyLastPlayedTime, 0L) }
             }
             R.id.filter_recently_added -> {
                 baseList.filter {
-                    val addedTime = preferences.getLong(it.keyAddedToLibraryTime, 0L)
-                    addedTime > (System.currentTimeMillis() - 24 * 60 * 60 * 1000)
+                    preferences.getLong(it.keyAddedToLibraryTime, 0L) > recentCutoff
                 }.sortedByDescending { preferences.getLong(it.keyAddedToLibraryTime, 0L) }
             }
             else -> baseList
         }
 
-        val searchTerm = binding.searchText.text.toString().lowercase(Locale.getDefault())
+        val searchTerm = binding.searchText.text.toString().trim().lowercase(Locale.ROOT)
         if (searchTerm.isEmpty()) {
             submitFilteredGames(filteredList)
             return
         }
 
-        val searchAlgorithm = if (searchTerm.length > 1) Jaccard(2) else JaroWinkler()
-        val sortedList = filteredList.mapNotNull { game ->
-            val title = game.title.lowercase(Locale.getDefault())
-            val score = searchAlgorithm.similarity(searchTerm, title)
-            if (score > 0.03) {
-                ScoredGame(score, game)
-            } else {
-                null
+        val directMatches = filteredList.mapNotNull { game ->
+            val title = game.title.lowercase(Locale.ROOT)
+            val score = when {
+                title == searchTerm -> 4.0
+                title.startsWith(searchTerm) -> 3.0
+                title.contains(" $searchTerm") -> 2.0
+                title.contains(searchTerm) -> 1.0
+                else -> null
             }
+            score?.let { ScoredGame(it, game) }
+        }
+        if (directMatches.isNotEmpty()) {
+            submitFilteredGames(directMatches.sortedByDescending { it.score }.map { it.item })
+            return
+        }
+
+        val searchAlgorithm = if (searchTerm.length > 1) Jaccard(2) else JaroWinkler()
+        val fuzzyMatches = filteredList.mapNotNull { game ->
+            val title = game.title.lowercase(Locale.ROOT)
+            val score = searchAlgorithm.similarity(searchTerm, title)
+            if (score > 0.03) ScoredGame(score, game) else null
         }.sortedByDescending { it.score }.map { it.item }
 
-        submitFilteredGames(sortedList)
+        submitFilteredGames(fuzzyMatches)
     }
 
     private fun submitFilteredGames(games: List<Game>) {
@@ -630,16 +713,8 @@ class GamesFragment : Fragment() {
         )
         if (binding.libraryCount.text.toString() == text) return
         binding.libraryCount.text = text
-        // Raw M3 accent: subtle emphasized settle whenever the count changes.
-        binding.libraryCount.animate().cancel()
-        binding.libraryCount.scaleX = 0.92f
-        binding.libraryCount.scaleY = 0.92f
-        binding.libraryCount.animate()
-            .scaleX(1f)
-            .scaleY(1f)
-            .setDuration(SuyuMotion.durationShort4(requireContext()))
-            .setInterpolator(SuyuMotion.emphasizedDecelerate(requireContext()))
-            .start()
+        // The count pill settles instead of snapping when filters change the number.
+        SuyuMotion.settleIn(binding.libraryCount)
     }
 
     private fun updateEmptyState() {
@@ -675,7 +750,6 @@ class GamesFragment : Fragment() {
                     binding.buttonEmptyAdd.setIconResource(R.drawable.ic_m3_close)
                 }
 
-                // Raw M3 entrance: fade-through slide on the emphasized curve.
                 binding.emptyState.alpha = 0f
                 binding.emptyState.translationY =
                     resources.getDimensionPixelSize(R.dimen.spacing_large).toFloat()
@@ -685,27 +759,6 @@ class GamesFragment : Fragment() {
                     .setDuration(SuyuMotion.durationMedium2(requireContext()))
                     .setInterpolator(SuyuMotion.emphasizedDecelerate(requireContext()))
                     .start()
-
-                // Layered M3 cascade: icon block, copy and action settle in order.
-                val decelerate = SuyuMotion.emphasizedDecelerate(requireContext())
-                val duration = SuyuMotion.durationMedium2(requireContext())
-                val rise = resources.getDimensionPixelSize(R.dimen.spacing_med).toFloat()
-                listOf(
-                    binding.emptyStateTitle,
-                    binding.noticeText,
-                    binding.buttonEmptyAdd
-                ).forEachIndexed { index, child ->
-                    child.animate().cancel()
-                    child.alpha = 0f
-                    child.translationY = rise
-                    child.animate()
-                        .alpha(1f)
-                        .translationY(0f)
-                        .setStartDelay(100L + index * 60L)
-                        .setDuration(duration)
-                        .setInterpolator(decelerate)
-                        .start()
-                }
             } else {
                 // Raw M3 exit: quick emphasized-accelerate fade-out.
                 binding.emptyState.animate()
@@ -732,6 +785,8 @@ class GamesFragment : Fragment() {
         // Reset transient view state so a fresh binding gets the correct entrance.
         emptyStateShown = false
         hasAnimatedEntrance = false
+        brandAnimators.forEach { it.cancel() }
+        brandAnimators.clear()
         _binding = null
     }
 
@@ -823,8 +878,6 @@ class GamesFragment : Fragment() {
                 right = rightInset + resources.getDimensionPixelSize(R.dimen.spacing_chip)
             )
 
-            // The pill consumes its own insets (see onViewCreated) and floats above
-            // the system bars with real margins instead of internal padding.
             val mlpNav = binding.navBar.layoutParams as ViewGroup.MarginLayoutParams
             mlpNav.leftMargin = leftInset + resources.getDimensionPixelSize(R.dimen.spacing_large)
             mlpNav.rightMargin = rightInset + resources.getDimensionPixelSize(R.dimen.spacing_large)

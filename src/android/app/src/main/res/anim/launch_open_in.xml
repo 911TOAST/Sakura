@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Game launch, incoming window: fade through from 95% scale so the emulation surface
+     grows out of the launcher instead of covering it in one frame. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fillAfter="true"
+    android:interpolator="@android:interpolator/fast_out_slow_in">
+    <alpha
+        android:duration="260"
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0" />
+    <scale
+        android:duration="380"
+        android:fromXScale="0.95"
+        android:fromYScale="0.95"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:toXScale="1.0"
+        android:toYScale="1.0" />
+</set>

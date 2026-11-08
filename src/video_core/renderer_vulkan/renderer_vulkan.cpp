@@ -159,6 +159,8 @@ try
 
     is_headless = (render_window.GetWindowInfo().type == Core::Frontend::WindowSystemType::Headless);
 
+    applied_resolution_setup = static_cast<u32>(Settings::values.resolution_setup.GetValue());
+
 #ifndef __ANDROID__
     // TurboMode only exists to submit a periodic compute dispatch on desktop. Its loop is compiled
     // out on Android, so registering it would wake a thread on every submission for nothing.
@@ -180,11 +182,16 @@ RendererVulkan::~RendererVulkan() {
 }
 
 void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebuffers) {
+    ApplyPendingResolutionChange();
+
     SCOPE_EXIT {
         render_window.OnFrameDisplayed();
     };
 
-    RenderAppletCaptureLayer(framebuffers);
+    // Keep the layer list for the on-demand applet capture. Compositing a second 1280x720 pass
+    // here cost ~28% of the display's pixel count on every frame, for an image that only the
+    // guest's capture request (SharedBufferManager) ever reads.
+    applet_layers.assign(framebuffers.begin(), framebuffers.end());
 
     if (is_headless) {
         static unsigned headless_composite_count = 0;
@@ -236,6 +243,33 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
 
     gpu.RendererFrameEndNotify();
     rasterizer.TickFrame();
+}
+
+void RendererVulkan::ApplyPendingResolutionChange() {
+    // The renderer owns this translation on purpose. Writing Settings::values.resolution_info from
+    // the UI thread while the GPU thread read it for a draw was a data race, and it could make the
+    // render targets switch size one frame before their rescaled copies were reallocated.
+    const u32 setup = static_cast<u32>(Settings::values.resolution_setup.GetValue());
+    if (setup == applied_resolution_setup) {
+        return;
+    }
+    applied_resolution_setup = setup;
+
+    // The frame the guest just finished was recorded with the old factor, and it may still sit in
+    // an open render pass. Close it and idle the device, then release the rescaled allocations:
+    // each one is sized for the factor that is no longer selected, so none of them can be reused.
+    // The next draw rebuilds them and render_targets.size follows the new factor.
+    scheduler.RequestOutsideRenderPassOperationContext();
+    scheduler.Finish();
+
+    // Dropping must happen while resolution_info still describes the old factor: the texture cache
+    // charges each copy with GetScaledImageSizeBytes() at the time ScaleUp() created it, so refunding
+    // with the new factor would leave total_used_memory skewed (underflow if the factor grew).
+    rasterizer.GetTextureCache().InvalidateRescaledImages();
+    Settings::UpdateRescalingInfo();
+
+    LOG_INFO(Render_Vulkan, "[Rescale] Internal resolution applied live: {}",
+             Settings::values.resolution_info.up_factor);
 }
 
 void RendererVulkan::Report() const {
@@ -305,6 +339,13 @@ std::vector<u8> RendererVulkan::GetAppletCaptureBuffer() {
     using namespace VideoCore::Capture;
 
     std::vector<u8> out(VideoCore::Capture::TiledSize);
+
+    // Render the applet layer here instead of in Composite(). This runs on the GPU thread through
+    // RequestSyncOperation, so it composes exactly the frame the guest is asking about and costs
+    // nothing on frames nobody asks for.
+    if (!applet_layers.empty()) {
+        RenderAppletCaptureLayer(applet_layers);
+    }
 
     if (!applet_frame.image) {
         return out;

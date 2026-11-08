@@ -5,16 +5,13 @@ package org.yuzu.yuzu_emu.adapters
 
 import android.content.DialogInterface
 import android.text.Html
+import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.HapticFeedbackConstants
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityOptionsCompat
-import androidx.navigation.ActivityNavigatorExtras
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.documentfile.provider.DocumentFile
@@ -185,24 +182,6 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 VIEW_TYPE_CAROUSEL -> bindCarouselView(model)
                 VIEW_TYPE_GRID_COMPACT -> bindGridCompactView(model)
             }
-            val card = when (val cardBinding = binding) {
-                is CardGameListBinding -> cardBinding.cardGameList
-                is CardGameGridBinding -> cardBinding.cardGameGrid
-                is CardGameGridCompactBinding -> cardBinding.cardGameGridCompact
-                is CardGameCarouselBinding -> cardBinding.cardGameCarousel
-                else -> null
-            }
-            // M3 press physics: quick emphasized press-in, spring-free release.
-            card?.setOnTouchListener { view, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                        SuyuMotion.pressDown(view)
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> SuyuMotion.pressUp(view)
-                }
-                false
-            }
         }
 
         private fun bindListView(model: Game) {
@@ -213,6 +192,11 @@ class GameAdapter(private val activity: AppCompatActivity) :
 
             listBinding.textGameTitle.text = model.title.replace("[\\t\\n\\r]+".toRegex(), " ")
             listBinding.textGameDeveloper.text = model.developer
+
+            // Library appearance: titles are optional, the artwork can carry the shelf on its own.
+            val titlesVisible = !BooleanSetting.HIDE_GAME_TITLES.getBoolean()
+            listBinding.textGameTitle.visibility = if (titlesVisible) View.VISIBLE else View.GONE
+            listBinding.textGameDeveloper.visibility = if (titlesVisible) View.VISIBLE else View.GONE
 
             listBinding.textGameTitle.marquee()
             listBinding.cardGameList.setOnClickListener { onClick(model) }
@@ -230,6 +214,8 @@ class GameAdapter(private val activity: AppCompatActivity) :
             GameIconUtils.loadGameIcon(model, gridBinding.imageGameScreen)
 
             gridBinding.textGameTitle.text = model.title.replace("[\\t\\n\\r]+".toRegex(), " ")
+            gridBinding.textGameTitle.visibility =
+                if (BooleanSetting.HIDE_GAME_TITLES.getBoolean()) View.GONE else View.VISIBLE
 
             gridBinding.cardGameGrid.setOnClickListener { onClick(model) }
             gridBinding.cardGameGrid.setOnLongClickListener { onLongClick(model) }
@@ -246,6 +232,8 @@ class GameAdapter(private val activity: AppCompatActivity) :
             GameIconUtils.loadGameIcon(model, gridCompactBinding.imageGameScreenCompact)
 
             gridCompactBinding.textGameTitleCompact.text = model.title.replace("[\\t\\n\\r]+".toRegex(), " ")
+            gridCompactBinding.textGameTitleCompact.visibility =
+                if (BooleanSetting.HIDE_GAME_TITLES.getBoolean()) View.GONE else View.VISIBLE
 
             gridCompactBinding.cardGameGridCompact.setOnClickListener { onClick(model) }
             gridCompactBinding.cardGameGridCompact.setOnLongClickListener { onLongClick(model) }
@@ -262,6 +250,8 @@ class GameAdapter(private val activity: AppCompatActivity) :
             GameIconUtils.loadGameIcon(model, carouselBinding.imageGameScreen)
 
             carouselBinding.textGameTitle.text = model.title.replace("[\\t\\n\\r]+".toRegex(), " ")
+            carouselBinding.textGameTitle.visibility =
+                if (BooleanSetting.HIDE_GAME_TITLES.getBoolean()) View.GONE else View.VISIBLE
             carouselBinding.cardGameCarousel.setOnClickListener { onClick(model) }
             carouselBinding.cardGameCarousel.setOnLongClickListener { onLongClick(model) }
 
@@ -290,6 +280,10 @@ class GameAdapter(private val activity: AppCompatActivity) :
             }
 
             val launch: () -> Unit = {
+                // Physical confirmation on the way into the game: the launch transition starts on
+                // the next frame, so the tap needs its own feedback to feel answered.
+                binding.root.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+
                 val preferences =
                     PreferenceManager.getDefaultSharedPreferences(YuzuApplication.appContext)
                 preferences.edit {
@@ -318,7 +312,12 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 binding.root.findNavController().navigate(action)
             }
 
-            if (NativeLibrary.gameRequiresFirmware(game.programId) && !NativeLibrary.isFirmwareAvailable()) {
+            // With fake system software enabled there is nothing to warn about: the applets the
+            // title is missing are served by the HLE frontend instead of a guest launch.
+            if (NativeLibrary.gameRequiresFirmware(game.programId) &&
+                !NativeLibrary.isFirmwareAvailable() &&
+                !BooleanSetting.FAKE_SYSTEM_APPLETS.getBoolean()
+            ) {
                 MaterialAlertDialogBuilder(activity)
                     .setTitle(R.string.loader_requires_firmware)
                     .setMessage(
@@ -339,24 +338,17 @@ class GameAdapter(private val activity: AppCompatActivity) :
 
         fun onLongClick(game: Game): Boolean {
             val action = HomeNavigationDirections.actionGlobalPerGamePropertiesFragment(game)
-            val artwork = when (val cardBinding = binding) {
-                is CardGameListBinding -> cardBinding.imageGameScreen
-                is CardGameGridBinding -> cardBinding.imageGameScreen
-                is CardGameGridCompactBinding -> cardBinding.imageGameScreenCompact
-                is CardGameCarouselBinding -> cardBinding.imageGameScreen
-                else -> null
-            }
-            if (artwork != null) {
-                val extras = ActivityNavigatorExtras(
-                    ActivityOptionsCompat.makeSceneTransitionAnimation(
-                        activity,
-                        artwork,
-                        "game_artwork"
-                    )
-                )
-                binding.root.findNavController().navigate(action, extras)
-            } else {
+
+            // Long press opens the per-game properties screen with plain navigation.
+            // The old code passed ActivityOptionsCompat.makeSceneTransitionAnimation() here;
+            // that transition is executed by the framework *after* navigate() returns, so a
+            // bad shared view (recycled, clipped, duplicate transitionName, activity tearing
+            // down) crashed the whole app outside any try/catch. The destination fragment's
+            // own MaterialSharedAxis transition still animates the screen.
+            runCatching {
                 binding.root.findNavController().navigate(action)
+            }.onFailure {
+                runCatching { activity.findNavController(R.id.fragment_container).navigate(action) }
             }
             return true
         }

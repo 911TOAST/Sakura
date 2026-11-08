@@ -141,6 +141,12 @@ public:
                                                             VAddr framebuffer_addr,
                                                             u32 pixel_stride);
 
+    /// Exposes the texture cache so the renderer can drop its rescaled copies when the internal
+    /// resolution changes while a game is running.
+    TextureCache& GetTextureCache() noexcept {
+        return texture_cache;
+    }
+
 private:
     static constexpr const u64 NEEDS_D24[] = {
         0x01006A800016E000ULL, // SSBU
@@ -158,7 +164,9 @@ private:
 
     void FlushWork();
 
-    void UpdateDynamicStates();
+    /// Resolves the draw's pipeline once in the caller and passes it in. Passing nullptr makes the
+    /// vertex-input check resolve it itself, which costs a second state refresh per draw.
+    void UpdateDynamicStates(GraphicsPipeline* pipeline);
 
     void HandleTransformFeedback();
 

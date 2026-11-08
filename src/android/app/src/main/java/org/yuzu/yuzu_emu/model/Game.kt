@@ -37,8 +37,11 @@ class Game(
 
     val settingsName: String
         get() {
-            val programIdLong = programId.toLong()
-            return if (programIdLong == 0L) {
+            // programId is not guaranteed to be numeric: homebrew and archives without
+            // metadata fall back to the file name. Parsing that with toLong() threw
+            // NumberFormatException, which crashed the long-press properties screen.
+            val programIdLong = programId.toLongOrNull()
+            return if (programIdLong == null || programIdLong == 0L) {
                 FileUtil.getFilename(Uri.parse(path))
             } else {
                 "0" + programIdLong.toString(16).uppercase()
@@ -47,7 +50,7 @@ class Game(
 
     val programIdHex: String
         get() {
-            val programIdLong = programId.toLong()
+            val programIdLong = programId.toLongOrNull() ?: return "0"
             return if (programIdLong == 0L) {
                 "0"
             } else {

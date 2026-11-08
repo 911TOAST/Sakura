@@ -9,6 +9,7 @@
 #include "common/fs/path_util.h"
 
 #include "common/logging.h"
+#include "common/settings.h"
 
 #include "core/crypto/key_manager.h"
 #include "frontend_common/content_manager.h"
@@ -130,4 +131,38 @@ FirmwareManager::FirmwareCheckResult FirmwareManager::VerifyFirmware(Core::Syste
     }
 
     return FirmwareGood;
+}
+
+void FirmwareManager::LogStartupStatus(Core::System &system) {
+    const bool has_keys = Core::Crypto::KeyManager::KeyFileExists(false);
+    const bool has_firmware = CheckFirmwarePresence(system);
+    const bool firmware_fallback = Settings::values.fake_system_applets.GetValue();
+
+    LOG_INFO(Frontend, "Keys (prod.keys): {}", has_keys ? "installed" : "missing");
+    LOG_INFO(Frontend, "System firmware: {}{}", has_firmware ? "installed" : "missing",
+             (!has_firmware && firmware_fallback) ? " (optional, HLE applet fallbacks enabled)"
+                                                  : "");
+
+    if (!has_keys) {
+        LOG_WARNING(Frontend,
+                    "No prod.keys found. Encrypted games cannot be decrypted and will fail to "
+                    "boot. This build ships no keys: dump them from your own console and install "
+                    "them from the settings screen. Unencrypted homebrew can still run.");
+    }
+    if (!has_firmware) {
+        if (firmware_fallback) {
+            // Firmware is optional: missing system applets are served by HLE and synthesized
+            // system archives cover fonts, time zones and the firmware version.
+            LOG_INFO(Frontend,
+                     "Booting without firmware. Missing library applets are served by the HLE "
+                     "frontend and synthesized system archives cover fonts, time zones and the "
+                     "firmware version. Titles that need a real system program are the exception.");
+        } else {
+            LOG_WARNING(Frontend,
+                        "No system firmware installed and fake_system_applets is off. Games that "
+                        "use system applets or services may not boot. This build ships no "
+                        "firmware: install your own firmware dump, or enable fake_system_applets "
+                        "to use the HLE fallback.");
+        }
+    }
 }

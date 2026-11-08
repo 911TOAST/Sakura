@@ -14,8 +14,11 @@ import android.content.DialogInterface
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.BatteryManager.*
@@ -28,6 +31,7 @@ import android.util.Rational
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
+import android.view.PixelCopy
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.View
@@ -60,6 +64,8 @@ import androidx.window.layout.WindowLayoutInfo
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.shape.MaterialShapeDrawable
+import com.google.android.material.shape.ShapeAppearanceModel
 import com.google.android.material.textview.MaterialTextView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -96,6 +102,8 @@ import org.yuzu.yuzu_emu.utils.InputHandler
 import org.yuzu.yuzu_emu.utils.Log
 import org.yuzu.yuzu_emu.utils.NativeConfig
 import org.yuzu.yuzu_emu.utils.NativeFreedrenoConfig
+import org.yuzu.yuzu_emu.utils.SuyuMotion
+import org.yuzu.yuzu_emu.utils.ThemeHelper
 import org.yuzu.yuzu_emu.utils.VulkanLayerHelper
 import org.yuzu.yuzu_emu.utils.ViewUtils
 import org.yuzu.yuzu_emu.utils.ViewUtils.setVisible
@@ -157,6 +165,11 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
     private var wasInputOverlayAutoHidden = false
     private var overlayTouchActive = false
     private var pausedFrameBitmap: Bitmap? = null
+
+    private var frostedBackdropBitmap: Bitmap? = null
+    private var frostedBackdropPending = false
+    private var inGameMenuOffset = 0f
+    private var quickSettingsOffset = 0f
 
     var shouldUseCustom = false
     private var isQuickSettingsMenuOpen = false
@@ -695,6 +708,8 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         binding.surfaceEmulation.holder.addCallback(this)
         binding.doneControlConfig.setOnClickListener { stopConfiguringControls() }
 
+        applyFrostedDrawerStyle()
+
         binding.drawerLayout.addDrawerListener(object : DrawerListener {
             override fun onDrawerSlide(drawerView: View, slideOffset: Float) {
                 binding.surfaceInputOverlay.dispatchTouchEvent(
@@ -707,6 +722,13 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                         0
                     )
                 )
+
+                if (drawerView == binding.inGameMenu) {
+                    inGameMenuOffset = slideOffset
+                } else if (drawerView == binding.quickSettingsSheet) {
+                    quickSettingsOffset = slideOffset
+                }
+                updateFrostedBackdrop(maxOf(inGameMenuOffset, quickSettingsOffset))
             }
 
             override fun onDrawerOpened(drawerView: View) {
@@ -724,6 +746,9 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
             override fun onDrawerClosed(drawerView: View) {
                 binding.drawerLayout.setDrawerLockMode(IntSetting.LOCK_DRAWER.getInt())
                 emulationViewModel.setDrawerOpen(false)
+                if (inGameMenuOffset <= 0f && quickSettingsOffset <= 0f) {
+                    clearFrostedBackdrop()
+                }
             }
 
             override fun onDrawerStateChanged(newState: Int) {
@@ -948,6 +973,13 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         binding.loadingTitle.isSelected = true
         binding.loadingText.isSelected = true
 
+        // The boot card is the first thing the user sees after tapping a game: bring it in on an
+        // expressive spring so the launch reads as one continuous motion from the library.
+        // Intent launches hide the card outright, so only animate a card that is actually shown.
+        if (binding.loadingIndicator.visibility == View.VISIBLE) {
+            SuyuMotion.springIn(binding.loadingIndicator)
+        }
+
         WindowInfoTracker.getOrCreate(requireContext())
             .windowLayoutInfo(requireActivity()).collect(viewLifecycleOwner) {
                 updateFoldableLayout(requireActivity() as EmulationActivity, it)
@@ -979,7 +1011,8 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
             if (it) {
                 binding.drawerLayout.setDrawerLockMode(IntSetting.LOCK_DRAWER.getInt())
                 ViewUtils.showView(binding.surfaceInputOverlay)
-                ViewUtils.hideView(binding.loadingIndicator)
+                // Hand the scene over: the boot card shrinks away instead of vanishing.
+                SuyuMotion.springOut(binding.loadingIndicator)
 
                 emulationState.updateSurface()
 
@@ -1009,7 +1042,8 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         emulationViewModel.isEmulationStopping.collect(viewLifecycleOwner) {
             if (it) {
                 binding.loadingText.setText(R.string.shutting_down)
-                ViewUtils.showView(binding.loadingIndicator)
+                binding.loadingIndicator.visibility = View.VISIBLE
+                SuyuMotion.springIn(binding.loadingIndicator)
                 ViewUtils.hideView(binding.inputContainer)
                 ViewUtils.hideView(binding.showStatsOverlayText)
             } else if (deferGameSetupUntilStopCompletes) {
@@ -1182,6 +1216,18 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
 
             quickSettings.addDivider(container)
 
+            // The internal resolution is the biggest frame-cost lever on a mobile GPU, so it sits
+            // at the top of the graphics block. It is applied at the next frame boundary with no
+            // restart: the renderer re-derives the scaling info and drops the render targets that
+            // were allocated for the previous factor.
+            quickSettings.addIntSetting(
+                R.string.renderer_resolution,
+                container,
+                IntSetting.RENDERER_RESOLUTION,
+                R.array.rendererResolutionNames,
+                R.array.rendererResolutionValues
+            )
+
             quickSettings.addIntSetting(
                 R.string.renderer_accuracy,
                 container,
@@ -1353,6 +1399,78 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         pausedFrameBitmap = null
     }
 
+    private fun applyFrostedDrawerStyle() {
+        val b = _binding ?: return
+        val surface = MaterialColors.getColor(
+            b.drawerLayout,
+            com.google.android.material.R.attr.colorSurface
+        )
+        val fill = ColorStateList.valueOf(
+            ThemeHelper.getColorWithOpacity(surface, FROSTED_PANEL_ALPHA)
+        )
+        b.inGameMenu.background = MaterialShapeDrawable(
+            ShapeAppearanceModel.builder().build()
+        ).apply { setFillColor(fill) }
+        b.quickSettingsSheet.background = MaterialShapeDrawable(
+            ShapeAppearanceModel.builder().build()
+        ).apply { setFillColor(fill) }
+    }
+
+    private fun updateFrostedBackdrop(slideOffset: Float) {
+        val b = _binding ?: return
+        val offset = slideOffset.coerceIn(0f, 1f)
+        if (offset > 0f && frostedBackdropBitmap == null && !frostedBackdropPending) {
+            captureFrostedBackdrop()
+        }
+        b.frostedBackdrop.alpha = offset
+        b.frostedBackdrop.setVisible(offset > 0f)
+    }
+
+    private fun captureFrostedBackdrop() {
+        val b = _binding ?: return
+        val surface = b.surfaceEmulation
+        if (surface.width <= 0 || surface.height <= 0) return
+
+        // A heavily downscaled copy is cheaper to blur and the upscale adds to the frost.
+        val width = (surface.width / FROSTED_BACKDROP_SCALE).coerceAtLeast(1)
+        val height = (surface.height / FROSTED_BACKDROP_SCALE).coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        frostedBackdropPending = true
+        PixelCopy.request(surface, bitmap, { result ->
+            frostedBackdropPending = false
+            val binding = _binding
+            if (result != PixelCopy.SUCCESS || binding == null) {
+                bitmap.recycle()
+                return@request
+            }
+            val previous = frostedBackdropBitmap
+            frostedBackdropBitmap = bitmap
+            binding.frostedBackdrop.setImageBitmap(bitmap)
+            previous?.recycle()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val radius = FROSTED_BACKDROP_BLUR_DP *
+                    binding.frostedBackdrop.resources.displayMetrics.density
+                binding.frostedBackdrop.setRenderEffect(
+                    RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP)
+                )
+            }
+        }, Handler(Looper.getMainLooper()))
+    }
+
+    private fun clearFrostedBackdrop() {
+        inGameMenuOffset = 0f
+        quickSettingsOffset = 0f
+        _binding?.frostedBackdrop?.let {
+            it.setVisible(false)
+            it.setImageDrawable(null)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                it.setRenderEffect(null)
+            }
+        }
+        frostedBackdropBitmap?.recycle()
+        frostedBackdropBitmap = null
+    }
+
     private fun handleLoadAmiiboSelection(): Boolean {
         val binding = _binding ?: return true
 
@@ -1462,6 +1580,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         socRunnable?.let { socUpdateHandler.removeCallbacks(it) }
         handler.removeCallbacksAndMessages(null)
         clearPausedFrame()
+        clearFrostedBackdrop()
         _binding?.surfaceInputOverlay?.touchEventListener = null
         lastOverlayText = null
         lastOverlayBackground = null
@@ -2487,6 +2606,10 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
     }
 
     companion object {
+        private const val FROSTED_PANEL_ALPHA = 0.88f
+        private const val FROSTED_BACKDROP_SCALE = 6
+        private const val FROSTED_BACKDROP_BLUR_DP = 18f
+
         private val AMIIBO_MIME_TYPES =
             arrayOf("application/octet-stream", "application/x-binary", "*/*")
         private val perfStatsUpdateHandler = Handler(Looper.myLooper()!!)

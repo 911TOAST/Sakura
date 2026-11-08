@@ -121,10 +121,14 @@ PresentManager::PresentManager(const vk::Instance& instance_,
                           device_.IsKhrSwapchainMutableFormatEnabled())}
     // Malikan always presents asynchronously. Waiting for the worker on every frame serialises
     // command recording with presentation and costs a full frame of GPU/CPU overlap. The direct
-    // path does not need the worker at all: Present() is a single WSI call.
-    , use_present_thread{!use_direct_present &&
-                         (Settings::values.async_presentation.GetValue() ||
-                          device_.IsMalikanMode())}
+    // path needs no copy work, so the async win there is purely "do not drain the worker", which
+    // is done inline: the Android WSI binds the present to the thread that acquired the image and
+    // handing vkQueuePresentKHR to a second thread is what broke Mali.
+    //
+    // The copy path can still use a dedicated present thread, but only when the user asks for it:
+    // forcing it on Malikan raced swapchain recreation against the render thread, and that is the
+    // reason async presentation is off by default on Android in the first place.
+    , use_present_thread{!use_direct_present && Settings::values.async_presentation.GetValue()}
 {
     SetImageCount();
 
@@ -133,8 +137,9 @@ PresentManager::PresentManager(const vk::Instance& instance_,
         ResetDirectFrames();
         LOG_INFO(Render_Vulkan,
                  "[Present] Zero-copy direct presentation enabled: {} swapchain images, "
-                 "no intermediate frame images, no swapchain copy",
-                 image_count);
+                 "no intermediate frame images, no swapchain copy, {} present",
+                 image_count,
+                 Settings::values.async_direct_present.GetValue() ? "async submit" : "synchronous");
         return;
     }
 
@@ -169,22 +174,38 @@ PresentManager::PresentManager(const vk::Instance& instance_,
     }
 }
 
-PresentManager::~PresentManager() = default;
+PresentManager::~PresentManager() {
+    // Drain anything still queued so the present thread never touches a destroyed swapchain or
+    // scheduler. The jthread member stops and joins the thread afterwards.
+    WaitPresent();
+}
 
 Frame* PresentManager::GetRenderFrame() {
     if (use_direct_present) {
         const Layout::FramebufferLayout& layout = render_window.GetFramebufferLayout();
 
+        // A present that failed with VK_ERROR_SURFACE_LOST_KHR is reported here instead of being
+        // rebuilt on the present thread: surface and swapchain objects belong to the render
+        // thread, and rebuilding them under a queued present would tear the WSI state.
+        const bool lost = direct_recreate_pending.exchange(false);
+
         // Resize or present-mode changes must happen before an image is acquired. This path runs
         // at most a handful of times per session, so the full idle is acceptable here.
-        if (swapchain.GetWidth() != layout.width || swapchain.GetHeight() != layout.height ||
+        if (lost || swapchain.GetWidth() != layout.width ||
+            swapchain.GetHeight() != layout.height ||
             frames.size() != swapchain.GetImageCount() || swapchain.NeedsRecreation()) {
+            if (lost) {
+                surface = CreateSurface(instance, render_window.GetWindowInfo());
+            }
             RecreateSwapchainDirect(layout.width, layout.height);
         }
 
         while (true) {
             try {
-                if (!swapchain.AcquireNextImage()) {
+                // The acquired image is only handed out once the presentation engine is done with
+                // it, which already proves the previous frame's GPU work is finished. Waiting on
+                // the timeline for the same image again only stalled the render thread.
+                if (!swapchain.AcquireNextImage(false)) {
                     break;
                 }
                 RecreateSwapchainDirect(layout.width, layout.height);
@@ -203,6 +224,7 @@ Frame* PresentManager::GetRenderFrame() {
 
         Frame* frame = &frames[swapchain.GetImageIndex()];
         frame->direct_present = true;
+        frame->swapchain_image_index = static_cast<u32>(swapchain.GetImageIndex());
         return frame;
     }
 
@@ -226,31 +248,20 @@ VkSemaphore PresentManager::GetPresentWaitSemaphore() const {
 }
 
 void PresentManager::Present(Frame* frame) {
-    if (use_direct_present) {
-        // Make sure the worker has actually issued the render submission before the WSI is asked
-        // to wait on its signal semaphore. This waits for submission, not for GPU completion.
-        scheduler.WaitWorker();
-        // The render submission already waited on the acquire semaphore and signals
-        // frame->render_ready when the composition pass (including the transition to
-        // PRESENT_SRC_KHR) has finished. Handing that same binary semaphore to the WSI is the
-        // entire presentation path.
-        try {
-            swapchain.Present(*frame->render_ready);
-        } catch (const vk::Exception& except) {
-            // The old copy path handles surface loss inside its submit loop. The direct path
-            // has no loop, so rebuild the surface and swapchain here instead of letting the
-            // exception escape through the renderer.
-            if (except.GetResult() != VK_ERROR_SURFACE_LOST_KHR) {
-                throw;
-            }
-#ifdef __ANDROID__
-            const Layout::FramebufferLayout& layout = render_window.GetFramebufferLayout();
-            surface = CreateSurface(instance, render_window.GetWindowInfo());
-            RecreateSwapchainDirect(layout.width, layout.height);
-#else
-            throw;
-#endif
+    if (frame->direct_present) {
+        // The WSI call stays on the render thread that acquired the image. "Async" here means the
+        // frame is not waiting for the worker to drain the whole recorded chunk: the submission it
+        // needs is published by serial, and only that serial is awaited below. Turning the setting
+        // off restores the old fully synchronous drain for drivers that dislike overlap.
+        if (!Settings::values.async_direct_present.GetValue()) {
+            scheduler.WaitWorker();
         }
+
+        // Latch the submission this frame waits on. Everything the render thread flushed before
+        // this call is included, so the presenter knows exactly when the WSI may be touched.
+        frame->present_serial = scheduler.IssuedSerial();
+
+        PresentDirect(frame);
         return;
     }
 
@@ -385,6 +396,30 @@ Frame* PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height,
     return frame;
 }
 
+void PresentManager::PresentDirect(Frame* frame) {
+    // The WSI must not be asked to wait on frame->render_ready before the submission signalling
+    // it has been issued to the queue. WaitSerial only waits for submission, never for GPU
+    // completion, so the render thread keeps overlapping the next frame with this one instead of
+    // draining the whole worker like WaitWorker does.
+    scheduler.WaitSerial(frame->present_serial);
+
+    // The render submission already waited on the acquire semaphore and signals
+    // frame->render_ready when the composition pass (including the transition to
+    // PRESENT_SRC_KHR) has finished. Handing that same binary semaphore to the WSI is the
+    // entire presentation path.
+    try {
+        swapchain.Present(*frame->render_ready, frame->swapchain_image_index);
+    } catch (const vk::Exception& except) {
+        // A lost surface is rebuilt by the render thread on its next frame: surface and swapchain
+        // objects belong to that thread, and this frame has nothing left to retry with.
+        if (except.GetResult() == VK_ERROR_SURFACE_LOST_KHR) {
+            direct_recreate_pending = true;
+            return;
+        }
+        throw;
+    }
+}
+
 void PresentManager::WaitPresent() {
     if (!use_present_thread) {
         return;
@@ -437,6 +472,10 @@ void PresentManager::RecreateSwapchain(Frame* frame) {
 }
 
 void PresentManager::RecreateSwapchainDirect(u32 width, u32 height) {
+    // A queued present still references the current swapchain and its image views. Drain it
+    // before anything is destroyed; this is the rare path (resize, present mode change, lost
+    // surface), so the wait is not on any per-frame route.
+    WaitPresent();
     // The old image views and framebuffers reference swapchain images. Drain the GPU and destroy
     // the wrappers before the images they point at are replaced.
     scheduler.Finish();

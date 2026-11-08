@@ -6,10 +6,13 @@
 
 #pragma once
 
+#include <array>
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <span>
 #include <thread>
 #include <utility>
 #include <queue>
@@ -54,11 +57,35 @@ public:
     /// safe to touch worker resources.
     void WaitWorker();
 
+    /// Serial of the last chunk handed to the worker. Lets another thread wait for recorded work
+    /// to be executed without dispatching the render thread's in-progress chunk (what WaitWorker
+    /// does, and it is not safe to call from anywhere but the render thread).
+    [[nodiscard]] u64 IssuedSerial() const noexcept {
+        return issued_serial.load(std::memory_order_acquire);
+    }
+
+    /// Blocks until the worker has executed every chunk queued up to \p serial. Safe to call from
+    /// any thread; returns immediately when the serial has already been reached.
+    void WaitSerial(u64 serial);
+
+    /// True while the worker still has chunks it has not executed yet. Callers that only feed the
+    /// worker to create overlap can skip dispatching: it already has work queued.
+    [[nodiscard]] bool HasPendingWork() const noexcept {
+        return issued_serial.load(std::memory_order_acquire) >
+               executed_serial.load(std::memory_order_acquire);
+    }
+
     /// Sends currently recorded work to the worker thread.
     void DispatchWork();
 
     /// Requests to begin a renderpass.
     void RequestRenderpass(const Framebuffer* framebuffer);
+
+    /// Requests to begin the variant of the framebuffer's render pass whose attachments are
+    /// defined at pass begin instead of loaded. Returns false when no such pass was begun, in which
+    /// case the caller has to clear explicitly as usual.
+    bool RequestRenderpassClear(const Framebuffer* framebuffer,
+                                std::span<const VkClearValue> clear_values);
 
     /// Requests the current execution context to be able to execute operations only allowed outside
     /// of a renderpass.
@@ -105,8 +132,8 @@ public:
         RecordWithUploadBuffer(
             [this, destination, command = std::forward<T>(command)](
                 vk::CommandBuffer cmdbuf, vk::CommandBuffer upload_cmdbuf) {
+                RegisterUploadBuffer(destination, upload_cmdbuf);
                 command(cmdbuf, upload_cmdbuf);
-                RegisterUploadBuffer(destination);
             });
     }
 
@@ -262,13 +289,16 @@ private:
         bool is_rescaling = false;
         bool rescaling_defined = false;
         bool needs_state_enable_refresh = false;
+        /// True while the open pass is the define-at-begin variant. Redraws into the same
+        /// framebuffer must keep it, or the tile would be stored and loaded again for nothing.
+        bool renderpass_is_clear = false;
     };
 
     void WorkerThread(std::stop_token stop_token);
 
     void AllocateWorkerCommandBuffer();
 
-    void RegisterUploadBuffer(VkBuffer buffer);
+    void RegisterUploadBuffer(VkBuffer buffer, vk::CommandBuffer upload_cmdbuf);
 
     u64 SubmitExecution(VkSemaphore signal_semaphore, VkSemaphore wait_semaphore);
 
@@ -304,13 +334,22 @@ private:
     std::vector<std::unique_ptr<CommandChunk>> chunk_reserve;
     // Written and consumed only on the scheduler worker thread. These let Mali use
     // resource-scoped barriers instead of flushing unrelated memory after each submit.
-    std::vector<VkBuffer> pending_upload_buffers;
-    std::vector<VkBufferMemoryBarrier> pending_upload_barriers;
+    static constexpr size_t MAX_TRACKED_UPLOAD_BUFFERS = 8;
+    std::array<VkBuffer, MAX_TRACKED_UPLOAD_BUFFERS> pending_upload_buffers{};
+    size_t num_pending_upload_buffers = 0;
+    bool use_global_upload_barrier = false;
     std::mutex execution_mutex;
     std::mutex reserve_mutex;
     std::mutex queue_mutex;
     std::condition_variable_any event_cv;
     std::jthread worker_thread;
+
+    /// Chunk accounting for WaitSerial. issued_serial is only advanced by the render thread,
+    /// executed_serial only by the worker; both are observed by the present thread.
+    std::atomic<u64> issued_serial{0};
+    std::atomic<u64> executed_serial{0};
+    std::mutex serial_mutex;
+    std::condition_variable serial_cv;
 
     std::chrono::steady_clock::duration frame_interval{};
     std::chrono::steady_clock::time_point start_time{};

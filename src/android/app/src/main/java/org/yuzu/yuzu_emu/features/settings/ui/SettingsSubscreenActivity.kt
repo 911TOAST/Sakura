@@ -23,6 +23,8 @@ import org.yuzu.yuzu_emu.utils.DirectoryInitialization
 import org.yuzu.yuzu_emu.utils.FullscreenHelper
 import org.yuzu.yuzu_emu.utils.InsetsHelper
 import org.yuzu.yuzu_emu.utils.ThemeHelper
+import org.yuzu.yuzu_emu.utils.applyPanelWindowMotion
+import org.yuzu.yuzu_emu.utils.finishWithPanelMotion
 
 enum class SettingsSubscreen {
     PROFILE_MANAGER,
@@ -36,6 +38,7 @@ enum class SettingsSubscreen {
     LICENSES,
     GAME_INFO,
     ADDONS,
+    WALLPAPERS,
 }
 
 class SettingsSubscreenActivity : AppCompatActivity() {
@@ -51,6 +54,7 @@ class SettingsSubscreenActivity : AppCompatActivity() {
         ThemeHelper.setTheme(this)
 
         super.onCreate(savedInstanceState)
+        applyPanelWindowMotion()
 
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -116,7 +120,7 @@ class SettingsSubscreenActivity : AppCompatActivity() {
         val navHostFragment =
             supportFragmentManager.findFragmentById(R.id.fragment_container) as NavHostFragment
         if (!navHostFragment.navController.popBackStack()) {
-            finish()
+            finishWithPanelMotion()
         }
     }
 
@@ -133,6 +137,7 @@ class SettingsSubscreenActivity : AppCompatActivity() {
             SettingsSubscreen.LICENSES -> R.id.licensesFragment
             SettingsSubscreen.GAME_INFO -> R.id.gameInfoFragment
             SettingsSubscreen.ADDONS -> R.id.addonsFragment
+            SettingsSubscreen.WALLPAPERS -> R.id.wallpaper_graph
         }
 
     private fun createStartDestinationArgs(): Bundle =

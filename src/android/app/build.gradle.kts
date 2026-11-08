@@ -89,6 +89,17 @@ android {
                 arguments.addAll(
                     listOf(
                         "-DENABLE_QT=0", // Don't use QT
+                        // Android ships the Vulkan backend plus the Malikan profile only. Leaving
+                        // OpenGL on compiled the entire GL renderer (~60 sources, its own blit
+                        // screen, pipeline and texture caches) into libyuzu-android.so for code
+                        // no APK path can ever select.
+                        "-DENABLE_OPENGL=0",
+                        // The Khronos validation layer is a ~24 MB diagnostic payload that shipped
+                        // in every release APK and is only used when a developer turns it on in
+                        // Quick tweaks. Debug builds can still fetch it with
+                        // -PYUZU_ANDROID_ARGS=-DYUZU_DOWNLOAD_ANDROID_VVL=ON (it is appended after
+                        // this list, so it wins).
+                        "-DYUZU_DOWNLOAD_ANDROID_VVL=OFF",
                         "-DENABLE_WEB_SERVICE=1", // Enable web service
                         "-DANDROID_ARM_NEON=true", // cryptopp requires Neon to work
                         "-DYUZU_USE_CPM=ON",
@@ -216,7 +227,7 @@ android {
     }
 
     // appNameBase is used for the primary identifier
-    // this should be "suyu <flavorName>"
+    // this should be "Sakura <flavorName>"
     flavorDimensions.add("version")
     productFlavors {
         create("mainline") {
@@ -287,7 +298,7 @@ android {
     }
 
     productFlavors.all {
-        val currentName = manifestPlaceholders["appNameBase"] as? String ?: "suyu"
+        val currentName = manifestPlaceholders["appNameBase"] as? String ?: "Sakura"
         val suffix = if (isNightly) " Nightly" else ""
 
         // apply nightly suffix I/A
@@ -377,6 +388,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("net.swiftzer.semver:semver:2.0.0")
+    // Wallpaper tuning/search logic is plain Kotlin; these cover it without an emulator.
+    testImplementation("junit:junit:4.13.2")
 }
 
 fun runGitCommand(command: List<String>): String {

@@ -298,6 +298,7 @@ struct DeviceDispatch : InstanceDispatch {
     PFN_vkCreateImage vkCreateImage{};
     PFN_vkCreateImageView vkCreateImageView{};
     PFN_vkCreatePipelineCache vkCreatePipelineCache{};
+    PFN_vkMergePipelineCaches vkMergePipelineCaches{};
     PFN_vkCreatePipelineLayout vkCreatePipelineLayout{};
     PFN_vkCreateQueryPool vkCreateQueryPool{};
     PFN_vkCreateRenderPass vkCreateRenderPass{};
@@ -966,6 +967,12 @@ public:
 
     VkResult Read(size_t* size, void* data) const noexcept {
         return dld->vkGetPipelineCacheData(owner, handle, size, data);
+    }
+
+    /// Merge the contents of another cache created on the same device into this one.
+    /// Both caches must have been created with the same VkDevice and driver.
+    void MergeFrom(const PipelineCache& source) const {
+        Check(dld->vkMergePipelineCaches(owner, handle, 1, source.address()));
     }
 };
 

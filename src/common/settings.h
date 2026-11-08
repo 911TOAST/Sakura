@@ -170,6 +170,21 @@ struct Values {
                                             Category::LibraryApplet};
     SwitchableSetting<bool> enable_overlay{linkage, false, "enable_overlay", Category::LibraryApplet};
 
+    // HLE performance preset. When enabled, every library applet is served by the HLE frontend
+    // instead of booting a guest applet process, and Maxwell macro programs always take their HLE
+    // implementation. Both are host-side shortcuts: the game's own code still runs, only the
+    // system applets and the known macro programs stop running as guest ARM code.
+    SwitchableSetting<bool> hle_performance_preset{linkage, false, "hle_performance_preset",
+                                                   Category::Core};
+
+    // Firmware-less operation. When a library applet's program is not installed (no firmware, or a
+    // title that only ships some of them), the HLE frontend applet is used instead of a guest
+    // launch that cannot succeed, and applets without a frontend get a stub that immediately
+    // reports Closed with empty output so the game continues. Default on: missing system software
+    // should not stop a game. Turn it off to get the retail behaviour of failing the launch.
+    SwitchableSetting<bool> fake_system_applets{linkage, true, "fake_system_applets",
+                                                Category::Core};
+
     // Audio
     SwitchableSetting<AudioEngine> sink_id{linkage, AudioEngine::Auto, "output_engine",
                                            Category::Audio, Specialization::RuntimeList};
@@ -405,6 +420,15 @@ struct Values {
     // Experimental: skip the NVIDIA Maxwell shader workaround pass. This does not bypass
     // Maxwell shader translation; Switch shaders are still translated to SPIR-V.
     SwitchableSetting<bool> no_well{linkage, false, "no_well", Category::RendererDebug};
+    // Skips re-deriving the fixed-function pipeline state on draws where the guest wrote no
+    // register that can reach the pipeline key, so a steady-state draw only re-emits the draw
+    // command itself. Requires the full extended dynamic state set; a no-op without it.
+    SwitchableSetting<bool> renderer_maxwell_bypass{linkage, false, "renderer_maxwell_bypass",
+                                                    Category::RendererDebug};
+    // Expresses a full-surface guest clear as the render pass's load operation instead of loading
+    // the attachments and clearing them inside the pass. Removes a full attachment read on tilers.
+    SwitchableSetting<bool> renderer_clear_loadop{linkage, true, "renderer_clear_loadop",
+                                                  Category::RendererDebug};
     // *nix platforms may have issues with the borderless windowed fullscreen mode.
     // Default to exclusive fullscreen on these platforms for now.
     SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
@@ -611,6 +635,16 @@ struct Values {
                                                false,
 #endif
                                                "async_presentation", Category::RendererHacks};
+
+    // Only used by the Malikan direct-present path: the frame is handed to the WSI as soon as its
+    // submission is issued instead of draining the whole render worker inline, so the CPU starts
+    // recording the next frame immediately. The WSI call itself always stays on the thread that
+    // acquired the image (Android surface handles are not thread-safe). Harmless on every other
+    // path.
+    SwitchableSetting<bool> async_direct_present{linkage,
+                                                 true,
+                                                 "async_direct_present",
+                                                 Category::RendererHacks};
 
     SwitchableSetting<bool> fix_bloom_effects{linkage, false, "fix_bloom_effects",
                                                      Category::RendererHacks};
@@ -939,6 +973,39 @@ struct Values {
     Setting<std::string> suyu_token{linkage, "",
                                     "suyu_token", Category::WebService};
 
+    // Library appearance (Android frontend). Persisted like any other setting so they survive
+    // restarts without a second preferences store.
+    SwitchableSetting<bool> hide_game_titles{linkage, false, "hide_game_titles", Category::Ui};
+    Setting<std::string> library_background_uri{linkage, "", "library_background_uri",
+                                                Category::Ui};
+    SwitchableSetting<int> library_background_blur{linkage, 12, "library_background_blur",
+                                                   Category::Ui};
+    Setting<int> library_background_fit{linkage, 0, "library_background_fit", Category::Ui};
+    Setting<int> library_background_dim{linkage, 30, "library_background_dim", Category::Ui};
+    Setting<int> library_background_zoom{linkage, 100, "library_background_zoom", Category::Ui};
+    Setting<int> library_background_x{linkage, 50, "library_background_x", Category::Ui};
+    Setting<int> library_background_y{linkage, 50, "library_background_y", Category::Ui};
+    Setting<bool> wallpaper_recent_games{linkage, false, "wallpaper_recent_games", Category::Ui};
+
+    // Discord Rich Presence (Android frontend). Three transports are supported because the
+    // platform does not offer one:
+    //   0 = Discord Social SDK, the official path. Needs only the public Application ID and the
+    //       Discord Android app installed and signed in; there is no credential to store.
+    //   1 = account token over the gateway, which is how Kizzy-style apps publish presence on the
+    //       player's own account. It is a self-bot and therefore against Discord's Terms.
+    //   2 = bot token over the gateway. Lawful, but the presence belongs to the bot account and is
+    //       only visible to members of a guild it has been invited to.
+    // The token is read at runtime and never logged.
+    SwitchableSetting<bool> discord_rich_presence{linkage, false, "discord_rich_presence",
+                                                  Category::Ui};
+    SwitchableSetting<int> discord_presence_mode{linkage, 0, "discord_presence_mode", Category::Ui};
+    Setting<std::string> discord_application_id{linkage, "", "discord_application_id",
+                                                Category::Ui};
+    Setting<std::string> discord_token{linkage, "", "discord_token", Category::Ui};
+    // The activity customiser, as a JSON document. One key rather than a dozen: the whole
+    // structure is edited by the dedicated Discord page and is meaningless outside it.
+    Setting<std::string> discord_activity_json{linkage, "", "discord_activity_json", Category::Ui};
+
     // Add-Ons
     std::map<u64, std::vector<std::string>> disabled_addons;
 
@@ -966,6 +1033,10 @@ bool IsFastmemEnabled();
 void ApplyPerformanceProfile();
 void SetNceEnabled(bool is_64bit);
 bool IsNceEnabled();
+
+// True when the user enabled the HLE performance preset. Consumers use this to force the HLE path
+// even when the per-feature (applet mode / disable_macro_hle) setting says otherwise.
+bool IsHlePerformancePresetEnabled();
 
 void SetCurrentProgramID(u64 program_id);
 u64 GetCurrentProgramID();

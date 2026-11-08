@@ -29,6 +29,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,11 +44,18 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import org.yuzu.yuzu_emu.NativeLibrary
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
+import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.ui.theme.SuyuM3Theme
+import org.yuzu.yuzu_emu.utils.ArtworkColors
 import org.yuzu.yuzu_emu.utils.NativeConfig
 import org.yuzu.yuzu_emu.utils.VulkanLayerHelper
 
 private enum class SpeedMode { STANDARD, TURBO, SLOW }
+
+// Ordinals of Settings::GpuOverclock. The switch is the coarse control: on means High, which is
+// where emulated GPU work stops being the frame-rate limiter on weak SoCs.
+private const val GPU_OVERCLOCK_OFF = 0
+private const val GPU_OVERCLOCK_ON = 2
 
 private data class OverlayToggle(val setting: BooleanSetting, val titleRes: Int)
 
@@ -62,6 +70,9 @@ private val overlayToggles = listOf(
 
 private val graphicsToggles = listOf(
     OverlayToggle(BooleanSetting.MALI_AFRC, R.string.tweaks_afrc),
+    OverlayToggle(BooleanSetting.RENDERER_CLEAR_LOADOP, R.string.tweaks_clear_loadop),
+    OverlayToggle(BooleanSetting.RENDERER_MAXWELL_BYPASS, R.string.tweaks_maxwell_bypass),
+    OverlayToggle(BooleanSetting.RENDERER_ASYNC_DIRECT_PRESENT, R.string.tweaks_async_present),
 )
 
 /**
@@ -75,7 +86,8 @@ fun showTweaksSheet(activity: ComponentActivity) {
     sheet.setViewTreeSavedStateRegistryOwner(activity)
     root.addView(sheet, FrameLayout.LayoutParams(-1, -1))
     sheet.setContent {
-        SuyuM3Theme {
+        val artworkSeed by ArtworkColors.seed.collectAsState()
+        SuyuM3Theme(artworkSeed = artworkSeed) {
             TweaksSheet(activity = activity, onDismiss = { root.removeView(sheet) })
         }
     }
@@ -95,6 +107,9 @@ private fun TweaksSheet(activity: ComponentActivity, onDismiss: () -> Unit) {
             mode = mode,
             overlays = overlayToggles.associate { it.setting.key to it.setting.getBoolean(needsGlobal) },
             graphics = graphicsToggles.associate { it.setting.key to it.setting.getBoolean(needsGlobal) },
+            gpuOverclock = runCatching {
+                IntSetting.FAST_GPU_TIME.getInt(needsGlobal) >= GPU_OVERCLOCK_ON
+            }.getOrDefault(false),
             layers = VulkanLayerHelper.getLayers()
                 .associate { it.name to VulkanLayerHelper.isLayerEnabled(it.name) },
         )
@@ -205,6 +220,19 @@ private fun TweaksSheet(activity: ComponentActivity, onDismiss: () -> Unit) {
                     }
                 )
             }
+            // Emulated GPU clock as a switch, for the level most players actually toggle. The
+            // five-step dropdown in App Settings still exposes Medium/Very High/Extreme.
+            ToggleRow(
+                label = stringResource(R.string.tweaks_gpu_overclock),
+                checked = sheet.gpuOverclock,
+                onChange = { value ->
+                    IntSetting.FAST_GPU_TIME.setInt(
+                        if (value) GPU_OVERCLOCK_ON else GPU_OVERCLOCK_OFF
+                    )
+                    NativeConfig.saveGlobalConfig()
+                    sheet = sheet.copy(gpuOverclock = value)
+                }
+            )
 
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 12.dp),
@@ -279,6 +307,7 @@ private data class SheetState(
     val mode: SpeedMode,
     val overlays: Map<String, Boolean>,
     val graphics: Map<String, Boolean>,
+    val gpuOverclock: Boolean,
     val layers: Map<String, Boolean>
 )
 

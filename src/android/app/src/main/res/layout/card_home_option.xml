@@ -7,13 +7,12 @@
     android:id="@+id/option_card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="10dp"
+    android:layout_marginBottom="@dimen/spacing_med"
     android:clickable="true"
     android:focusable="true"
     app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
     app:cardCornerRadius="24dp"
     app:cardElevation="0dp"
-    app:rippleColor="?attr/colorPrimary"
     app:strokeWidth="0dp">
 
     <androidx.appcompat.widget.LinearLayoutCompat
@@ -22,14 +21,14 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="14dp">
+        android:paddingHorizontal="@dimen/spacing_large"
+        android:paddingVertical="@dimen/spacing_large">
 
         <com.google.android.material.card.MaterialCardView
-            android:layout_width="52dp"
-            android:layout_height="52dp"
+            android:layout_width="@dimen/m3_touch_target_size"
+            android:layout_height="@dimen/m3_touch_target_size"
             app:cardBackgroundColor="?attr/colorPrimaryContainer"
-            app:cardCornerRadius="18dp"
+            app:shapeAppearance="@style/ShapeAppearance.Suyu.Medium"
             app:cardElevation="0dp"
             app:strokeWidth="0dp">
 
@@ -47,13 +46,13 @@
         <androidx.appcompat.widget.LinearLayoutCompat
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
+            android:layout_marginStart="@dimen/spacing_large"
             android:layout_weight="1"
             android:orientation="vertical">
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/option_title"
-                style="@style/TextAppearance.Suyu.TitleMedium"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/google_sans_semibold"
@@ -63,7 +62,7 @@
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/option_description"
-                style="@style/TextAppearance.Suyu.BodySmall"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
@@ -75,7 +74,7 @@
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/option_detail"
-                style="@style/TextAppearance.Suyu.LabelMedium"
+                android:textAppearance="?attr/textAppearanceLabelMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
@@ -95,8 +94,7 @@
         <ImageView
             android:layout_width="20dp"
             android:layout_height="20dp"
-            android:layout_marginStart="8dp"
-            android:alpha="0.7"
+            android:layout_marginStart="@dimen/spacing_med"
             android:importantForAccessibility="no"
             android:src="@drawable/ic_m3_chevron_right"
             app:tint="?attr/colorOnSurfaceVariant" />

@@ -83,6 +83,11 @@ private:
     void RenderScreenshot(std::span<const Tegra::FramebufferConfig> framebuffers);
     void RenderAppletCaptureLayer(std::span<const Tegra::FramebufferConfig> framebuffers);
 
+    /// Applies an internal resolution change requested between frames. Runs on the GPU thread at a
+    /// frame boundary, which is the only point where the device can be idled and the texture
+    /// cache can drop its rescaled allocations safely.
+    void ApplyPendingResolutionChange();
+
     Tegra::MaxwellDeviceMemoryManager& device_memory;
     Tegra::GPU& gpu;
 
@@ -109,11 +114,18 @@ private:
     std::optional<TurboMode> turbo_mode;
 
     Frame applet_frame;
+    /// Layer list of the last composited frame. The applet capture is rendered on demand from this
+    /// instead of every frame: nothing but the guest's capture request ever reads it.
+    std::vector<Tegra::FramebufferConfig> applet_layers;
 
     bool is_headless{false};
     std::vector<u8> headless_frame_data;
     u32 headless_width{1280};
     u32 headless_height{720};
+
+    /// Internal-resolution setup the renderer's scaling state was last derived from. Compared as a
+    /// plain integer so this header does not need the settings enums.
+    u32 applied_resolution_setup{};
 };
 
 } // namespace Vulkan

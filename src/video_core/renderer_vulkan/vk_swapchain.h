@@ -37,10 +37,20 @@ public:
         u32 height);
 
     /// Acquires the next image in the swapchain, waits as needed.
-    bool AcquireNextImage();
+    ///
+    /// \param wait_previous_work When false, the GPU timeline wait for this image's previous
+    ///        frame is skipped. Only callers whose acquire already proves the image is idle
+    ///        (the zero-copy path presents through the WSI, which pins the image until the GPU
+    ///        has finished with it) may pass false. Frame pacing still applies.
+    bool AcquireNextImage(bool wait_previous_work = true);
 
     /// Presents the rendered image to the swapchain.
     void Present(VkSemaphore render_semaphore);
+
+    /// Presents a specific acquired image. Used when presentation runs on its own thread: the
+    /// render thread may already have acquired the next image, so reading image_index here would
+    /// present the wrong one.
+    void Present(VkSemaphore render_semaphore, u32 presented_image);
 
     /// Returns true when the swapchain needs to be recreated.
     bool NeedsRecreation() const {
@@ -90,7 +100,7 @@ public:
     }
 
     VkSemaphore CurrentPresentSemaphore() const {
-        return *present_semaphores[frame_index];
+        return acquired_present_semaphore;
     }
 
     VkSemaphore CurrentRenderSemaphore() const {
@@ -136,6 +146,9 @@ private:
 
     u32 image_index{};
     u32 frame_index{};
+    /// Semaphore handed to vkAcquireNextImageKHR by the last successful acquire. The render
+    /// submission waits on it, so it must not be derived from frame_index after the fact.
+    VkSemaphore acquired_present_semaphore{};
 
     VkFormat image_view_format{};
     VkExtent2D extent{};

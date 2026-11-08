@@ -206,9 +206,16 @@ public:
         return is_rescaled;
     }
 
+    /// Variant of RenderPass() whose attachments are defined at pass begin rather than loaded.
+    /// VK_NULL_HANDLE when the framebuffer has no such variant.
+    [[nodiscard]] VkRenderPass ClearRenderPass() const noexcept {
+        return clear_renderpass;
+    }
+
 private:
     vk::Framebuffer framebuffer;
     VkRenderPass renderpass{};
+    VkRenderPass clear_renderpass{};
     VkExtent2D render_area{};
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     u32 num_color_buffers = 0;
@@ -278,6 +285,11 @@ public:
     bool ScaleUp(bool ignore = false);
 
     bool ScaleDown(bool ignore = false);
+
+    /// Releases the cached rescaling copy and falls back to the unscaled image. The caller must
+    /// guarantee the device is idle: the next ScaleUp() allocates a fresh copy using whatever
+    /// resolution is selected at that point, which is what a mid-session resolution change needs.
+    void DropScaledCopy();
 
     u64 allocation_tick;
 

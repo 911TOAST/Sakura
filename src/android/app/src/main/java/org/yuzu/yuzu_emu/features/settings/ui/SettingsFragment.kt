@@ -26,14 +26,12 @@ import androidx.navigation.findNavController
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.transition.MaterialSharedAxis
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.databinding.FragmentSettingsBinding
 import org.yuzu.yuzu_emu.features.input.NativeInput
 import org.yuzu.yuzu_emu.features.settings.model.Settings
 import org.yuzu.yuzu_emu.features.settings.model.view.PathSetting
 import org.yuzu.yuzu_emu.fragments.MessageDialogFragment
-import org.yuzu.yuzu_emu.ui.MotionBlur
 import org.yuzu.yuzu_emu.utils.PathUtil
 import org.yuzu.yuzu_emu.utils.ViewUtils.updateMargins
 import org.yuzu.yuzu_emu.utils.*
@@ -43,7 +41,6 @@ import androidx.core.net.toUri
 class SettingsFragment : Fragment() {
     private lateinit var presenter: SettingsFragmentPresenter
     private var settingsAdapter: SettingsAdapter? = null
-    private var motionBlur: MotionBlur? = null
 
     private var _binding: FragmentSettingsBinding? = null
     private val binding get() = _binding!!
@@ -68,11 +65,6 @@ class SettingsFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enterTransition = MaterialSharedAxis(MaterialSharedAxis.X, true)
-        returnTransition = MaterialSharedAxis(MaterialSharedAxis.X, false)
-        reenterTransition = MaterialSharedAxis(MaterialSharedAxis.X, false)
-        exitTransition = MaterialSharedAxis(MaterialSharedAxis.X, true)
-
         val playerIndex = getPlayerIndex()
         if (playerIndex != -1) {
             NativeInput.loadInputProfiles()
@@ -106,7 +98,7 @@ class SettingsFragment : Fragment() {
         binding.listSettings.apply {
             adapter = settingsAdapter
             layoutManager = LinearLayoutManager(requireContext())
-            motionBlur = MotionBlur(this).also { addOnScrollListener(it) }
+            itemAnimator = null
         }
 
         binding.toolbarSettings.setNavigationOnClickListener {
@@ -116,7 +108,9 @@ class SettingsFragment : Fragment() {
         settingsViewModel.shouldReloadSettingsList.collect(
             viewLifecycleOwner,
             resetState = { settingsViewModel.setShouldReloadSettingsList(false) }
-        ) { if (it) presenter.loadSettingsList() }
+        ) { if (it) {
+            presenter.loadSettingsList()
+        } }
         settingsViewModel.adapterItemChanged.collect(
             viewLifecycleOwner,
             resetState = { settingsViewModel.setAdapterItemChanged(-1) }
@@ -185,9 +179,8 @@ class SettingsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
-        motionBlur?.stop()
-        motionBlur = null
         super.onDestroyView()
+        _binding = null
     }
 
 private fun getPlayerIndex(): Int =

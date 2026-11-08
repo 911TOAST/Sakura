@@ -6,10 +6,12 @@
 
 #include <algorithm>
 #include <bit>
+#include <chrono>
 #include <cstddef>
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -39,7 +41,9 @@
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
+#include "video_core/renderer_vulkan/vk_state_tracker.h"
 #include "video_core/renderer_vulkan/vk_update_descriptor.h"
+#include "video_core/dirty_flags.h"
 #include "video_core/shader_cache.h"
 #include "video_core/shader_environment.h"
 #include "video_core/shader_notify.h"
@@ -73,6 +77,11 @@ constexpr u32 SPIRV_CACHE_VERSION = 1;
 constexpr size_t MAX_CACHED_STAGES = 5;
 constexpr size_t MAX_CACHED_SPIRV_WORDS = 16 * 1024 * 1024 / sizeof(u32);
 constexpr size_t MAX_CACHED_PAYLOAD_SIZE = 64 * 1024 * 1024;
+
+// Upper bound for the device-wide (cross-title) driver pipeline cache. It is shared by every
+// game booted on this device/driver, so it is allowed to grow much larger than a per-title
+// cache, but it must not grow without bound: it is read in full on every boot.
+constexpr size_t MAX_GLOBAL_PIPELINE_CACHE_SIZE = 128 * 1024 * 1024;
 
 struct CachedStage {
     u32 stage_index{};
@@ -665,9 +674,16 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
 }
 
 PipelineCache::~PipelineCache() {
-    if (use_vulkan_pipeline_cache && !vulkan_pipeline_cache_filename.empty()) {
+    if (!use_vulkan_pipeline_cache) {
+        return;
+    }
+    if (!vulkan_pipeline_cache_filename.empty()) {
         SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
                                      CACHE_VERSION);
+    }
+    if (!global_vulkan_pipeline_cache_filename.empty()) {
+        SerializeVulkanPipelineCache(global_vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
+                                     CACHE_VERSION, MAX_GLOBAL_PIPELINE_CACHE_SIZE);
     }
 }
 
@@ -677,16 +693,91 @@ GraphicsPipeline* PipelineCache::CurrentGraphicsPipeline() {
         current_pipeline = nullptr;
         return nullptr;
     }
+
+    InitializeMaxwellBypass();
+    ArmMaxwellBypassEngine();
+
+    // Steady-state draw: the guest has not written a register that reaches the pipeline key since
+    // the key was derived, so the derived key and the pipeline it resolved to still apply. This is
+    // what removes the per-draw re-derivation from a frame that mostly repeats itself.
+    if (maxwell_bypass_available && pipeline_state_epoch_valid && current_pipeline != nullptr &&
+        Settings::values.renderer_maxwell_bypass.GetValue() &&
+        pipeline_epoch_engine == maxwell3d &&
+        pipeline_state_epoch == maxwell3d->pipeline_state_epoch &&
+        // The vertex input registers are excluded from the watched mask because they are replayed
+        // as dynamic commands, but Refresh folds their attribute types into the key, so a pending
+        // VertexInput write still needs the derivation.
+        !maxwell3d->dirty.flags[Dirty::VertexInput] &&
+        pipeline_engine_state == static_cast<u32>(maxwell3d->engine_state)) {
+        if (GraphicsPipeline* const built{BuiltPipeline(current_pipeline)}; built != nullptr) {
+            return built;
+        }
+    }
+
     graphics_key.state.Refresh(*maxwell3d, dynamic_features);
 
     if (current_pipeline) {
         GraphicsPipeline* const next{current_pipeline->Next(graphics_key)};
         if (next) {
             current_pipeline = next;
+            pipeline_state_epoch = maxwell3d->pipeline_state_epoch;
+            pipeline_engine_state = static_cast<u32>(maxwell3d->engine_state);
+            pipeline_epoch_engine = maxwell3d;
+            pipeline_state_epoch_valid = true;
             return BuiltPipeline(current_pipeline);
         }
     }
     return CurrentGraphicsPipelineSlowPath();
+}
+
+void PipelineCache::InitializeMaxwellBypass() {
+    if (maxwell_bypass_initialized) {
+        return;
+    }
+    maxwell_bypass_initialized = true;
+
+    // Skipping the derivation is only sound when every piece of state that reaches the key is
+    // covered by a watched dirty flag. That holds for the full extended-dynamic-state permutation:
+    // the others fold whole register blocks into FixedPipelineState::dynamic_state and the vertex
+    // attribute table, which this path does not track.
+    maxwell_bypass_available =
+        dynamic_features.has_extended_dynamic_state &&
+        dynamic_features.has_extended_dynamic_state_2 &&
+        dynamic_features.has_extended_dynamic_state_2_logic_op &&
+        dynamic_features.has_extended_dynamic_state_3_blend &&
+        dynamic_features.has_extended_dynamic_state_3_enables &&
+        dynamic_features.has_dynamic_vertex_input;
+    if (!maxwell_bypass_available) {
+        LOG_INFO(Render_Vulkan, "[Bypass] Maxwell pipeline bypass unavailable on this device");
+        return;
+    }
+    LOG_INFO(Render_Vulkan, "[Bypass] Maxwell pipeline bypass available");
+}
+
+void PipelineCache::ArmMaxwellBypassEngine() {
+    if (!maxwell_bypass_available || maxwell3d == nullptr || armed_engine == maxwell3d) {
+        return;
+    }
+    armed_engine = maxwell3d;
+
+    auto& watch = maxwell3d->pipeline_state_watch;
+    watch.set();
+    // Registers with no dirty state land on flag 0; they can never change the key.
+    watch[0] = false;
+    // Per-draw bindings that FixedPipelineState never reads. Leaving them watched would bump the
+    // epoch on almost every draw and the steady-state path would never run.
+    watch[VideoCommon::Dirty::IndexBuffer] = false;
+    watch[VideoCommon::Dirty::Descriptors] = false;
+    // With dynamic vertex input the attribute and binding registers are streamed as commands and
+    // never reach the key. A pending write to them is checked directly in the fast path instead.
+    watch[VideoCommon::Dirty::VertexBuffers] = false;
+    watch[Dirty::VertexInput] = false;
+    for (int index = Dirty::VertexAttribute0; index <= Dirty::VertexAttribute31; ++index) {
+        watch[index] = false;
+    }
+    for (int index = Dirty::VertexBinding0; index <= Dirty::VertexBinding31; ++index) {
+        watch[index] = false;
+    }
 }
 
 ComputePipeline* PipelineCache::CurrentComputePipeline() {
@@ -715,6 +806,7 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
     if (title_id == 0) {
         return;
     }
+    const auto warmup_start{std::chrono::steady_clock::now()};
     const auto shader_dir{Common::FS::GetSuyuPath(Common::FS::SuyuPath::ShaderDir)};
     const auto base_dir{shader_dir / fmt::format("{:016x}", title_id)};
     if (!Common::FS::CreateDir(shader_dir) || !Common::FS::CreateDir(base_dir)) {
@@ -725,15 +817,39 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
 
     if (use_vulkan_pipeline_cache) {
         vulkan_pipeline_cache_filename = base_dir / "vulkan_pipelines.bin";
+
+        // The driver pipeline cache is device-wide, not title-wide. Use a cache shared by every
+        // title on this exact device/driver as the base, so a pipeline compiled while playing one
+        // game is reused by the next game without recompiling. The salt keeps blobs from different
+        // drivers (for example a switched custom GPU driver) in separate files, because Vulkan
+        // only permits reusing pipeline cache data on the device/driver that produced it.
+        global_vulkan_pipeline_cache_filename =
+            shader_dir / fmt::format("vulkan_pipelines_global_{:016x}.bin", shader_cache_salt);
         vulkan_pipeline_cache =
-            LoadVulkanPipelineCache(vulkan_pipeline_cache_filename, CACHE_VERSION);
+            LoadVulkanPipelineCache(global_vulkan_pipeline_cache_filename, CACHE_VERSION);
+
+        // Merge this title's cache into the device-wide cache. Merging is cheap compared to the
+        // shader compilation the entries save, and it keeps one warm cache for the whole device.
+        const vk::PipelineCache title_pipeline_cache{
+            LoadVulkanPipelineCache(vulkan_pipeline_cache_filename, CACHE_VERSION)};
+        if (title_pipeline_cache) {
+            vulkan_pipeline_cache.MergeFrom(title_pipeline_cache);
+        }
     }
 
     struct {
         std::mutex mutex;
         size_t total{};
         size_t built{};
+        size_t from_disk{};
+        size_t compiled{};
+        size_t failed{};
         bool has_loaded{};
+        // A cache file is append-only, so an entry may be present more than once (for example if
+        // a build was interrupted between the SPIR-V and driver cache write, or after a cache
+        // version bump). Building the same pipeline twice at boot is pure wasted driver time.
+        ankerl::unordered_dense::set<ComputePipelineCacheKey> seen_compute;
+        ankerl::unordered_dense::set<GraphicsPipelineCacheKey> seen_graphics;
         std::unique_ptr<PipelineStatistics> statistics;
     } state;
 
@@ -745,13 +861,19 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
         file.read(reinterpret_cast<char*>(&key), sizeof(key));
         std::vector<u8> payload{ReadCachedPayload(file)};
 
+        if (!state.seen_compute.insert(key).second) {
+            return;
+        }
+
         workers.QueueWork([this, key, env_ = std::move(env), payload = std::move(payload),
                            &state, &callback]() mutable {
             std::unique_ptr<ComputePipeline> pipeline;
+            bool from_disk{false};
             if (!payload.empty()) {
                 try {
                     pipeline =
                         CreateComputePipelineFromCache(key, payload, state.statistics.get(), false);
+                    from_disk = pipeline != nullptr;
                 } catch (const std::exception& e) {
                     // Never let a bad cache entry escape a worker thread: fall back to compiling.
                     LOG_ERROR(Render_Vulkan, "Discarding cached compute pipeline: {}", e.what());
@@ -763,8 +885,16 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
                 pipeline = CreateComputePipeline(pools, key, env_, state.statistics.get(), false);
             }
             std::scoped_lock lock{state.mutex};
-            if (pipeline) {
+            const bool built_ok{pipeline != nullptr};
+            if (built_ok) {
                 compute_cache.emplace(key, std::move(pipeline));
+            }
+            if (from_disk) {
+                ++state.from_disk;
+            } else if (built_ok) {
+                ++state.compiled;
+            } else {
+                ++state.failed;
             }
             ++state.built;
             if (state.has_loaded) {
@@ -806,13 +936,19 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
             return;
         }
 
+        if (!state.seen_graphics.insert(key).second) {
+            return;
+        }
+
         workers.QueueWork([this, key, envs_ = std::move(envs), payload = std::move(payload),
                            &state, &callback]() mutable {
             std::unique_ptr<GraphicsPipeline> pipeline;
+            bool from_disk{false};
             if (!payload.empty()) {
                 try {
                     pipeline = CreateGraphicsPipelineFromCache(key, payload,
                                                                state.statistics.get(), false);
+                    from_disk = pipeline != nullptr;
                 } catch (const std::exception& e) {
                     LOG_ERROR(Render_Vulkan, "Discarding cached graphics pipeline: {}", e.what());
                     pipeline.reset();
@@ -829,8 +965,16 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
             }
 
             std::scoped_lock lock{state.mutex};
-            if (pipeline) {
+            const bool built_ok{pipeline != nullptr};
+            if (built_ok) {
                 graphics_cache.emplace(key, std::move(pipeline));
+            }
+            if (from_disk) {
+                ++state.from_disk;
+            } else if (built_ok) {
+                ++state.compiled;
+            } else {
+                ++state.failed;
             }
             ++state.built;
             if (state.has_loaded) {
@@ -851,9 +995,24 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
 
     workers.WaitForRequests(stop_loading);
 
+    // Every pipeline above was created inside the worker threads, which calls
+    // vkCreateGraphicsPipelines/vkCreateComputePipelines. That is the GPU warmup: by the time the
+    // first frame is drawn the driver has already compiled the cached pipelines into device code.
+    const auto warmup_ms{std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - warmup_start)
+                             .count()};
+    LOG_INFO(Render_Vulkan,
+             "[ShaderWarmup] {} pipelines ready in {} ms: {} from disk, {} compiled, {} failed",
+             state.built, warmup_ms, state.from_disk, state.compiled, state.failed);
+    if (state.built == 0) {
+        LOG_INFO(Render_Vulkan, "[ShaderWarmup] Cold start: no cached pipelines for this title");
+    }
+
     if (use_vulkan_pipeline_cache) {
         SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
                                      CACHE_VERSION);
+        SerializeVulkanPipelineCache(global_vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
+                                     CACHE_VERSION, MAX_GLOBAL_PIPELINE_CACHE_SIZE);
     }
 
     if (state.statistics) {
@@ -874,6 +1033,10 @@ GraphicsPipeline* PipelineCache::CurrentGraphicsPipelineSlowPath() {
         current_pipeline->AddTransition(pipeline.get());
     }
     current_pipeline = pipeline.get();
+    pipeline_state_epoch = maxwell3d->pipeline_state_epoch;
+    pipeline_engine_state = static_cast<u32>(maxwell3d->engine_state);
+    pipeline_epoch_engine = maxwell3d;
+    pipeline_state_epoch_valid = true;
     return BuiltPipeline(current_pipeline);
 }
 
@@ -1214,17 +1377,7 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipelineFromCache(
 
 void PipelineCache::SerializeVulkanPipelineCache(const std::filesystem::path& filename,
                                                  const vk::PipelineCache& pipeline_cache,
-                                                 u32 cache_version) try {
-    std::ofstream file(filename, std::ios::binary);
-    file.exceptions(std::ifstream::failbit);
-    if (!file.is_open()) {
-        LOG_ERROR(Common_Filesystem, "Failed to open Vulkan driver pipeline cache file {}",
-                  Common::FS::PathToUTF8String(filename));
-        return;
-    }
-    file.write(VULKAN_CACHE_MAGIC_NUMBER.data(), VULKAN_CACHE_MAGIC_NUMBER.size())
-        .write(reinterpret_cast<const char*>(&cache_version), sizeof(cache_version));
-
+                                                 u32 cache_version, size_t max_size) try {
     size_t cache_size = 0;
     std::vector<char> cache_data;
     if (pipeline_cache) {
@@ -1232,10 +1385,27 @@ void PipelineCache::SerializeVulkanPipelineCache(const std::filesystem::path& fi
         cache_data.resize(cache_size);
         pipeline_cache.Read(&cache_size, cache_data.data());
     }
+    if (cache_size > max_size) {
+        LOG_WARNING(Render_Vulkan,
+                    "Skipping Vulkan driver pipeline cache {}: {} bytes exceeds the {} byte limit",
+                    Common::FS::PathToUTF8String(filename), cache_size, max_size);
+        return;
+    }
+
+    std::ofstream file(filename, std::ios::binary);
+    file.exceptions(std::ifstream::failbit);
+    if (!file.is_open()) {
+        LOG_ERROR(Common_Filesystem, "Failed to open Vulkan driver pipeline cache file {}",
+                  Common::FS::PathToUTF8String(filename));
+        return;
+    }
+
+    file.write(VULKAN_CACHE_MAGIC_NUMBER.data(), VULKAN_CACHE_MAGIC_NUMBER.size())
+        .write(reinterpret_cast<const char*>(&cache_version), sizeof(cache_version));
     file.write(cache_data.data(), cache_size);
 
-    LOG_INFO(Render_Vulkan, "Vulkan driver pipelines cached at: {}",
-             Common::FS::PathToUTF8String(filename));
+    LOG_INFO(Render_Vulkan, "Vulkan driver pipelines cached at: {} ({} bytes)",
+             Common::FS::PathToUTF8String(filename), cache_size);
 
 } catch (const std::ios_base::failure& e) {
     LOG_ERROR(Common_Filesystem, "{}", e.what());
@@ -1291,8 +1461,8 @@ vk::PipelineCache PipelineCache::LoadVulkanPipelineCache(const std::filesystem::
         std::vector<char> cache_data(cache_size);
         file.read(cache_data.data(), cache_size);
 
-        LOG_INFO(Render_Vulkan,
-                 "Loaded Vulkan driver pipeline cache: ", Common::FS::PathToUTF8String(filename));
+        LOG_INFO(Render_Vulkan, "Loaded Vulkan driver pipeline cache: {}",
+                 Common::FS::PathToUTF8String(filename));
 
         return create_pipeline_cache(cache_size, cache_data.data());
 

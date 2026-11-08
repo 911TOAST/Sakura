@@ -27,23 +27,21 @@
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/text_setting_name"
-                style="@style/TextAppearance.Material3.HeadlineMedium"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textAlignment="viewStart"
-                android:textSize="17sp"
-                app:lineHeight="22dp"
+                android:textColor="?attr/colorOnSurface"
                 tools:text="Setting Name" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/text_setting_value"
-                style="@style/TextAppearance.Material3.LabelMedium"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_small"
                 android:textAlignment="viewStart"
-                android:textStyle="bold"
-                android:textSize="13sp"
+                android:textColor="?attr/colorPrimary"
                 tools:text="1x" />
 
         </LinearLayout>
@@ -53,6 +51,8 @@
             style="?attr/materialIconButtonStyle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:minWidth="@dimen/m3_touch_target_size"
+            android:minHeight="@dimen/m3_touch_target_size"
             android:nextFocusLeft="@id/setting_body"
             app:icon="@drawable/ic_more_vert"
             app:iconSize="24dp"

@@ -186,3 +186,12 @@ License: GPL-3.0-or-later
 Comment: CPM.cmake has had additional modifications from crueter to better work with CPMUtil
          https://git.crueter.xyz/CMake/CPMUtil
          https://git.crueter.xyz/CMake/Modules
+
+Files: src/android/app/src/main/res/font/sakura_display.ttf
+Copyright: 2012 The Audiowide Project Authors (https://github.com/googlefonts/audiowide)
+License: OFL-1.1
+
+Files: src/android/app/src/main/res/font/google_sans*.ttf
+       src/android/app/src/main/res/font/google_sans.xml
+Copyright: Google, Inc.
+License: OFL-1.1

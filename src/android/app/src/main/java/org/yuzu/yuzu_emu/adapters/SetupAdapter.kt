@@ -25,6 +25,11 @@ import org.yuzu.yuzu_emu.utils.SuyuMotion
 
 class SetupAdapter(val activity: AppCompatActivity, pages: List<SetupPage>) :
     AbstractListAdapter<SetupPage, SetupAdapter.SetupPageViewHolder>(pages) {
+    // Pages live in a ViewPager2: it animates its own swipes, and a bind-time reveal would fade
+    // pages in behind the pager's own motion. Press feedback would also fight the page buttons.
+    override val usesItemReveal: Boolean = false
+    override val usesPressFeedback: Boolean = false
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SetupPageViewHolder {
         PageSetupBinding.inflate(LayoutInflater.from(parent.context), parent, false)
             .also { return SetupPageViewHolder(it) }

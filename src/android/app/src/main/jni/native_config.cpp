@@ -59,6 +59,10 @@ void Java_org_yuzu_yuzu_1emu_utils_NativeConfig_saveGlobalConfig(JNIEnv* env, jo
     global_config->AndroidConfig::SaveAllValues();
 }
 
+jboolean Java_org_yuzu_yuzu_1emu_utils_NativeConfig_saveWallpaperConfig(JNIEnv* env, jobject obj) {
+    return global_config && global_config->SaveWallpaperValues();
+}
+
 void Java_org_yuzu_yuzu_1emu_utils_NativeConfig_initializePerGameConfig(JNIEnv* env, jobject obj,
                                                                         jstring jprogramId,
                                                                         jstring jfileName) {

@@ -12,6 +12,7 @@ public:
 
     void ReloadAllValues() override;
     void SaveAllValues() override;
+    [[nodiscard]] bool SaveWallpaperValues();
 
     void ReadAndroidControlPlayerValues(std::size_t player_index);
     void SaveAndroidControlPlayerValues(std::size_t player_index);

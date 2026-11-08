@@ -49,6 +49,9 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
     INSERT(Settings, enable_overlay, tr("Enable Overlay Applet"),
            tr("Enables Horizon\'s built-in overlay applet. Press and hold the home button for 1 "
               "second to show it."));
+    INSERT(Settings, hle_performance_preset, tr("HLE performance preset"),
+           tr("Forces every library applet onto the HLE frontends and every known macro program "
+              "onto its HLE implementation."));
 
     // Audio
     INSERT(Settings, sink_id, tr("Output Engine:"), QString());

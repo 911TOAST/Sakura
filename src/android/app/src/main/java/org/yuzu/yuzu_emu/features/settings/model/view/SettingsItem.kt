@@ -623,6 +623,16 @@ abstract class SettingsItem(
                 )
             )
             put(
+                SliderSetting(
+                    IntSetting.ANDROID_DRAW_BATCH,
+                    titleId = R.string.draw_batch_size,
+                    descriptionId = R.string.draw_batch_size_description,
+                    min = 1024,
+                    max = 16384,
+                    units = "draws"
+                )
+            )
+            put(
                 SingleChoiceSetting(
                     IntSetting.RENDERER_ANTI_ALIASING,
                     titleId = R.string.renderer_anti_aliasing,
@@ -681,6 +691,27 @@ abstract class SettingsItem(
                     BooleanSetting.RENDERER_ASYNC_PRESENTATION,
                     titleId = R.string.renderer_async_presentation,
                     descriptionId = R.string.renderer_async_presentation_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_ASYNC_DIRECT_PRESENT,
+                    titleId = R.string.renderer_async_direct_present,
+                    descriptionId = R.string.renderer_async_direct_present_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_MAXWELL_BYPASS,
+                    titleId = R.string.renderer_maxwell_bypass,
+                    descriptionId = R.string.renderer_maxwell_bypass_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_CLEAR_LOADOP,
+                    titleId = R.string.renderer_clear_loadop,
+                    descriptionId = R.string.renderer_clear_loadop_description
                 )
             )
             put(
@@ -845,6 +876,20 @@ abstract class SettingsItem(
                     BooleanSetting.NATIVE_GPU_MODE,
                     titleId = R.string.native_gpu_mode,
                     descriptionId = R.string.native_gpu_mode_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.HLE_PERFORMANCE_PRESET,
+                    titleId = R.string.hle_performance_preset,
+                    descriptionId = R.string.hle_performance_preset_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.FAKE_SYSTEM_APPLETS,
+                    titleId = R.string.fake_system_applets,
+                    descriptionId = R.string.fake_system_applets_description
                 )
             )
             put(

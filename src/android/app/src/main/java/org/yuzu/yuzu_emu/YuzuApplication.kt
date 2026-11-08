@@ -21,6 +21,7 @@ import android.os.LocaleList
 import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.utils.DirectoryInitialization
 import org.yuzu.yuzu_emu.utils.DocumentsTree
+import org.yuzu.yuzu_emu.utils.CrashReporter
 import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.Log
 import org.yuzu.yuzu_emu.utils.PowerStateUpdater
@@ -60,6 +61,9 @@ class YuzuApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         application = this
+        // Must be installed before any other startup work so the first crash is captured.
+        CrashReporter.install(this)
+        CrashReporter.showLastCrashHeadline(this)
         documentsTree = DocumentsTree()
         DirectoryInitialization.start()
 

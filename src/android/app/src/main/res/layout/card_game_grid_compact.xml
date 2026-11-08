@@ -8,7 +8,7 @@
     android:focusableInTouchMode="false"
     android:padding="4dp">
 
-    <org.yuzu.yuzu_emu.views.GradientBorderCardView
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/card_game_grid_compact"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -18,7 +18,7 @@
         android:focusable="true"
         android:transitionName="card_game_compact"
         app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
-        app:cardCornerRadius="20dp"
+        app:cardCornerRadius="16dp"
         app:cardElevation="0dp"
         app:strokeWidth="0dp">
 
@@ -65,6 +65,6 @@
 
         </FrameLayout>
 
-    </org.yuzu.yuzu_emu.views.GradientBorderCardView>
+    </com.google.android.material.card.MaterialCardView>
 
 </FrameLayout>

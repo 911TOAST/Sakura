@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.databinding.ListItemProfileBinding
+import org.yuzu.yuzu_emu.viewholder.revealItemOnce
 import org.yuzu.yuzu_emu.model.UserProfile
 import java.io.File
 import org.yuzu.yuzu_emu.NativeLibrary
@@ -54,8 +55,8 @@ class ProfileAdapter(
 
     override fun onBindViewHolder(holder: ProfileViewHolder, position: Int) {
         holder.bind(differ.currentList[position])
+        revealItemOnce(holder.itemView, position)
     }
-
     override fun getItemCount(): Int = differ.currentList.size
 
     inner class ProfileViewHolder(private val binding: ListItemProfileBinding) :

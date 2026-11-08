@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <cstdio>
+#include <unistd.h>
 #include <common/fs/path_util.h>
 #include <common/logging.h>
 #include <common/settings.h>
@@ -32,6 +34,32 @@ void AndroidConfig::SaveAllValues() {
     SaveAndroidValues();
 }
 
+bool AndroidConfig::SaveWallpaperValues() {
+    if (!global) {
+        return false;
+    }
+    BeginGroup(Settings::TranslateCategory(Settings::Category::Ui));
+    WriteCategory(Settings::Category::Ui);
+    EndGroup();
+
+    const auto temporary = config_loc + ".wallpaper.tmp";
+    FILE* fp = fopen(temporary.c_str(), "wb");
+    if (fp == nullptr) {
+        return false;
+    }
+    CSimpleIniA::FileWriter writer(fp);
+    bool saved = config->Save(writer, false) >= 0;
+    saved = (fflush(fp) == 0) && saved;
+    saved = (ferror(fp) == 0) && saved;
+    saved = (fsync(fileno(fp)) == 0) && saved;
+    saved = (fclose(fp) == 0) && saved;
+    if (!saved || std::rename(temporary.c_str(), config_loc.c_str()) != 0) {
+        std::remove(temporary.c_str());
+        return false;
+    }
+    return true;
+}
+
 void AndroidConfig::ReadAndroidValues() {
     if (global) {
         ReadAndroidUIValues();
@@ -59,6 +87,7 @@ void AndroidConfig::ReadAndroidUIValues() {
 void AndroidConfig::ReadUIValues() {
     BeginGroup(Settings::TranslateCategory(Settings::Category::Ui));
 
+    ReadCategory(Settings::Category::Ui);
     ReadPathValues();
 
     EndGroup();
@@ -245,6 +274,7 @@ void AndroidConfig::SaveAndroidUIValues() {
 void AndroidConfig::SaveUIValues() {
     BeginGroup(Settings::TranslateCategory(Settings::Category::Ui));
 
+    WriteCategory(Settings::Category::Ui);
     SavePathValues();
 
     EndGroup();

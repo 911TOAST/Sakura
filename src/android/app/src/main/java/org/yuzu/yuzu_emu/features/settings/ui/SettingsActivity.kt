@@ -46,6 +46,7 @@ class SettingsActivity : AppCompatActivity() {
         ThemeHelper.setTheme(this)
 
         super.onCreate(savedInstanceState)
+        applyPanelWindowMotion()
 
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -60,6 +61,10 @@ class SettingsActivity : AppCompatActivity() {
         navHostFragment.navController.setGraph(R.navigation.settings_navigation, intent.extras)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        if (WindowFrosting.apply(this)) {
+            binding.constraintSettings.background = null
+        }
 
         if (InsetsHelper.getSystemGestureType(applicationContext) !=
             InsetsHelper.GESTURE_NAVIGATION
@@ -112,7 +117,7 @@ class SettingsActivity : AppCompatActivity() {
         if (navHostFragment.childFragmentManager.backStackEntryCount > 0) {
             navHostFragment.navController.popBackStack()
         } else {
-            finish()
+            finishWithPanelMotion()
         }
     }
 
@@ -183,7 +188,7 @@ class SettingsActivity : AppCompatActivity() {
             getString(R.string.settings_reset),
             Toast.LENGTH_LONG
         ).show()
-        finish()
+        finishWithPanelMotion()
     }
 
     private fun setInsets() {

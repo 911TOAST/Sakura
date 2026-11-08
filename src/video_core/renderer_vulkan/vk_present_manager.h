@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <boost/container/deque.hpp>
@@ -37,6 +38,12 @@ struct Frame {
     /// The frame is a swapchain image handed out by GetRenderFrame(). No intermediate image,
     /// no copy and no free queue are involved; Present() hands the image straight to the WSI.
     bool direct_present{};
+    /// Image acquired for this frame. Presentation reads it from the frame instead of the
+    /// swapchain so a queued present can never pick up the index of a newer frame.
+    u32 swapchain_image_index{};
+    /// Scheduler chunk serial of the submission that renders into this frame. The WSI may only be
+    /// asked to wait on render_ready once that submission has been issued.
+    u64 present_serial{};
 };
 
 class PresentManager {
@@ -76,6 +83,10 @@ public:
 private:
     void PresentThread(std::stop_token token);
 
+    /// Hands a direct-present frame to the WSI. Always runs on the render thread that acquired the
+    /// image, because Android surface handles are bound to the thread that touched them.
+    void PresentDirect(Frame* frame);
+
     void CopyToSwapchain(Frame* frame);
 
     void CopyToSwapchainImpl(Frame* frame);
@@ -106,6 +117,7 @@ private:
     std::mutex queue_mutex;
     std::mutex free_mutex;
     std::jthread present_thread;
+    std::atomic<bool> direct_recreate_pending{false};
     bool blit_supported;
     bool use_direct_present;
     bool use_present_thread;

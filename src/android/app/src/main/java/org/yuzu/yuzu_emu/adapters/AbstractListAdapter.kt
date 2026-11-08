@@ -14,8 +14,22 @@ import org.yuzu.yuzu_emu.viewholder.AbstractViewHolder
 abstract class AbstractListAdapter<Model : Any, Holder : AbstractViewHolder<Model>>(
     open var currentList: List<Model>
 ) : RecyclerView.Adapter<Holder>() {
-    override fun onBindViewHolder(holder: Holder, position: Int) =
+    /** Adds the shared press-in/press-out scale to every row. Item containers with their own
+     *  touch handling (sliders, switches) override this to false. */
+    protected open val usesPressFeedback: Boolean = true
+
+    /** Staggered entrance per row. Paged lists that animate their own swipes turn this off. */
+    protected open val usesItemReveal: Boolean = true
+
+    override fun onBindViewHolder(holder: Holder, position: Int) {
         holder.bind(currentList[position])
+        if (usesItemReveal) {
+            holder.revealOnce(position)
+        }
+        if (usesPressFeedback) {
+            holder.applyPressFeedback()
+        }
+    }
 
     override fun getItemCount(): Int = currentList.size
 

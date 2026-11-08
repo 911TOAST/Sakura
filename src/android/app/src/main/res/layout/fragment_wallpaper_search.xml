@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="?attr/colorSurface">
+    <com.google.android.material.appbar.MaterialToolbar android:id="@+id/wallpaper_toolbar"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
+        app:title="@string/wallpaper_search" app:navigationIcon="@drawable/ic_perf_arrow_back"
+        app:navigationContentDescription="@string/back" />
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/wallpaper_query_layout"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginHorizontal="16dp"
+        android:hint="@string/wallpaper_search_hint" app:endIconMode="clear_text">
+        <com.google.android.material.textfield.TextInputEditText android:id="@+id/wallpaper_query"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
+            android:inputType="text" android:imeOptions="actionSearch" android:maxLength="200" android:singleLine="true" />
+    </com.google.android.material.textfield.TextInputLayout>
+    <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none">
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:paddingHorizontal="16dp">
+            <com.google.android.material.chip.Chip android:id="@+id/wallpaper_orientation"
+                style="@style/SuyuFilterChip" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="@string/wallpaper_orientation" android:checkable="false" />
+            <com.google.android.material.chip.Chip android:id="@+id/wallpaper_resolution"
+                style="@style/SuyuFilterChip" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" android:text="@string/wallpaper_resolution" android:checkable="false" />
+            <com.google.android.material.chip.Chip android:id="@+id/wallpaper_sort"
+                style="@style/SuyuFilterChip" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" android:text="@string/wallpaper_sort" android:checkable="false" />
+            <com.google.android.material.chip.Chip android:id="@+id/wallpaper_advanced"
+                style="@style/SuyuFilterChip" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" android:text="@string/wallpaper_advanced" android:checkable="false" />
+        </LinearLayout>
+    </HorizontalScrollView>
+    <TextView android:id="@+id/wallpaper_suggestions_label"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:paddingHorizontal="16dp" android:textAppearance="?attr/textAppearanceLabelLarge"
+        android:textColor="?attr/colorOnSurfaceVariant" android:text="@string/wallpaper_topics" />
+    <HorizontalScrollView android:id="@+id/wallpaper_suggestions_scroll"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none">
+        <LinearLayout android:id="@+id/wallpaper_suggestions"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:paddingHorizontal="16dp" />
+    </HorizontalScrollView>
+    <TextView android:id="@+id/wallpaper_source_notice"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingHorizontal="16dp"
+        android:textAppearance="?attr/textAppearanceBodySmall" android:textColor="?attr/colorOnSurfaceVariant" />
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/wallpaper_search_grid"
+        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:padding="8dp" android:clipToPadding="false" />
+    <LinearLayout android:id="@+id/wallpaper_search_bottom" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:paddingHorizontal="16dp" android:orientation="vertical">
+        <TextView android:id="@+id/wallpaper_search_status"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textAppearance="?attr/textAppearanceBodyMedium" android:accessibilityLiveRegion="polite"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+        <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/wallpaper_search_progress"
+            android:layout_width="match_parent" android:layout_height="wrap_content" android:indeterminate="true"
+            android:visibility="gone" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/wallpaper_search_more"
+            style="@style/SuyuButton.Tonal" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/wallpaper_more" android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>

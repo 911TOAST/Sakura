@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Library card: artwork on top, label block underneath, single 24dp container. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -24,8 +27,7 @@
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:padding="10dp">
+            android:layout_height="wrap_content">
 
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/image_game_screen"
@@ -36,26 +38,28 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.sakura.GameArtwork"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.sakura.GameArtworkTop"
                 tools:src="@drawable/default_icon" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/text_game_title"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
                 android:layout_marginTop="10dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginBottom="12dp"
                 android:ellipsize="end"
-                android:fontFamily="@font/google_sans_medium"
-                android:gravity="center"
+                android:fontFamily="@font/google_sans_semibold"
+                android:gravity="start"
                 android:letterSpacing="0.005"
                 android:lineSpacingExtra="1dp"
                 android:maxLines="2"
-                android:minLines="2"
                 android:textColor="?attr/colorOnSurface"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="@+id/image_game_screen"
-                app:layout_constraintStart_toStartOf="@+id/image_game_screen"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/image_game_screen"
                 tools:text="The Legend of Zelda: Skyward Sword" />
 

@@ -181,6 +181,7 @@ void Load(VkDevice device, DeviceDispatch& dld) noexcept {
     X(vkCreateImage);
     X(vkCreateImageView);
     X(vkCreatePipelineCache);
+    X(vkMergePipelineCaches);
     X(vkCreatePipelineLayout);
     X(vkCreateQueryPool);
     X(vkCreateRenderPass);

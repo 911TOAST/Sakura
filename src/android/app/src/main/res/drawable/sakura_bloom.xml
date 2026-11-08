@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launch-splash bloom: the sakura mark unfurls from 55% with a short rotation.
+     Android 12+ plays this as the splash icon; older versions fall back to the
+     first frame, which is still the correct mark. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:drawable="@drawable/sakura_flower_named">
+    <target android:name="bloom">
+        <aapt:attr name="android:animation">
+            <set android:ordering="together">
+                <objectAnimator
+                    android:duration="820"
+                    android:interpolator="@android:interpolator/decelerate_quint"
+                    android:propertyName="scaleX"
+                    android:valueFrom="0.55"
+                    android:valueTo="0.82" />
+                <objectAnimator
+                    android:duration="820"
+                    android:interpolator="@android:interpolator/decelerate_quint"
+                    android:propertyName="scaleY"
+                    android:valueFrom="0.55"
+                    android:valueTo="0.82" />
+                <objectAnimator
+                    android:duration="900"
+                    android:interpolator="@android:interpolator/decelerate_quint"
+                    android:propertyName="rotation"
+                    android:valueFrom="-120"
+                    android:valueTo="0" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>

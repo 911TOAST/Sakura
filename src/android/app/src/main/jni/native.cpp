@@ -13,6 +13,7 @@
 #include <fstream>
 #include <locale>
 #include <map>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <span>
@@ -396,6 +397,10 @@ Core::SystemResultStatus EmulationSession::InitializeEmulation(const std::string
     if (m_load_result != Core::SystemResultStatus::Success) {
         return m_load_result;
     }
+
+    // Report what the user still needs to provide. This build ships no keys or firmware; say so
+    // explicitly instead of failing later with an unexplained boot error.
+    FirmwareManager::LogStartupStatus(m_system);
 
     // Complete initialization.
     m_system.GPU().Start();
@@ -1511,7 +1516,20 @@ void Java_org_yuzu_yuzu_1emu_NativeLibrary_setCabinetMode(JNIEnv* env, jclass cl
 }
 
 bool isFirmwarePresent() {
-    return FirmwareManager::CheckFirmwarePresence(EmulationSession::GetInstance().System());
+    // Cached per System instance. Every call otherwise walks the NAND registered cache, and the
+    // settings list and game grid ask for this while binding items. Installing or removing firmware
+    // recreates the System (initializeSystem), so the pointer alone keeps the cache honest.
+    static std::mutex firmware_mutex;
+    static const Core::System* cached_system = nullptr;
+    static bool cached_present = false;
+
+    auto& system = EmulationSession::GetInstance().System();
+    std::scoped_lock lock{firmware_mutex};
+    if (cached_system != &system) {
+        cached_system = &system;
+        cached_present = FirmwareManager::CheckFirmwarePresence(system);
+    }
+    return cached_present;
 }
 
 jboolean Java_org_yuzu_yuzu_1emu_NativeLibrary_isFirmwareAvailable(JNIEnv* env, jclass clazz) {

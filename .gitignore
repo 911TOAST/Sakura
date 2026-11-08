@@ -66,6 +66,13 @@ vulkansdk*.exe
 /aot_test_output
 *.log
 
+# Local backups and signing secrets
+*.rar
+*.jks
+*.keystore
+keystore.pass
+/secrets/
+
 # vcpkg manifest-mode install tree (build output, 350+ MB)
 vcpkg_installed/
 

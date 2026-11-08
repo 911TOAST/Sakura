@@ -89,6 +89,18 @@ inline bool CheckFirmwarePresence(Core::System &system)
 FirmwareCheckResult VerifyFirmware(Core::System &system);
 
 /**
+ * \brief Logs the installed key and firmware status once, at emulation boot.
+ *
+ * This build ships no keys and no firmware. The message tells the user which
+ * piece is missing and which feature it affects, instead of leaving them with a
+ * generic loader failure. It never changes behaviour: the emulator still
+ * requires keys to decrypt encrypted content.
+ *
+ * \param system The system whose filesystem/keys should be inspected.
+ */
+void LogStartupStatus(Core::System &system);
+
+/**
  * @brief Get the currently installed firmware version.
  * @param system The system to check firmware on.
  * @return A pair of the firmware version format and result code.

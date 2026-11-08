@@ -56,11 +56,17 @@
                     android:src="@drawable/sakura_flower" />
 
                 <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/about_wordmark"
                     style="@style/TextAppearance.Material3.TitleMedium"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:fontFamily="@font/sakura_display"
+                    android:includeFontPadding="false"
+                    android:letterSpacing="0.02"
                     android:text="@string/app_name"
-                    android:textAlignment="center" />
+                    android:textAlignment="center"
+                    android:textScaleX="1.15"
+                    android:textSize="26sp" />
 
                 <com.google.android.material.textview.MaterialTextView
                     style="@style/SynthwaveText.Body"
@@ -197,26 +203,11 @@
                 android:layout_marginHorizontal="40dp">
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/button_github"
-                    style="@style/SuyuButton.Secondary"
-                    android:layout_width="0dp"
-                    android:layout_height="56dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="8dp"
-                    app:icon="@drawable/ic_github"
-                    app:iconSize="24dp"
-                    app:iconGravity="textStart"
-                    app:iconPadding="0dp"
-                    app:strokeColor="?attr/colorOutline"
-                    app:strokeWidth="0dp" />
-
-                <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_reddit"
                     style="@style/SuyuButton.Secondary"
                     android:layout_width="0dp"
                     android:layout_height="56dp"
                     android:layout_weight="1"
-                    android:layout_marginStart="8dp"
                     app:icon="@drawable/ic_website"
                     app:iconSize="24dp"
                     app:iconGravity="textStart"
@@ -225,6 +216,77 @@
                     app:strokeWidth="0dp" />
 
             </LinearLayout>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/neotron_link"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="16dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="@android:color/transparent"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeColor="?attr/colorOutline"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="14dp">
+
+                    <ImageView
+                        android:id="@+id/neotron_icon"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:alpha="0.85"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_m3_sports_esports"
+                        app:tint="?attr/colorPrimary" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="14dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/neotron_title"
+                            style="@style/TextAppearance.Material3.TitleSmall"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/neotron_credit_title" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            style="@style/TextAppearance.Material3.BodySmall"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:alpha="0.7"
+                            android:text="@string/neotron_credit" />
+
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/neotron_chevron"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_marginStart="8dp"
+                        android:alpha="0.45"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_m3_chevron_right"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
 

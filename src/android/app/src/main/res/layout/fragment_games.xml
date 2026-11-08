@@ -5,8 +5,33 @@
     android:id="@+id/games_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorSurface"
+    android:background="@color/suyu_surface"
     android:clipChildren="false">
+
+    <!-- Optional user background: sits behind every other child, blurred and dimmed by
+         LibraryBackgroundApplier when a picture is selected. -->
+    <ImageView
+        android:id="@+id/library_background"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <View
+        android:id="@+id/library_background_scrim"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Brand row: logo, wordmark, and the two primary actions. -->
     <LinearLayout
@@ -22,6 +47,7 @@
         app:layout_constraintTop_toTopOf="parent">
 
         <FrameLayout
+            android:id="@+id/brand_mark"
             android:layout_width="42dp"
             android:layout_height="42dp"
             android:background="@drawable/sakura_icon_tile">
@@ -31,7 +57,8 @@
                 android:layout_height="26dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/sakura_flower" />
+                android:src="@drawable/sakura_flower"
+                app:tint="?attr/colorOnPrimaryContainer" />
         </FrameLayout>
 
         <LinearLayout
@@ -41,16 +68,19 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/brand_wordmark_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="@font/google_sans_semibold"
+                android:fontFamily="@font/sakura_display"
                 android:includeFontPadding="false"
-                android:letterSpacing="0"
+                android:letterSpacing="0.02"
                 android:text="@string/app_name"
                 android:textColor="?attr/colorOnSurface"
+                android:textScaleX="1.15"
                 android:textSize="20sp" />
 
             <TextView
+                android:id="@+id/brand_tagline_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
@@ -69,20 +99,13 @@
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/view_button"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:clickable="true"
-            android:contentDescription="@string/home_change_view"
-            android:focusable="true"
-            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
-            app:cardCornerRadius="22dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="0dp">
+            style="@style/Widget.Suyu.IconButton"
+            android:contentDescription="@string/home_change_view">
 
             <ImageView
                 android:id="@+id/view_icon"
-                android:layout_width="21dp"
-                android:layout_height="21dp"
+                android:layout_width="@dimen/m3_icon_size"
+                android:layout_height="@dimen/m3_icon_size"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_m3_grid_view"
@@ -107,12 +130,10 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="@font/google_sans_semibold"
             android:includeFontPadding="false"
-            android:letterSpacing="-0.01"
             android:text="@string/home_library"
-            android:textColor="?attr/colorOnSurface"
-            android:textSize="30sp" />
+            android:textAppearance="?attr/textAppearanceHeadlineLarge"
+            android:textColor="?attr/colorOnSurface" />
 
         <TextView
             android:id="@+id/library_count"
@@ -127,7 +148,7 @@
             android:paddingTop="5dp"
             android:paddingEnd="10dp"
             android:paddingBottom="5dp"
-            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textColor="?attr/colorOnSecondaryContainer"
             android:textSize="12sp"
             tools:text="12 games" />
     </LinearLayout>
@@ -146,7 +167,7 @@
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/search_background"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="@dimen/m3_search_height"
             android:clickable="true"
             android:focusable="true"
             app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
@@ -158,8 +179,8 @@
                 android:id="@+id/search_container"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_marginStart="18dp"
-                android:layout_marginEnd="44dp"
+                android:layout_marginStart="@dimen/spacing_large"
+                android:layout_marginEnd="@dimen/m3_search_height"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -189,15 +210,15 @@
                     android:singleLine="true"
                     android:textColor="?attr/colorOnSurface"
                     android:textColorHint="?attr/colorOnSurfaceVariant"
-                    android:textSize="15sp" />
+                    android:textAppearance="?attr/textAppearanceBodyLarge" />
             </LinearLayout>
 
             <FrameLayout
                 android:id="@+id/clear_button"
-                android:layout_width="44dp"
+                android:layout_width="@dimen/m3_touch_target_size"
                 android:layout_height="match_parent"
                 android:layout_gravity="center_vertical|end"
-                android:layout_marginEnd="6dp"
+                android:layout_marginEnd="@dimen/spacing_small"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:contentDescription="@string/home_clear_search"
@@ -240,60 +261,32 @@
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/filter_all"
-                style="@style/Widget.Material3.Chip.Filter"
+                style="@style/SuyuFilterChip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="@string/home_filter_all"
-                android:textColor="@color/suyu_chip_text"
-                app:checkedIcon="@drawable/ic_m3_check"
-                app:checkedIconTint="?attr/colorOnSecondaryContainer"
-                app:checkedIconVisible="true"
-                app:chipBackgroundColor="@color/suyu_chip_background"
-                app:chipCornerRadius="20dp"
-                app:chipStrokeWidth="0dp" />
+                android:text="@string/home_filter_all" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/filter_alphabetical"
-                style="@style/Widget.Material3.Chip.Filter"
+                style="@style/SuyuFilterChip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/home_filter_az"
-                android:textColor="@color/suyu_chip_text"
-                app:checkedIcon="@drawable/ic_m3_check"
-                app:checkedIconTint="?attr/colorOnSecondaryContainer"
-                app:checkedIconVisible="true"
-                app:chipBackgroundColor="@color/suyu_chip_background"
-                app:chipCornerRadius="20dp"
-                app:chipStrokeWidth="0dp" />
+                android:text="@string/home_filter_az" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/filter_recent"
-                style="@style/Widget.Material3.Chip.Filter"
+                style="@style/SuyuFilterChip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/home_filter_recent"
-                android:textColor="@color/suyu_chip_text"
-                app:checkedIcon="@drawable/ic_m3_check"
-                app:checkedIconTint="?attr/colorOnSecondaryContainer"
-                app:checkedIconVisible="true"
-                app:chipBackgroundColor="@color/suyu_chip_background"
-                app:chipCornerRadius="20dp"
-                app:chipStrokeWidth="0dp" />
+                android:text="@string/home_filter_recent" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/filter_new"
-                style="@style/Widget.Material3.Chip.Filter"
+                style="@style/SuyuFilterChip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/home_filter_new"
-                android:textColor="@color/suyu_chip_text"
-                app:checkedIcon="@drawable/ic_m3_check"
-                app:checkedIconTint="?attr/colorOnSecondaryContainer"
-                app:checkedIconVisible="true"
-                app:chipBackgroundColor="@color/suyu_chip_background"
-                app:chipCornerRadius="20dp"
-                app:chipStrokeWidth="0dp" />
+                android:text="@string/home_filter_new" />
         </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>
 
@@ -321,7 +314,7 @@
                 android:paddingStart="32dp"
                 android:paddingTop="16dp"
                 android:paddingEnd="32dp"
-                android:paddingBottom="96dp"
+                android:paddingBottom="32dp"
                 android:visibility="gone">
 
                 <FrameLayout
@@ -367,17 +360,11 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_empty_add"
-                    style="@style/Widget.Material3.Button"
+                    style="@style/SuyuButton.Primary"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
-                    android:fontFamily="@font/google_sans_medium"
-                    android:letterSpacing="0.01"
-                    android:minHeight="48dp"
                     android:text="@string/choose_game_folder"
-                    android:textAllCaps="false"
-                    android:textSize="14sp"
-                    app:cornerRadius="24dp"
                     app:icon="@drawable/ic_m3_create_new_folder"
                     app:iconPadding="10dp" />
             </LinearLayout>
@@ -390,7 +377,7 @@
                 android:fadeScrollbars="true"
                 android:paddingHorizontal="10dp"
                 android:paddingTop="2dp"
-                android:paddingBottom="96dp"
+                android:paddingBottom="24dp"
                 android:scrollbarStyle="outsideOverlay"
                 android:scrollbars="vertical" />
         </RelativeLayout>
@@ -414,8 +401,6 @@
         app:maxImageSize="24dp"
         app:tint="?attr/colorOnPrimaryContainer" />
 
-    <!-- Persistent destinations. QLaunch is shown only when it is available. -->
-    <!-- Floating pill destination bar with an animated M3 active indicator. -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/nav_bar"
         android:layout_width="0dp"
@@ -427,6 +412,8 @@
         android:elevation="6dp"
         android:fitsSystemWindows="false"
         app:itemActiveIndicatorStyle="@style/Widget.Suyu.NavActiveIndicator"
+        app:itemTextAppearanceActive="?attr/textAppearanceLabelLarge"
+        app:itemTextAppearanceInactive="?attr/textAppearanceLabelMedium"
         app:labelVisibilityMode="labeled"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

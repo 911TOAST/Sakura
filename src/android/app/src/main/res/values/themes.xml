@@ -3,8 +3,17 @@
 
     <style name="Theme.Yuzu.Splash.Main" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/suyu_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/sakura_flower</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/sakura_splash</item>
+        <item name="windowSplashScreenAnimationDuration">760</item>
         <item name="postSplashScreenTheme">@style/Theme.Yuzu.Main</item>
+    </style>
+
+    <!-- Black backgrounds live in values-night, but ThemeHelper applies this overlay before the
+         activity configuration is rebuilt. Keeping a light-mode copy means the lookup can never
+         fail with Resources.NotFoundException and take the activity down with it. -->
+    <style name="ThemeOverlay.Yuzu.Dark" parent="">
+        <item name="colorSurface">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
     </style>
 
     <style name="Theme.Yuzu.Main" parent="Theme.Material3.DayNight.NoActionBar">
@@ -53,6 +62,13 @@
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Suyu.Small</item>
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Suyu.Medium</item>
         <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Suyu.Large</item>
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Suyu.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Suyu.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Suyu.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Suyu.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Suyu.ExtraLarge</item>
+        <item name="materialButtonStyle">@style/SuyuButton.Primary</item>
+        <item name="materialButtonOutlinedStyle">@style/SuyuButton.Secondary</item>
         <item name="textAppearanceDisplayLarge">@style/TextAppearance.Suyu.DisplayLarge</item>
         <item name="textAppearanceDisplayMedium">@style/TextAppearance.Suyu.DisplayMedium</item>
         <item name="textAppearanceDisplaySmall">@style/TextAppearance.Suyu.DisplaySmall</item>
@@ -136,6 +152,13 @@
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Suyu.Small</item>
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Suyu.Medium</item>
         <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Suyu.Large</item>
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Suyu.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Suyu.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Suyu.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Suyu.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Suyu.ExtraLarge</item>
+        <item name="materialButtonStyle">@style/SuyuButton.Primary</item>
+        <item name="materialButtonOutlinedStyle">@style/SuyuButton.Secondary</item>
         <item name="textAppearanceDisplayLarge">@style/TextAppearance.Suyu.DisplayLarge</item>
         <item name="textAppearanceDisplayMedium">@style/TextAppearance.Suyu.DisplayMedium</item>
         <item name="textAppearanceDisplaySmall">@style/TextAppearance.Suyu.DisplaySmall</item>

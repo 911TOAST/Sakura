@@ -192,10 +192,11 @@ void Swapchain::Create(
     resource_ticks.resize(image_count);
 }
 
-bool Swapchain::AcquireNextImage() {
+bool Swapchain::AcquireNextImage(bool wait_previous_work) {
+    const VkSemaphore acquire_semaphore{*present_semaphores[frame_index]};
     const VkResult result = device.GetLogical().AcquireNextImageKHR(
-        *swapchain, (std::numeric_limits<u64>::max)(), *present_semaphores[frame_index],
-        VK_NULL_HANDLE, &image_index);
+        *swapchain, (std::numeric_limits<u64>::max)(), acquire_semaphore, VK_NULL_HANDLE,
+        &image_index);
     switch (result) {
     case VK_SUCCESS:
         break;
@@ -213,37 +214,57 @@ bool Swapchain::AcquireNextImage() {
         break;
     }
 
-    const auto wait_with_frame_pacing = [this] {
-    switch (Settings::values.frame_pacing_mode.GetValue()) {
-    case Settings::FramePacingMode::Target_Auto:
-        scheduler.Wait(resource_ticks[image_index]);
-        break;
-    case Settings::FramePacingMode::Target_30:
-        scheduler.Wait(resource_ticks[image_index], 30.0);
-        break;
-    case Settings::FramePacingMode::Target_60:
-        scheduler.Wait(resource_ticks[image_index], 60.0);
-        break;
-    case Settings::FramePacingMode::Target_90:
-        scheduler.Wait(resource_ticks[image_index], 90.0);
-        break;
-    case Settings::FramePacingMode::Target_120:
-        scheduler.Wait(resource_ticks[image_index], 120.0);
-        break;
-    }
+    const auto wait_with_frame_pacing = [this](u64 tick) {
+        switch (Settings::values.frame_pacing_mode.GetValue()) {
+        case Settings::FramePacingMode::Target_Auto:
+            scheduler.Wait(tick);
+            break;
+        case Settings::FramePacingMode::Target_30:
+            scheduler.Wait(tick, 30.0);
+            break;
+        case Settings::FramePacingMode::Target_60:
+            scheduler.Wait(tick, 60.0);
+            break;
+        case Settings::FramePacingMode::Target_90:
+            scheduler.Wait(tick, 90.0);
+            break;
+        case Settings::FramePacingMode::Target_120:
+            scheduler.Wait(tick, 120.0);
+            break;
+        }
     };
 
     // Target_Auto is a plain tick wait, i.e. exactly what the removed Android API>=30 bypass
     // hardcoded, so default behaviour is unchanged; the explicit 30/60/90/120 targets give the
     // user a working frame-rate cap, which on a 120 Hz panel is the main GPU-load lever.
-    wait_with_frame_pacing();
+    //
+    // The tick itself is only needed when the caller cannot prove the image is idle. In the
+    // zero-copy path the image is only handed back by the presentation engine after the GPU
+    // finished the frame that rendered into it, so waiting on the timeline again duplicated a
+    // guarantee the acquire already made and stalled the render thread for up to a full frame.
+    // Passing 0 keeps the pacing sleep (which lives in Scheduler::Wait) and skips just the wait.
+    const u64 previous_tick = wait_previous_work ? resource_ticks[image_index] : 0;
+    wait_with_frame_pacing(previous_tick);
 
     resource_ticks[image_index] = scheduler.CurrentTick();
+
+    // The render submission waits on the semaphore this acquire used. Latch it here and only
+    // then advance the slot: presentation may run on its own thread and must never have to read
+    // this index, and the render thread is free to acquire the next image right away.
+    acquired_present_semaphore = acquire_semaphore;
+    ++frame_index;
+    if (frame_index >= present_semaphores.size()) {
+        frame_index = 0;
+    }
 
     return is_suboptimal || is_outdated;
 }
 
 void Swapchain::Present(VkSemaphore render_semaphore) {
+    Present(render_semaphore, image_index);
+}
+
+void Swapchain::Present(VkSemaphore render_semaphore, u32 presented_image) {
     const auto present_queue{device.GetPresentQueue()};
     const VkPresentInfoKHR present_info{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -252,7 +273,7 @@ void Swapchain::Present(VkSemaphore render_semaphore) {
         .pWaitSemaphores = &render_semaphore,
         .swapchainCount = 1,
         .pSwapchains = swapchain.address(),
-        .pImageIndices = &image_index,
+        .pImageIndices = &presented_image,
         .pResults = nullptr,
     };
     std::scoped_lock lock{scheduler.submit_mutex};
@@ -271,10 +292,6 @@ void Swapchain::Present(VkSemaphore render_semaphore) {
     default:
         LOG_CRITICAL(Render_Vulkan, "Failed to present with error {}", string_VkResult(result));
         break;
-    }
-    ++frame_index;
-    if (frame_index >= image_count) {
-        frame_index = 0;
     }
 }
 
@@ -415,7 +432,9 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
 }
 
 void Swapchain::CreateSemaphores() {
-    present_semaphores.resize(image_count);
+    // Acquire semaphores are cycled by the render thread and can stay in flight for a frame or
+    // two while a queued present waits for its signal, so keep two per swapchain image.
+    present_semaphores.resize((std::max)(image_count * 2, std::size_t{2}));
     std::ranges::generate(present_semaphores,
                           [this] { return device.GetLogical().CreateSemaphore(); });
     render_semaphores.resize(image_count);
@@ -425,6 +444,7 @@ void Swapchain::CreateSemaphores() {
 
 void Swapchain::Destroy() {
     frame_index = 0;
+    acquired_present_semaphore = VK_NULL_HANDLE;
     present_semaphores.clear();
     render_semaphores.clear();
     swapchain.reset();

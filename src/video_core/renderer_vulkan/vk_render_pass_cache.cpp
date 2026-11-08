@@ -44,21 +44,27 @@ using VideoCore::Surface::SurfaceType;
         }
 
         VkAttachmentDescription AttachmentDescription(const Device& device, PixelFormat format,
-                                                      VkSampleCountFlagBits samples) {
+                                                      VkSampleCountFlagBits samples,
+                                                      bool clear_color, bool clear_depth,
+                                                      bool clear_stencil) {
             using MaxwellToVK::SurfaceFormat;
 
             const SurfaceType surface_type = GetSurfaceType(format);
             const bool has_stencil = surface_type == SurfaceType::DepthStencil ||
                                      surface_type == SurfaceType::Stencil;
+            const bool is_depth = surface_type == SurfaceType::Depth ||
+                                  surface_type == SurfaceType::DepthStencil;
+            const bool clear{is_depth ? clear_depth : clear_color};
 
             return {
                 .flags = {},
                 .format = SurfaceFormat(device, FormatType::Optimal, true, format).format,
                 .samples = samples,
-                .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+                .loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .stencilLoadOp = has_stencil ? VK_ATTACHMENT_LOAD_OP_LOAD
-                                                 : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilLoadOp = !has_stencil ? VK_ATTACHMENT_LOAD_OP_DONT_CARE
+                                              : (clear_stencil ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                                               : VK_ATTACHMENT_LOAD_OP_LOAD),
                 .stencilStoreOp = has_stencil ? VK_ATTACHMENT_STORE_OP_STORE
                                                   : VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
@@ -87,7 +93,9 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
             .layout = VK_IMAGE_LAYOUT_GENERAL,
         };
         if (is_valid) {
-            descriptions.push_back(AttachmentDescription(*device, format, key.samples));
+            descriptions.push_back(AttachmentDescription(*device, format, key.samples,
+                                                         key.color_clear, key.depth_clear,
+                                                         key.stencil_clear));
             num_attachments = static_cast<u32>(index + 1);
             ++num_colors;
         }
@@ -99,7 +107,9 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
             .attachment = num_colors,
             .layout = VK_IMAGE_LAYOUT_GENERAL,
         };
-        descriptions.push_back(AttachmentDescription(*device, key.depth_format, key.samples));
+        descriptions.push_back(AttachmentDescription(*device, key.depth_format, key.samples,
+                                                     key.color_clear, key.depth_clear,
+                                                     key.stencil_clear));
     }
     const VkSubpassDescription subpass{
         .flags = 0,

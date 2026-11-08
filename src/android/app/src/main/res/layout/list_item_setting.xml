@@ -49,18 +49,16 @@
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/text_setting_name"
-                style="@style/TextAppearance.Suyu.TitleMedium"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textAlignment="viewStart"
-                android:textSize="16sp"
                 android:textColor="?attr/colorOnSurface"
-                app:lineHeight="22dp"
                 tools:text="Setting Name" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/text_setting_description"
-                style="@style/TextAppearance.Suyu.BodySmall"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
@@ -70,18 +68,17 @@
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/text_setting_value"
-                style="@style/TextAppearance.Suyu.LabelMedium"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:textAlignment="viewStart"
                 android:textColor="?attr/colorPrimary"
-                android:textSize="13sp"
                 tools:text="1x" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_clear"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/SuyuButton.Tonal"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"

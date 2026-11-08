@@ -26,7 +26,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.navigation.findNavController
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.GridLayoutManager
-import com.google.android.material.transition.MaterialSharedAxis
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.yuzu.yuzu_emu.HomeNavigationDirections
 import org.yuzu.yuzu_emu.NativeLibrary
 import org.yuzu.yuzu_emu.R
@@ -34,8 +34,12 @@ import org.yuzu.yuzu_emu.YuzuApplication
 import org.yuzu.yuzu_emu.adapters.HomeSettingAdapter
 import org.yuzu.yuzu_emu.databinding.FragmentHomeSettingsBinding
 import org.yuzu.yuzu_emu.features.DocumentProvider
+import org.yuzu.yuzu_emu.features.dashboard.PerfDashboardActivity
+import org.yuzu.yuzu_emu.features.dashboard.showTweaksSheet
 import org.yuzu.yuzu_emu.features.fetcher.SpacingItemDecoration
 import org.yuzu.yuzu_emu.features.settings.model.Settings
+import org.yuzu.yuzu_emu.features.settings.model.IntSetting
+import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.ui.SettingsSubscreen
 import org.yuzu.yuzu_emu.model.DriverViewModel
 import org.yuzu.yuzu_emu.model.HomeSetting
@@ -44,7 +48,7 @@ import org.yuzu.yuzu_emu.ui.main.MainActivity
 import org.yuzu.yuzu_emu.utils.FileUtil
 import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.Log
-import org.yuzu.yuzu_emu.utils.SuyuMotion
+import org.yuzu.yuzu_emu.utils.NativeConfig
 
 class HomeSettingsFragment : Fragment() {
     private var _binding: FragmentHomeSettingsBinding? = null
@@ -52,13 +56,18 @@ class HomeSettingsFragment : Fragment() {
 
     private lateinit var mainActivity: MainActivity
 
+    private companion object {
+        // Enum ordinals from Common::Settings. Kept literal so the fragment does not depend on the
+        // generated settings bridge for values that never change.
+        const val RESOLUTION_0_5X = 1   // ResolutionSetup::Res1_2X
+        const val RESOLUTION_0_75X = 2  // ResolutionSetup::Res3_4X
+        const val SCALING_BILINEAR = 1  // ScalingFilter::Bilinear
+        const val ANTI_ALIASING_NONE = 0 // AntiAliasing::None
+        const val ANISOTROPY_DEFAULT = 0 // AnisotropyMode::Default
+    }
+
     private val homeViewModel: HomeViewModel by activityViewModels()
     private val driverViewModel: DriverViewModel by activityViewModels()
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        reenterTransition = MaterialSharedAxis(MaterialSharedAxis.X, false)
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -85,6 +94,59 @@ class HomeSettingsFragment : Fragment() {
         }
 
         val optionsList: MutableList<HomeSetting> = mutableListOf<HomeSetting>().apply {
+            // One tap to the biggest frame-rate lever on Mali: fewer shaded pixels.
+            add(
+                HomeSetting(
+                    R.string.performance_preset_title,
+                    R.string.performance_preset_description,
+                    R.drawable.ic_m3_speed,
+                    { showPerformancePresetDialog() }
+                )
+            )
+            // Library appearance: artwork first, titles optional, picture optional.
+            add(
+                HomeSetting(
+                    R.string.library_hide_titles,
+                    R.string.library_hide_titles_description,
+                    R.drawable.ic_m3_view_agenda,
+                    { toggleGameTitles() }
+                )
+            )
+            add(
+                HomeSetting(
+                    R.string.wallpapers_title,
+                    R.string.wallpapers_description,
+                    R.drawable.ic_m3_folder_open,
+                    {
+                        val action = HomeNavigationDirections.actionGlobalSettingsSubscreenActivity(
+                            SettingsSubscreen.WALLPAPERS,
+                            null
+                        )
+                        binding.root.findNavController().navigate(action)
+                    }
+                )
+            )
+            // Live performance tooling used to be reachable only from the in-game menu.
+            add(
+                HomeSetting(
+                    R.string.dashboard_title,
+                    R.string.dashboard_description,
+                    R.drawable.ic_m3_dashboard,
+                    {
+                        startActivity(
+                            Intent(requireContext(), PerfDashboardActivity::class.java)
+                        )
+                    }
+                )
+            )
+            add(
+                HomeSetting(
+                    R.string.tweaks_title,
+                    R.string.tweaks_description,
+                    R.drawable.ic_m3_speed,
+                    { showTweaksSheet(mainActivity) }
+                )
+            )
             add(
                 HomeSetting(
                     R.string.advanced_settings,
@@ -330,35 +392,55 @@ class HomeSettingsFragment : Fragment() {
         }
 
         setInsets()
-        animateHeaderEntrance()
-    }
-
-    /**
-     * Expressive hub entrance: the header rises on the emphasized curve while
-     * the option rows stagger in through the adapter.
-     */
-    private fun animateHeaderEntrance() {
-        val context = requireContext()
-        val header = binding.homeSettingsHeader
-        header.animate().cancel()
-        header.alpha = 0f
-        header.translationY = resources.getDimensionPixelSize(R.dimen.spacing_large).toFloat()
-        header.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .setDuration(SuyuMotion.durationLong2(context))
-            .setInterpolator(SuyuMotion.emphasizedDecelerate(context))
-            .start()
-    }
-
-    override fun onStart() {
-        super.onStart()
-        exitTransition = null
     }
 
     override fun onResume() {
         super.onResume()
         driverViewModel.updateDriverNameForGame(null)
+    }
+
+    private fun toggleGameTitles() {
+        val hideTitles = !BooleanSetting.HIDE_GAME_TITLES.getBoolean()
+        BooleanSetting.HIDE_GAME_TITLES.setBoolean(hideTitles)
+        NativeConfig.saveGlobalConfig()
+        Toast.makeText(
+            requireContext(),
+            if (hideTitles) R.string.library_titles_hidden else R.string.library_titles_shown,
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    private fun showPerformancePresetDialog() {
+        val choices = arrayOf(
+            getString(R.string.performance_preset_max),
+            getString(R.string.performance_preset_balanced)
+        )
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.performance_preset_title)
+            .setItems(choices) { _, which -> applyPerformancePreset(maximum = which == 0) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * Fill rate is the dominant GPU cost on Mali, so the preset trades internal resolution for
+     * frames and drops everything that shades or resamples extra pixels. Values mirror
+     * Settings::ResolutionSetup / ScalingFilter / AntiAliasing.
+     */
+    private fun applyPerformancePreset(maximum: Boolean) {
+        IntSetting.RENDERER_RESOLUTION.setInt(
+            if (maximum) RESOLUTION_0_5X else RESOLUTION_0_75X
+        )
+        IntSetting.RENDERER_SCALING_FILTER.setInt(SCALING_BILINEAR)
+        IntSetting.RENDERER_ANTI_ALIASING.setInt(ANTI_ALIASING_NONE)
+        IntSetting.MAX_ANISOTROPY.setInt(ANISOTROPY_DEFAULT)
+        NativeConfig.saveGlobalConfig()
+
+        Toast.makeText(
+            requireContext(),
+            R.string.performance_preset_applied,
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     override fun onDestroyView() {

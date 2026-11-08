@@ -44,6 +44,9 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QWidget* parent) {
     INSERT(Settings, login_share_applet_mode, tr("Login share"), QStringLiteral());
     INSERT(Settings, wifi_web_auth_applet_mode, tr("Wifi web auth"), QStringLiteral());
     INSERT(Settings, my_page_applet_mode, tr("My page"), QStringLiteral());
+    INSERT(Settings, hle_performance_preset, tr("HLE performance preset"),
+           tr("Forces every library applet onto the HLE frontends and every known macro program "
+              "onto its HLE implementation."));
 
     // Audio
     INSERT(Settings, sink_id, tr("Output Engine:"), QStringLiteral());

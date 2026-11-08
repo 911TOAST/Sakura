@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import org.yuzu.yuzu_emu.utils.FreedrenoPreset
 import org.yuzu.yuzu_emu.databinding.ListItemFreedrenoPresetBinding
+import org.yuzu.yuzu_emu.viewholder.revealItemOnce
 
 /**
  * Adapter for displaying Freedreno preset configurations in a horizontal list.
@@ -30,6 +31,7 @@ class FreedrenoPresetAdapter(
 
     override fun onBindViewHolder(holder: PresetViewHolder, position: Int) {
         holder.bind(getItem(position))
+        revealItemOnce(holder.itemView, position)
     }
 
     inner class PresetViewHolder(private val binding: ListItemFreedrenoPresetBinding) :

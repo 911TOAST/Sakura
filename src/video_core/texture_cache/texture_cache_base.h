@@ -199,6 +199,10 @@ public:
     /// UpdateRenderTargets should be called before this
     Framebuffer* GetFramebuffer();
 
+    /// Drop every cached rescaling copy so the render targets are allocated again at the internal
+    /// resolution that is selected right now. The caller is responsible for idling the device.
+    void InvalidateRescaledImages();
+
     /// Mark images in a range as modified from the CPU
     void WriteMemory(DAddr cpu_addr, size_t size);
 

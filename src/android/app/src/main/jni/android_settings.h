@@ -186,6 +186,16 @@ namespace AndroidSettings {
                                               true,
                                               false};
 
+        // How many draws RasterizerVulkan::FlushWork records before it submits the command chunk.
+        // Fewer submissions mean less driver and queue overhead, but the worker sees the work later
+        // and one batch costs more memory. Read every flush, so it applies immediately and can be
+        // tuned per game. Only used in Malikan mode.
+        Settings::Setting<s32> draw_batch_size{linkage, 8192, "draw_batch_size",
+                                               Settings::Category::Android,
+                                               Settings::Specialization::Default,
+                                               true,
+                                               true};
+
 
         Settings::Setting<bool> show_input_overlay{linkage, true, "show_input_overlay",
                                                    Settings::Category::Overlay};

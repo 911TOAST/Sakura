@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="?attr/colorSurface">
+    <com.google.android.material.appbar.MaterialToolbar android:id="@+id/wallpaper_toolbar"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp"
+        app:title="@string/wallpapers_title" app:navigationIcon="@drawable/ic_perf_arrow_back"
+        app:navigationContentDescription="@string/back" />
+    <androidx.core.widget.NestedScrollView android:id="@+id/wallpaper_hub_scroll"
+        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:fillViewport="true" android:clipToPadding="false">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:padding="16dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/wallpaper_current" android:textAppearance="?attr/textAppearanceHeadlineMedium"
+                android:textColor="?attr/colorOnSurface" android:accessibilityHeading="true" />
+            <FrameLayout android:id="@+id/wallpaper_preview_container"
+                android:layout_width="match_parent" android:layout_height="280dp" android:layout_marginVertical="16dp"
+                android:background="?attr/colorSurfaceContainerLow">
+                <include android:id="@+id/wallpaper_preview_card" layout="@layout/wallpaper_preview"
+                    android:layout_width="match_parent" android:layout_height="match_parent" android:layout_gravity="center" />
+            </FrameLayout>
+            <com.google.android.material.button.MaterialButton android:id="@+id/wallpaper_edit"
+                style="@style/SuyuButton.Tonal" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/wallpaper_edit" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/wallpaper_search"
+                style="@style/SuyuButton.Primary" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/wallpaper_search" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/wallpaper_choose"
+                style="@style/SuyuButton.Secondary" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/wallpaper_choose" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/wallpaper_restore"
+                style="@style/SuyuButton.Tonal" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/wallpaper_restore" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginVertical="16dp" android:text="@string/wallpaper_discovery_note"
+                android:textAppearance="?attr/textAppearanceBodyMedium" android:textColor="?attr/colorOnSurfaceVariant" />
+            <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/wallpaper_personalized"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
+                android:text="@string/wallpaper_personalized" android:textAppearance="?attr/textAppearanceTitleMedium" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/wallpaper_privacy" android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" android:layout_marginBottom="16dp" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/wallpaper_refresh"
+                style="@style/SuyuButton.Tonal" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/wallpaper_refresh" />
+            <TextView android:id="@+id/wallpaper_recommendation_status"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingVertical="16dp"
+                android:textAppearance="?attr/textAppearanceBodyMedium" android:accessibilityLiveRegion="polite"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+            <LinearLayout android:id="@+id/wallpaper_recommendation_groups"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="24dp" android:text="@string/wallpaper_popular"
+                android:textAppearance="?attr/textAppearanceHeadlineSmall" android:accessibilityHeading="true"
+                android:textColor="?attr/colorOnSurface" />
+            <TextView android:id="@+id/wallpaper_popular_status"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingVertical="16dp"
+                android:textAppearance="?attr/textAppearanceBodyMedium" android:accessibilityLiveRegion="polite"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/wallpaper_popular_grid"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

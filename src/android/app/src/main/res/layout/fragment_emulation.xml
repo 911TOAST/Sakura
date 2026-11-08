@@ -28,83 +28,92 @@
                 android:focusableInTouchMode="false"
                 android:defaultFocusHighlightEnabled="false" />
 
+            <!-- Boot surface: one grouped tonal card (cover, title, state, wavy track) instead of
+                 a stack of floating elements. It springs in when the game is launched. -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/loading_indicator"
-                style="?attr/materialCardViewOutlinedStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:focusable="false"
-                android:defaultFocusHighlightEnabled="false"
                 android:clickable="false"
-                app:rippleColor="@android:color/transparent">
+                android:defaultFocusHighlightEnabled="false"
+                android:focusable="false"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+                app:cardCornerRadius="32dp"
+                app:cardElevation="0dp"
+                app:rippleColor="@android:color/transparent"
+                app:strokeWidth="0dp">
 
-                <androidx.constraintlayout.widget.ConstraintLayout
+                <LinearLayout
                     android:id="@+id/loading_layout"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:gravity="center_horizontal">
+                    android:gravity="center_horizontal"
+                    android:minWidth="264dp"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="24dp"
+                    android:paddingVertical="28dp">
 
-                    <ImageView
+                    <com.google.android.material.imageview.ShapeableImageView
                         android:id="@+id/loading_image"
-                        android:layout_width="wrap_content"
-                        android:layout_height="0dp"
-                        android:adjustViewBounds="true"
-                        app:layout_constraintBottom_toBottomOf="@+id/linearLayout"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="@+id/linearLayout"
+                        android:layout_width="96dp"
+                        android:layout_height="96dp"
+                        android:contentDescription="@null"
+                        android:scaleType="centerCrop"
+                        app:shapeAppearanceOverlay="@style/ShapeAppearance.Suyu.LoadingArtwork"
                         tools:src="@drawable/default_icon" />
 
-                    <LinearLayout
-                        android:id="@+id/linearLayout"
+                    <!-- Main takeaway: the game you just launched, largest element on the card. -->
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/loading_title"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingHorizontal="24dp"
-                        android:paddingVertical="36dp"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toEndOf="@id/loading_image"
-                        app:layout_constraintTop_toTopOf="parent">
+                        android:layout_marginTop="18dp"
+                        android:ellipsize="end"
+                        android:fontFamily="@font/google_sans_semibold"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:letterSpacing="-0.01"
+                        android:maxLines="1"
+                        android:maxWidth="248dp"
+                        android:textAlignment="center"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textSize="20sp"
+                        tools:text="@string/games" />
 
-                        <com.google.android.material.textview.MaterialTextView
-                            android:id="@+id/loading_title"
-                            style="@style/TextAppearance.Material3.TitleMedium"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:ellipsize="marquee"
-                            android:marqueeRepeatLimit="marquee_forever"
-                            android:requiresFadingEdge="horizontal"
-                            android:singleLine="true"
-                            android:textAlignment="viewStart"
-                            tools:text="@string/games" />
+                    <!-- Live boot state (shader progress, shutting down) in accent colour. -->
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/loading_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:ellipsize="end"
+                        android:fontFamily="@font/google_sans_medium"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:letterSpacing="0.02"
+                        android:maxLines="1"
+                        android:maxWidth="248dp"
+                        android:text="@string/loading"
+                        android:textAlignment="center"
+                        android:textColor="?attr/colorPrimary"
+                        android:textSize="13sp" />
 
-                        <com.google.android.material.textview.MaterialTextView
-                            android:id="@+id/loading_text"
-                            style="@style/TextAppearance.Material3.TitleSmall"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:ellipsize="marquee"
-                            android:marqueeRepeatLimit="marquee_forever"
-                            android:requiresFadingEdge="horizontal"
-                            android:singleLine="true"
-                            android:text="@string/loading"
-                            android:textAlignment="viewStart" />
+                    <!-- M3 Expressive wavy loader: track height is configurable per surface. -->
+                    <org.yuzu.yuzu_emu.views.WavyProgressIndicator
+                        android:id="@+id/loading_progress_indicator"
+                        android:layout_width="208dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="18dp"
+                        android:contentDescription="@string/loading"
+                        app:wavyIndeterminate="true"
+                        app:wavyIndicatorColor="?attr/colorPrimary"
+                        app:wavyTrackColor="?attr/colorSurfaceContainerHighest"
+                        app:wavyTrackThickness="8dp"
+                        app:wavyWaveAmplitude="4dp"
+                        app:wavyWaveLength="34dp" />
 
-                        <com.google.android.material.progressindicator.LinearProgressIndicator
-                            android:id="@+id/loading_progress_indicator"
-                            android:layout_width="192dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:indeterminate="true"
-                            android:contentDescription="@string/loading"
-                            app:trackThickness="6dp"
-                            app:trackCornerRadius="8dp" />
-
-                    </LinearLayout>
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
+                </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>
 
@@ -198,6 +207,18 @@
 
         </FrameLayout>
 
+        <!-- Blurred snapshot of the game, shown behind the translucent drawers -->
+        <ImageView
+            android:id="@+id/frosted_backdrop"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:contentDescription="@null"
+            android:focusable="false"
+            android:importantForAccessibility="no"
+            android:scaleType="fitCenter"
+            android:visibility="gone" />
+
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
     <com.google.android.material.navigation.NavigationView
@@ -206,7 +227,6 @@
         android:layout_height="match_parent"
         android:layout_gravity="end"
         android:focusedByDefault="true"
-        android:background="?attr/colorSurface"
         tools:visibility="gone">
 
         <include layout="@layout/layout_quick_settings" />
@@ -221,7 +241,6 @@
     android:focusedByDefault="true"
     app:headerLayout="@layout/header_in_game"
     app:menu="@menu/menu_in_game"
-    android:background="?attr/colorSurface"
     tools:visibility="gone" />
 
 </androidx.drawerlayout.widget.DrawerLayout>

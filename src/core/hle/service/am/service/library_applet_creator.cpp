@@ -5,6 +5,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/settings.h"
+#include "core/core.h"
+#include "core/file_sys/content_archive.h"
+#include "core/file_sys/registered_cache.h"
 #include "core/hle/kernel/k_transfer_memory.h"
 #include "core/hle/service/am/applet_data_broker.h"
 #include "core/hle/service/am/applet_manager.h"
@@ -16,13 +19,37 @@
 #include "core/hle/service/am/service/storage.h"
 #include "core/hle/service/am/window_system.h"
 #include "core/hle/service/cmif_serialization.h"
+#include "core/hle/service/filesystem/filesystem.h"
 #include "core/hle/service/sm/sm.h"
 
 namespace Service::AM {
 
 namespace {
 
-bool ShouldCreateGuestApplet(AppletId applet_id) {
+AppletProgramId AppletIdToProgramId(AppletId applet_id);
+
+/// True when the guest applet program is actually installed in the system NAND. Without firmware
+/// (or without that specific applet) CreateProcess cannot succeed, so asking for it only burns a
+/// process creation, an NCA lookup and an error log before the HLE frontend applet is built anyway.
+bool AppletNcaExists(Core::System& system, AppletId applet_id) {
+    const auto program_id = static_cast<u64>(AppletIdToProgramId(applet_id));
+    if (program_id == 0) {
+        return false;
+    }
+    auto bis_system = system.GetFileSystemController().GetSystemNANDContents();
+    if (!bis_system) {
+        return false;
+    }
+    return bis_system->GetEntry(program_id, FileSys::ContentRecordType::Program) != nullptr;
+}
+
+bool ShouldCreateGuestApplet(Core::System& system, AppletId applet_id) {
+    // HLE performance preset: never boot a guest library applet. The frontend applet is created
+    // instead, which costs a host object rather than a full ARM process plus IPC round trips.
+    if (Settings::IsHlePerformancePresetEnabled()) {
+        return false;
+    }
+
 #define X(Name, name)                                                                              \
     if (applet_id == AppletId::Name &&                                                             \
         Settings::values.name##_applet_mode.GetValue() != Settings::AppletMode::LLE) {             \
@@ -47,6 +74,20 @@ bool ShouldCreateGuestApplet(AppletId applet_id) {
 
 #undef X
 
+    if (AppletNcaExists(system, applet_id)) {
+        return true;
+    }
+
+    // Missing system software. A guest launch here is guaranteed to fail, so with the fake-applet
+    // setting on we go straight to the HLE frontend (which falls back to a stub that reports
+    // Closed with empty output) and let the game continue instead of stalling on a dead applet.
+    if (Settings::values.fake_system_applets.GetValue()) {
+        LOG_INFO(Service_AM, "Faking missing library applet {:02X}: no program NCA installed",
+                 static_cast<u8>(applet_id));
+        return false;
+    }
+
+    // Setting off: keep the retail behaviour and let the guest launch fail.
     return true;
 }
 
@@ -193,7 +234,7 @@ Result ILibraryAppletCreator::CreateLibraryApplet(
               library_applet_mode);
 
     std::shared_ptr<ILibraryAppletAccessor> library_applet;
-    if (ShouldCreateGuestApplet(applet_id)) {
+    if (ShouldCreateGuestApplet(system, applet_id)) {
         library_applet =
             CreateGuestApplet(system, m_window_system, m_applet, applet_id, library_applet_mode);
     }
@@ -219,7 +260,7 @@ Result ILibraryAppletCreator::CreateLibraryAppletEx(
               library_applet_mode, thread_id);
 
     std::shared_ptr<ILibraryAppletAccessor> library_applet;
-    if (ShouldCreateGuestApplet(applet_id)) {
+    if (ShouldCreateGuestApplet(system, applet_id)) {
         library_applet =
             CreateGuestApplet(system, m_window_system, m_applet, applet_id, library_applet_mode);
     }

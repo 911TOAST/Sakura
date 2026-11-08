@@ -475,6 +475,25 @@ bool TextureCache<P>::RescaleRenderTargets() {
 }
 
 template <class P>
+void TextureCache<P>::InvalidateRescaledImages() {
+    // A rescaled copy is allocated for the factor that was selected when it was created, while
+    // render_targets.size is recomputed from the factor that is selected now. Reusing the two
+    // together is a framebuffer dimension mismatch, so every copy is released here and rebuilt
+    // lazily by the next ScaleUp(). InvalidateScale drops the views and framebuffers that still
+    // point at the released image.
+    for (auto it = slot_images.begin(); it != slot_images.end(); ++it) {
+        const auto& entry = *it;
+        Image& image = *entry.second;
+        if (!image.HasScaled()) {
+            continue;
+        }
+        total_used_memory -= GetScaledImageSizeBytes(image);
+        image.DropScaledCopy();
+        InvalidateScale(image);
+    }
+}
+
+template <class P>
 void TextureCache<P>::UpdateRenderTargets(bool is_clear) {
     using namespace VideoCommon::Dirty;
     auto& flags = maxwell3d->dirty.flags;

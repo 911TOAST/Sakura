@@ -261,7 +261,9 @@ object GameHelper {
 
         // If the game's ID field is empty, use the filename without extension.
         if (programId.isEmpty()) {
-            programId = name.substring(0, name.lastIndexOf("."))
+            // substringBeforeLast handles names with no dot; the old substring(0, -1) threw
+            // StringIndexOutOfBoundsException and aborted the whole library scan.
+            programId = name.substringBeforeLast('.')
         }
 
         val newGame = Game(

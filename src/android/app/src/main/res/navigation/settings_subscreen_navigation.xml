@@ -8,7 +8,8 @@
     <fragment
         android:id="@+id/profileManagerFragment"
         android:name="org.yuzu.yuzu_emu.fragments.ProfileManagerFragment"
-        android:label="ProfileManagerFragment">
+        android:label="ProfileManagerFragment"
+        >
         <action
             android:id="@+id/action_profileManagerFragment_to_newUserDialog"
             app:destination="@id/newUserDialogFragment" />
@@ -17,12 +18,14 @@
     <fragment
         android:id="@+id/newUserDialogFragment"
         android:name="org.yuzu.yuzu_emu.fragments.EditUserDialogFragment"
-        android:label="NewUserDialogFragment" />
+        android:label="NewUserDialogFragment"
+        />
 
     <fragment
         android:id="@+id/driverManagerFragment"
         android:name="org.yuzu.yuzu_emu.fragments.DriverManagerFragment"
-        android:label="DriverManagerFragment">
+        android:label="DriverManagerFragment"
+        >
         <argument
             android:name="game"
             app:argType="org.yuzu.yuzu_emu.model.Game"
@@ -34,12 +37,14 @@
         android:id="@+id/driverFetcherFragment"
         android:name="org.yuzu.yuzu_emu.fragments.DriverFetcherFragment"
         android:label="fragment_driver_fetcher"
-        tools:layout="@layout/fragment_driver_fetcher" />
+        tools:layout="@layout/fragment_driver_fetcher"
+        />
 
     <fragment
         android:id="@+id/freedrenoSettingsFragment"
         android:name="org.yuzu.yuzu_emu.fragments.FreedrenoSettingsFragment"
-        android:label="@string/freedreno_settings_title">
+        android:label="@string/freedreno_settings_title"
+        >
         <argument
             android:name="game"
             app:argType="org.yuzu.yuzu_emu.model.Game"
@@ -50,7 +55,8 @@
     <fragment
         android:id="@+id/appletLauncherFragment"
         android:name="org.yuzu.yuzu_emu.fragments.AppletLauncherFragment"
-        android:label="AppletLauncherFragment">
+        android:label="AppletLauncherFragment"
+        >
         <action
             android:id="@+id/action_appletLauncherFragment_to_cabinetLauncherDialogFragment"
             app:destination="@id/cabinetLauncherDialogFragment" />
@@ -64,17 +70,20 @@
     <fragment
         android:id="@+id/aboutFragment"
         android:name="org.yuzu.yuzu_emu.fragments.AboutFragment"
-        android:label="AboutFragment" />
+        android:label="AboutFragment"
+        />
 
     <fragment
         android:id="@+id/licensesFragment"
         android:name="org.yuzu.yuzu_emu.fragments.LicensesFragment"
-        android:label="LicensesFragment" />
+        android:label="LicensesFragment"
+        />
 
     <fragment
         android:id="@+id/gameInfoFragment"
         android:name="org.yuzu.yuzu_emu.fragments.GameInfoFragment"
-        android:label="GameInfoFragment">
+        android:label="GameInfoFragment"
+        >
         <argument
             android:name="game"
             app:argType="org.yuzu.yuzu_emu.model.Game" />
@@ -83,7 +92,8 @@
     <fragment
         android:id="@+id/addonsFragment"
         android:name="org.yuzu.yuzu_emu.fragments.AddonsFragment"
-        android:label="AddonsFragment">
+        android:label="AddonsFragment"
+        >
         <argument
             android:name="game"
             app:argType="org.yuzu.yuzu_emu.model.Game" />
@@ -92,12 +102,48 @@
     <fragment
         android:id="@+id/installableFragment"
         android:name="org.yuzu.yuzu_emu.fragments.InstallableFragment"
-        android:label="InstallableFragment" />
+        android:label="InstallableFragment"
+        />
+
+    <navigation
+        android:id="@+id/wallpaper_graph"
+        app:startDestination="@id/wallpaperHubFragment">
+
+        <fragment
+            android:id="@+id/wallpaperHubFragment"
+            android:name="org.yuzu.yuzu_emu.fragments.WallpaperHubFragment"
+            android:label="WallpaperHubFragment"
+            tools:layout="@layout/fragment_wallpaper_hub">
+            <action
+                android:id="@+id/action_wallpaperHubFragment_to_wallpaperSearchFragment"
+                app:destination="@id/wallpaperSearchFragment" />
+            <action
+                android:id="@+id/action_wallpaperHubFragment_to_wallpaperEditorFragment"
+                app:destination="@id/wallpaperEditorFragment" />
+        </fragment>
+
+        <fragment
+            android:id="@+id/wallpaperSearchFragment"
+            android:name="org.yuzu.yuzu_emu.fragments.WallpaperSearchFragment"
+            android:label="WallpaperSearchFragment"
+            tools:layout="@layout/fragment_wallpaper_search">
+            <action
+                android:id="@+id/action_wallpaperSearchFragment_to_wallpaperEditorFragment"
+                app:destination="@id/wallpaperEditorFragment" />
+        </fragment>
+
+        <fragment
+            android:id="@+id/wallpaperEditorFragment"
+            android:name="org.yuzu.yuzu_emu.fragments.WallpaperEditorFragment"
+            android:label="WallpaperEditorFragment"
+            tools:layout="@layout/fragment_wallpaper_editor" />
+    </navigation>
 
     <fragment
         android:id="@+id/gameFoldersFragment"
         android:name="org.yuzu.yuzu_emu.fragments.GameFoldersFragment"
-        android:label="GameFoldersFragment" />
+        android:label="GameFoldersFragment"
+        />
 
     <activity
         android:id="@+id/emulationActivity"

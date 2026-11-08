@@ -12,6 +12,7 @@
 
 #include "common/common_types.h"
 #include "video_core/buffer_cache/memory_tracker_base.h"
+#include "video_core/buffer_cache/usage_tracker.h"
 #include "core/device_memory.h"
 #include "core/memory.h"
 #include "video_core/host1x/gpu_device_memory_manager.h"
@@ -73,6 +74,73 @@ private:
 } // Anonymous namespace
 
 using MemoryTracker = VideoCommon::MemoryTrackerBase<RasterizerInterface>;
+
+TEST_CASE("UsageTracker: Empty ranges do not create dependencies", "[video_core]") {
+    VideoCommon::UsageTracker tracker(PAGE * 3);
+    tracker.Track(63, 0);
+    REQUIRE_FALSE(tracker.HasDirtyPages());
+    tracker.Track(0, PAGE);
+    REQUIRE_FALSE(tracker.IsUsed(63, 0));
+    tracker.Reset();
+    tracker.Reset();
+    REQUIRE_FALSE(tracker.HasDirtyPages());
+    REQUIRE_FALSE(tracker.IsUsed(0, PAGE * 3));
+}
+
+TEST_CASE("UsageTracker: Every single-byte access is tracked", "[video_core]") {
+    VideoCommon::UsageTracker tracker(PAGE * 2);
+    for (u64 offset = 0; offset < PAGE; ++offset) {
+        tracker.Track(offset, 1);
+        REQUIRE(tracker.IsUsed(offset, 1));
+        REQUIRE(tracker.IsUsed(offset & ~u64{63}, 64));
+        REQUIRE_FALSE(tracker.IsUsed((offset & ~u64{63}) + 64, 1));
+        tracker.Reset();
+        REQUIRE_FALSE(tracker.IsUsed(offset, 1));
+    }
+}
+
+TEST_CASE("UsageTracker: Unaligned ranges include both boundary blocks", "[video_core]") {
+    VideoCommon::UsageTracker tracker(PAGE * 2);
+    tracker.Track(63, 2);
+    REQUIRE(tracker.IsUsed(0, 1));
+    REQUIRE(tracker.IsUsed(64, 1));
+    REQUIRE_FALSE(tracker.IsUsed(128, 1));
+    tracker.Reset();
+    tracker.Track(PAGE - 1, 2);
+    REQUIRE(tracker.IsUsed(PAGE - 64, 64));
+    REQUIRE(tracker.IsUsed(PAGE, 64));
+    REQUIRE_FALSE(tracker.IsUsed(PAGE + 64, 1));
+}
+
+TEST_CASE("UsageTracker: Full pages do not spill into adjacent pages", "[video_core]") {
+    VideoCommon::UsageTracker tracker(PAGE * 3);
+    tracker.Track(PAGE, PAGE);
+    REQUIRE_FALSE(tracker.IsUsed(0, PAGE));
+    REQUIRE(tracker.IsUsed(PAGE, 1));
+    REQUIRE(tracker.IsUsed(PAGE * 2 - 1, 1));
+    REQUIRE_FALSE(tracker.IsUsed(PAGE * 2, PAGE));
+    tracker.Reset();
+    REQUIRE_FALSE(tracker.HasDirtyPages());
+    REQUIRE_FALSE(tracker.IsUsed(0, PAGE * 3));
+}
+
+TEST_CASE("UsageTracker: Block coverage matches rounded byte intervals", "[video_core]") {
+    VideoCommon::UsageTracker tracker(PAGE * 4);
+    for (const u64 offset : {u64{0}, u64{1}, u64{63}, u64{64}, PAGE - 1, PAGE + 31}) {
+        for (const u64 size : {u64{1}, u64{63}, u64{64}, u64{65}, PAGE, PAGE + 65}) {
+            tracker.Track(offset, size);
+            const u64 first_block = offset / 64;
+            const u64 last_block = (offset + size - 1) / 64;
+            for (u64 block = 0; block < PAGE * 4 / 64; ++block) {
+                const bool expected = block >= first_block && block <= last_block;
+                REQUIRE(tracker.IsUsed(block * 64, 64) == expected);
+            }
+            tracker.Reset();
+            REQUIRE_FALSE(tracker.HasDirtyPages());
+            REQUIRE_FALSE(tracker.IsUsed(0, PAGE * 4));
+        }
+    }
+}
 
 TEST_CASE("MemoryTracker: Small region", "[video_core]") {
     RasterizerInterface rasterizer;

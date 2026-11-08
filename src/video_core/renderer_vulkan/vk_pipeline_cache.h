@@ -9,6 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <span>
 #include <type_traits>
@@ -120,6 +121,13 @@ public:
 private:
     [[nodiscard]] GraphicsPipeline* CurrentGraphicsPipelineSlowPath();
 
+    /// Fills in the watch mask of the Maxwell engine the first time a draw asks for a pipeline.
+    void InitializeMaxwellBypass();
+
+    /// Arms the watch mask on the currently bound engine. Each channel owns its own 3D engine, so
+    /// this has to run again after a channel switch.
+    void ArmMaxwellBypassEngine();
+
     [[nodiscard]] GraphicsPipeline* BuiltPipeline(GraphicsPipeline* pipeline) const noexcept;
 
     std::unique_ptr<GraphicsPipeline> CreateGraphicsPipeline();
@@ -148,7 +156,8 @@ private:
         PipelineStatistics* statistics, bool build_in_parallel);
 
     void SerializeVulkanPipelineCache(const std::filesystem::path& filename,
-                                      const vk::PipelineCache& pipeline_cache, u32 cache_version);
+                                      const vk::PipelineCache& pipeline_cache, u32 cache_version,
+                                      size_t max_size = std::numeric_limits<size_t>::max());
 
     vk::PipelineCache LoadVulkanPipelineCache(const std::filesystem::path& filename,
                                               u32 expected_cache_version);
@@ -167,6 +176,19 @@ private:
     GraphicsPipelineCacheKey graphics_key{};
     GraphicsPipeline* current_pipeline{};
 
+    /// Epoch of Maxwell3D::pipeline_state_epoch the cached key was derived from, and the engine
+    /// hint it was derived with. Both must match for the skip-derivation path to be valid.
+    u64 pipeline_state_epoch{};
+    u32 pipeline_engine_state{};
+    /// Engine the epoch above was read from. Each channel owns its own 3D engine and its own
+    /// epoch counter, so a channel switch has to invalidate the cached derivation.
+    const Tegra::Engines::Maxwell3D* pipeline_epoch_engine{};
+    /// Engine whose dirty table already carries the watch mask.
+    const Tegra::Engines::Maxwell3D* armed_engine{};
+    bool pipeline_state_epoch_valid{};
+    bool maxwell_bypass_initialized{};
+    bool maxwell_bypass_available{};
+
     ankerl::unordered_dense::map<ComputePipelineCacheKey, std::unique_ptr<ComputePipeline>> compute_cache;
     ankerl::unordered_dense::map<GraphicsPipelineCacheKey, std::unique_ptr<GraphicsPipeline>> graphics_cache;
 
@@ -179,6 +201,7 @@ private:
     std::filesystem::path pipeline_cache_filename;
 
     std::filesystem::path vulkan_pipeline_cache_filename;
+    std::filesystem::path global_vulkan_pipeline_cache_filename;
     vk::PipelineCache vulkan_pipeline_cache;
 
     Common::ThreadWorker workers;

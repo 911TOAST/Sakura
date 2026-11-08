@@ -2172,6 +2172,16 @@ bool Image::ScaleDown(bool ignore) {
     return true;
 }
 
+void Image::DropScaledCopy() {
+    // The copy below was allocated with the factor that was selected when ScaleUp() first ran, so
+    // its extent cannot be reused once the internal resolution changed. The device is idle (see
+    // RendererVulkan::ApplyPendingResolutionChange), which makes releasing it here safe.
+    scaled_image = vk::Image{};
+    has_scaled = false;
+    flags &= ~ImageFlagBits::Rescaled;
+    current_image = &Image::original_image;
+}
+
 bool Image::BlitScaleHelper(bool scale_up) {
     using namespace VideoCommon;
     static constexpr auto BLIT_OPERATION = Tegra::Engines::Fermi2D::Operation::SrcCopy;
@@ -2660,6 +2670,15 @@ void Framebuffer::CreateFramebuffer(TextureCacheRuntime& runtime,
     renderpass_key.samples = samples;
 
     renderpass = runtime.render_pass_cache.Get(renderpass_key);
+    // A second variant that defines its attachments at pass begin. Building it here keeps both
+    // handles cached with the framebuffer; the render pass cache deduplicates the object itself.
+    {
+        RenderPassKey clear_key = renderpass_key;
+        clear_key.color_clear = true;
+        clear_key.depth_clear = has_depth;
+        clear_key.stencil_clear = has_stencil;
+        clear_renderpass = runtime.render_pass_cache.Get(clear_key);
+    }
     render_area.width = (std::min)(render_area.width, width);
     render_area.height = (std::min)(render_area.height, height);
 
