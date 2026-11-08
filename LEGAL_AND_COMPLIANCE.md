@@ -87,3 +87,56 @@ once. Nothing about the user's library, saves or gameplay is sent. See
 If you believe a build or a contribution violates this policy or applicable
 law, contact the repository owner. Takedown requests from rights holders should
 go to the repository owner, not to contributors.
+
+## Takedown requests and counter-notification
+
+This project responds to valid notices and pushes back on invalid ones. The
+process below is the one in 17 U.S.C. §512, and it applies to any host that
+wants safe-harbour protection.
+
+**What the repository contains.** Source code and documentation, all under
+GPL-3.0-or-later, plus build configuration. It contains no Nintendo firmware,
+no encryption keys, no game content, and no Nintendo code or assets. That is
+verifiable from the public git history: every commit is timestamped and every
+change is visible.
+
+**What a valid notice must contain** (§512(c)(3)):
+
+- identification of the copyrighted work claimed to be infringed;
+- identification of the material claimed to be infringing, with enough
+  information to locate it (a URL or file path — not "the whole repository");
+- the complainant's contact details;
+- a statement of good-faith belief that the use is not authorised;
+- a statement, under penalty of perjury, that the information is accurate and
+  that the complainant is authorised to act for the rights holder;
+- the complainant's physical or electronic signature.
+
+**Counter-notification** (§512(g)(3)). If material is removed and the
+repository owner believes it was lawful, the owner may send a
+counter-notification to the host's designated agent containing:
+
+- identification of the removed material and where it was before removal;
+- a statement under penalty of perjury of a good-faith belief that the material
+  was removed by mistake or misidentification;
+- name, address, and a phone number, plus consent to the jurisdiction of the
+  appropriate federal district court (or, for users outside the US, any
+  judicial district in which the host may be found);
+- consent to accept service of process from the complainant.
+
+**What happens next.** The host forwards the counter-notification to the
+complainant and, unless the complainant notifies the host that it has filed a
+court action, may restore the material after **10 to 14 business days**. The
+complainant then has to decide whether to litigate.
+
+**Misrepresentation** (§512(f)). A party that knowingly materially misrepresents
+that material is infringing, or that material was removed by mistake, may be
+liable for damages. This is what makes the counter-notification process more
+than paperwork.
+
+**Limits.** A counter-notification does not stop a lawsuit, does not create
+immunity, and is not a substitute for counsel. It is a procedural right, and
+this section is a description of it, not legal advice.
+
+Takedown requests should go to the repository owner rather than to individual
+contributors.
+
