@@ -136,7 +136,7 @@ handed to `vkQueuePresentKHR`. The previous intermediate full-screen image,
 the full-screen `vkCmdCopyImage`/blit, its two barriers, the separate copy
 submission, and the present-thread hop are not executed on this path.
 
-Deterministic savings at 1220 x 2712 (Edge 60 Fusion panel):
+Deterministic savings at 1220 x 2712 (reference panel):
 
 - `75.72 MiB` of intermediate frame images (six swapchain buffers) no longer
   allocated;

@@ -1,7 +1,7 @@
 # Project Zero-Copy — direct-to-swapchain presentation
 
 Date: 2026-10-26
-Device target: Motorola Edge 60 Fusion (MediaTek MT6878, Mali-G615 MC2)
+Device target: MediaTek MT6878 reference device (Mali-G615 MC2)
 Build: Sakura Optimized, arm64-v8a, `armv8.2-a+dotprod+fp16+lse`
 
 ## The short version
@@ -66,7 +66,7 @@ queue are treated as a separate concern. That costs, per frame:
 Zero-copy removes the copy and the hand-off. The composition still has to write
 the screen once; it simply writes it into the buffer Android will display.
 
-### VRAM removed at 1220 x 2712 (Edge 60 Fusion panel)
+### VRAM removed at 1220 x 2712 (reference panel)
 
 - One RGBA8 frame: 13,234,560 bytes (12.62 MiB)
 - Six intermediate frames: 79,407,360 bytes (**75.72 MiB**)

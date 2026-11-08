@@ -9,81 +9,102 @@
 [![platforms](https://img.shields.io/badge/platforms-Android%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-f2a4b8?style=flat-square)](#build-it)
 [![CI](https://img.shields.io/badge/builds-GitHub%20Actions-f2a4b8?style=flat-square)](../../actions)
 
-[what is this](#hiii--what-is-sakura) ·
-[what's different](#so-whats-actually-different-_) ·
-[build it](#build-it) ·
-[legal stuff](#is-this-legal-) ·
-[takedowns](#if-someone-files-a-takedown-_) ·
+[features](#features) ·
+[optimization](#the-genius-of-optimization) ·
+[build](#build-it) ·
+[legal](#the-legal-bit) ·
 [credits](#credits)
 
 </div>
 
 ---
 
-## hiii ~ what is Sakura?
-
 Sakura is a fork of [suyu](https://github.com/suyu-emu/suyu-v0.0.4) — itself a
-continuation of yuzu — tuned for the GPUs that usually get ignored: **Mali on
-MediaTek phones**. Not a settings pack, not a re-skin with a new icon. There is
-real code here that changes how a frame reaches your screen, and a pile of
-documentation that shows the receipts.
+continuation of yuzu — built around the GPUs that usually get ignored: **Mali on
+MediaTek phones**. It also has a UI that doesn't look like a spreadsheet, because
+you stare at this thing for hours ~
 
-It also ships a UI that doesn't look like a spreadsheet, because you stare at
-this thing for hours ~
+It ships no games, no firmware, and no keys, and it isn't affiliated with
+Nintendo. That's the whole disclaimer; the details are in [the legal bit](#the-legal-bit).
 
-Sakura is **not affiliated with Nintendo**, doesn't ship games, firmware, or
-keys, and never will. More on that in [legal stuff](#is-this-legal-).
+## features
 
-> **One honest thing up front:** this README doesn't have "2x FPS!!" stickers.
-> Where a change has a measurable effect, the repo has a log line or a document
-> for it. Where it doesn't, we say so. Weird, I know >_<
+**A library that looks like yours.** Grid or list, custom accent colours, Sakura
+boot animations, and a settings tree that's actually searchable.
 
-## so what's actually different? ( >_< )
+**Wallpapers that stay private.** Pick a background from your device or from an
+online gallery. The downloaded image is stored **AES-GCM encrypted** with a key
+held in the Android Keystore — only ciphertext touches disk. See
+[THEME_BACKGROUNDS.md](THEME_BACKGROUNDS.md).
 
-The short list, with the caveat that matters:
+**A perf dashboard, not a guess.** Frame stats, a tweaks sheet, and adjustable
+Mali memory limits without hunting through config files.
 
-| What | Where it applies | What actually changed |
-|---|---|---|
-| **Direct-to-swapchain present** | Mali + Malikan / native GPU path | The render pass writes into the image acquired from Android's Vulkan WSI and presents that same image. The full-screen copy, its barriers, and the separate present thread are gone — deleted from the source, not just made faster. Other drivers keep the old path untouched. |
-| **Device-wide pipeline cache** | Vulkan | The driver's compiled pipeline cache is shared across titles (`vulkan_pipelines_global_<salt>.bin`), merged with the per-title cache at boot, capped at 128 MiB, salted per driver so blobs never leak between drivers. |
-| **Boot-time shader warmup** | Vulkan | Cached pipelines are compiled while the game is still on the loading screen, and the log tells you exactly what happened: `[ShaderWarmup] N pipelines ready in T ms: X from disk, Y compiled, Z failed`. Drive `Y` to zero ~ |
-| **Segmented block-linear copies** | Texture decoding | Large block-linear texture copies are split into cache-friendly segments instead of one giant strided copy. |
-| **ARMv8.2 codegen preset** | Android arm64-v8a | Built with `armv8.2-a+dotprod+fp16+lse` so the CPU backend can use the instructions your phone actually has. |
-| **Wallpaper engine** | Android UI | Library backgrounds from your device or an online gallery, stored **AES-GCM encrypted** with a key in the Android Keystore. Only ciphertext touches disk. Details in [THEME_BACKGROUNDS.md](THEME_BACKGROUNDS.md). |
-| **Discord Rich Presence** | Android | Optional, off unless you turn it on. Shows what you're playing, not what you're doing. |
-| **Perf dashboard + Mali controls** | Android UI | Frame stats, tweaks sheet, and adjustable Mali memory limits without digging through config files. |
+**Discord Rich Presence.** Optional, off by default, and it shows what you're
+playing — not what you're doing.
 
-Full write-ups, with the boring details that make them believable:
+**Firmware optional where it can be.** `fake_system_applets` (on by default)
+serves missing library applets through the HLE frontend, so titles that don't
+need firmware just boot. Titles that do need it are flagged, and launching
+encrypted content without keys gives a clear error instead of a mystery crash.
 
-- [ZERO_COPY_OVERDRIVE.md](ZERO_COPY_OVERDRIVE.md) — the presentation rework
-- [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md) — dated notes, including what was *not* measured
-- [SHADER_WARMUP_AND_CACHE.md](SHADER_WARMUP_AND_CACHE.md) — the cache layers, explained
-- [THEME_BACKGROUNDS.md](THEME_BACKGROUNDS.md) — the wallpaper crypto, and its limits
+**Runs where you are.** Android is the focus; Windows, Linux, and macOS builds
+come out of the same tree.
 
-## it still doesn't ship games (sorry ~)
+## the genius of optimization
 
-Retail Switch games are encrypted. To run yours you need `prod.keys` and, for
-some titles, a firmware dump **from a console you own**, installed through the
-app's own screens. Sakura does not include, link to, or generate either, and it
-does not bypass the console's encryption. Booting encrypted content without keys
-gives you a clear "missing keys" error instead of a mystery crash (thank you,
-past us).
+This is the part that isn't a settings pack. Each change is documented, and each
+doc says what was measured and what wasn't — no "2x FPS!!" stickers ( >_< )
 
-Firmware is optional for titles that don't need it: `fake_system_applets` (on by
-default) serves missing library applets through the HLE frontend. Titles known to
-need firmware are flagged in the game list.
+### the copy that isn't there anymore
 
-Read [LEGAL_AND_COMPLIANCE.md](LEGAL_AND_COMPLIANCE.md) for the whole policy.
+On Mali with the Malikan/native-GPU path, the composition pass now renders
+**directly into the image acquired from Android's Vulkan WSI** and hands that same
+image to the compositor. The intermediate full-screen image, its framebuffer, the
+`vkCmdCopyImage`/`vkCmdBlitImage` call, both surrounding barriers, and the
+dedicated present thread are gone — deleted from the source, not made faster.
+Every other driver keeps the old path untouched.
+
+→ [ZERO_COPY_OVERDRIVE.md](ZERO_COPY_OVERDRIVE.md)
+
+### one pipeline cache for the whole device
+
+The Vulkan driver cache used to be per title, so a pipeline compiled in one game
+was recompiled in the next. It's now device-wide
+(`vulkan_pipelines_global_<salt>.bin`), merged with the per-title cache at boot
+via `vkMergePipelineCaches`, salted per driver so blobs never leak between
+drivers, and capped at 128 MiB.
+
+### shaders warm up before you do
+
+Cached pipelines are compiled while the game is still on the loading screen
+instead of mid-frame, and the log tells you exactly what happened:
+
+```
+[ShaderWarmup] N pipelines ready in T ms: X from disk, Y compiled, Z failed
+```
+
+Drive `Y` to zero for a title and its stutters are gone.
+
+### the small stuff that adds up
+
+- Block-linear texture copies are split into cache-friendly segments instead of
+  one giant strided copy.
+- The ARMv8.2-a preset (`+dotprod+fp16+lse`) lets the CPU backend use the
+  instructions the phone actually has.
+- Duplicate pipeline keys are skipped before they reach a worker, so nothing is
+  built twice in one boot.
+
+→ [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md) ·
+[SHADER_WARMUP_AND_CACHE.md](SHADER_WARMUP_AND_CACHE.md)
 
 ## build it
 
-### the lazy way (recommended, no compiler on your laptop)
+### the lazy way (no compiler on your laptop)
 
 Push, then **Actions → Android CI → Run workflow** and pick a flavor. The runner
-builds it and hands you an APK artifact when it's done. Your fans stay quiet, and
-your laptop gets to live (｡•̀ᴗ-)✧
-
-Good for a quick loop:
+builds it and hands you an APK artifact. Your fans stay quiet, and your laptop
+gets to live (｡•̀ᴗ-)✧
 
 ```
 assembleMainlineRelease
@@ -95,8 +116,8 @@ All four flavors (slower, ~40–90 min):
 assembleMainlineRelease assembleLegacyRelease assembleChromeOSRelease assembleGenshinSpoofRelease
 ```
 
-> Heads-up: private repos get 2,000 free Actions minutes/month. A full four-flavor
-> run eats a chunk of that, so iterate on Mainline and save the big one for releases.
+Private repos get 2,000 free Actions minutes a month, so iterate on Mainline and
+save the full set for releases.
 
 ### the local way
 
@@ -110,88 +131,58 @@ cd src/android
 ```
 
 A signed release needs `ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASS`, and
-`ANDROID_KEY_ALIAS` set.
+`ANDROID_KEY_ALIAS`. Desktop builds go through CMake like upstream — see
+[docs/Build.md](docs/Build.md).
 
-Desktop builds go through CMake like upstream; see [docs/Build.md](docs/Build.md).
+## the legal bit
 
-## is this legal? ( ? , )
+**Emulators are legal, ROMs you didn't dump are not.** That's the short version;
+here's the rest.
 
-Short version: **emulators are legal, ROMs you didn't dump are not.** Here's the
-long version, because "trust me bro" isn't a legal theory.
+*Sony Computer Entertainment v. Connectix* and *Sony v. Bleem* (both 9th Cir.
+2000) held that reverse-engineering a console to build an emulator is fair use,
+and that an emulator isn't a derivative work of the console firmware. Sakura
+contains no Nintendo code, assets, or firmware — it reimplements documented
+console behaviour.
 
-**What the law actually says.** Emulators have been tested in US court more than
-once. *Sony Computer Entertainment v. Connectix* (9th Cir. 2000) and *Sony v.
-Bleem* (9th Cir. 2000) both held that reverse-engineering a console to build an
-emulator is fair use, and that an emulator is not a derivative work of the
-console's firmware. Sakura contains no Nintendo code, no Nintendo assets, and no
-Nintendo firmware — it's an independent reimplementation of documented console
-behaviour.
-
-**What we ship:** source code under GPL-3.0-or-later, and optionally an APK built
+**This repo ships:** source under GPL-3.0-or-later, and optionally APKs built
 from that exact source.
 
-**What we do not ship, ever:** firmware, `prod.keys` / `title.keys`, ROMs
-(NSP/XCI/NCA), updates, DLC, key generators, key databases, or anything designed
-to bypass signature or entitlement checks. Contributions that add any of that
-get rejected. If you ever find one of those things inside a build, that's a bug
-and we want the issue.
+**It never ships:** firmware, `prod.keys`/`title.keys`, ROMs (NSP/XCI/NCA),
+updates, DLC, key generators, key databases, or anything that bypasses signature
+or entitlement checks. Contributions adding any of that get rejected.
 
-**What you have to do:** dump keys and firmware from hardware you own, and only
-run software you're legally allowed to run. That's on you, not on the emulator.
+**You provide:** keys and firmware dumped from hardware you own, installed
+through the app's own screens, and only software you're legally allowed to run.
 
-**GPL-3.0-or-later:** if you distribute a build, you have to publish the
-corresponding source at the commit you built from. Publishing this repo is how we
-satisfy that, and how any fork of it should too.
+**GPL-3.0-or-later:** if you distribute a build, publish the corresponding source
+at the commit you built from. That's how this repo satisfies it, and how any fork
+of it should too.
 
-This is a project policy, not legal advice. If you're distributing builds
-commercially or you're unsure about your local law, ask an actual lawyer.
+**Takedowns.** Everything here is public record — every commit is timestamped and
+every change visible. A valid notice under 17 U.S.C. §512(c)(3) has to identify
+the work, identify the specific material, and state a good-faith belief with a
+signature; "this whole repo, because it's an emulator" isn't that. If lawful
+material is removed, the owner can file a counter-notification under §512(g)(3),
+and the material can go back after 10–14 business days unless the sender files
+suit. Knowingly false notices expose the sender to liability under §512(f).
+None of that is a magic shield — if a notice is valid, the material comes down.
+Requests go to the repository owner, not contributors.
 
-## if someone files a takedown ( >_< )
-
-Rights holders are allowed to send takedown notices. They are **not** allowed to
-send knowingly false ones. Both of those are in the same statute, so this section
-is short and boring on purpose:
-
-1. **Everything here is public record.** Every commit is timestamped, every
-   changed file is visible, and the diff history shows exactly what this project
-   did and didn't add. There is no hidden payload to find.
-2. **A valid notice has to be specific.** Under 17 U.S.C. §512(c)(3), a notice
-   must identify the copyrighted work, identify the material claimed to be
-   infringing with enough detail to locate it, and state that the sender has a
-   good-faith belief the use isn't authorized. "This whole repo, because it's an
-   emulator" is not that.
-3. **A wrong notice can be answered.** If material is removed and it was lawful,
-   the repository owner can file a counter-notification under §512(g)(3). Once
-   that's in, the material can go back after 10–14 business days unless the
-   sender files a court action — the ball goes back to them.
-4. **Bad-faith notices have consequences.** Knowingly misrepresenting that
-   material is infringing exposes the sender to liability under §512(f). That's
-   not a threat, it's the reason the counter-notification process exists at all.
-
-None of this is a magic shield — bad takedowns happen all the time, and big
-companies have better lawyers than any hobby project. The real defense isn't
-attitude, it's that the code is ours, the licence is GPL, the repo ships nothing
-infringing, and the history proves it. If a notice is valid, we'll take the
-material down. If it isn't, we'll use the process above (·•᷄ᴗ•᷅)
-
-Takedown requests should go to the repository owner rather than individual
-contributors. See [LEGAL_AND_COMPLIANCE.md](LEGAL_AND_COMPLIANCE.md).
+Full policy: [LEGAL_AND_COMPLIANCE.md](LEGAL_AND_COMPLIANCE.md). This is project
+policy, not legal advice; if you're distributing commercially, ask a lawyer.
 
 ## credits
 
-Standing on a lot of shoulders, and not shy about it:
-
-- [suyu](https://github.com/suyu-emu/suyu-v0.0.4) — the base this fork is built on
-- yuzu, Citra, and the whole emulator lineage behind them
-- every library in `externals/` — SDL, Vulkan-Headers, dynarmic, FFmpeg, mbedTLS, and friends
-- everyone who reported a crash with a log instead of "it doesn't work"
+Standing on a lot of shoulders, and not shy about it: [suyu](https://github.com/suyu-emu/suyu-v0.0.4),
+yuzu, Citra, and every library in `externals/` — SDL, Vulkan-Headers, dynarmic,
+FFmpeg, mbedTLS, and friends. Also everyone who reported a crash with a log
+instead of "it doesn't work" (´｡• ᵕ •｡`)
 
 The Sakura name, icon, and UI art are original to this fork.
 
-## also try
-
-[NE0TR0N!!](https://www.roblox.com/games/78128522742858/NE0TR0N) — a small game
-made by one dev. Different thing entirely, still neat ~
+**Also try:** [NE0TR0N!!](https://www.roblox.com/games/78128522742858/NE0TR0N) —
+a small game made by one dev. Different thing entirely, still neat ~
 
 ## license
 
