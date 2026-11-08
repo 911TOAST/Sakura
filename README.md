@@ -6,7 +6,7 @@
 
 [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-f2a4b8?style=flat-square)](LICENSE.txt)
 [![based on suyu](https://img.shields.io/badge/based%20on-suyu-f2a4b8?style=flat-square)](https://github.com/suyu-emu/suyu-v0.0.4)
-[![platforms](https://img.shields.io/badge/platforms-Android%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-f2a4b8?style=flat-square)](#build-it)
+[![platforms](https://img.shields.io/badge/platform-Android%20only-f2a4b8?style=flat-square)](#build-it)
 [![CI](https://img.shields.io/badge/builds-GitHub%20Actions-f2a4b8?style=flat-square)](../../actions)
 
 [features](#features) ·
@@ -19,13 +19,25 @@
 
 ---
 
-Sakura is a fork of [suyu](https://github.com/suyu-emu/suyu-v0.0.4) — itself a
-continuation of yuzu — built around the GPUs that usually get ignored: **Mali on
-MediaTek phones**. It also has a UI that doesn't look like a spreadsheet, because
-you stare at this thing for hours ~
+Sakura is an **Android** fork of [suyu](https://github.com/suyu-emu/suyu-v0.0.4) —
+itself a continuation of yuzu — built around the GPUs that usually get ignored:
+**Mali on MediaTek phones**. It also has a UI that doesn't look like a
+spreadsheet, because you stare at this thing for hours ~
 
 It ships no games, no firmware, and no keys, and it isn't affiliated with
 Nintendo. That's the whole disclaimer; the details are in [the legal bit](#the-legal-bit).
+
+## status: experimental ( >_< )
+
+Sakura is **always going to be an experimental emulator**. It is not stable
+software and it doesn't pretend to be: expect crashes, broken titles, driver
+fights, and things that worked yesterday deciding not to today. If you need
+something boring and reliable, this isn't it ~
+
+What it's actually *pretty great* at is **performance**. When a title runs, it
+runs well — that's the entire point of the [optimization work](#the-genius-of-optimization)
+below. Think "shockingly fast for an experimental build", not "certified stable".
+
 
 ## features
 
@@ -48,8 +60,8 @@ serves missing library applets through the HLE frontend, so titles that don't
 need firmware just boot. Titles that do need it are flagged, and launching
 encrypted content without keys gives a clear error instead of a mystery crash.
 
-**Runs where you are.** Android is the focus; Windows, Linux, and macOS builds
-come out of the same tree.
+**Android only, on purpose.** No desktop builds, no other platforms to keep
+alive. Every change is aimed at phones — Mali first, everything else welcome.
 
 ## the genius of optimization
 
@@ -135,8 +147,8 @@ cd src/android
 ```
 
 A signed release needs `ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASS`, and
-`ANDROID_KEY_ALIAS`. Desktop builds go through CMake like upstream — see
-[docs/Build.md](docs/Build.md).
+`ANDROID_KEY_ALIAS`. That's the whole build — there is no desktop target to
+configure.
 
 ## the legal bit
 

@@ -7,8 +7,8 @@ AI assistant, read this before touching anything, then follow it literally.
 
 - **`911TOAST/sakura-suyu-mtk`** — Sakura, a fork of
   [suyu](https://github.com/suyu-emu/suyu-v0.0.4) (GPL-3.0-or-later).
-- Android-first emulator with a Kotlin/Jetpack UI and a C++ core. Desktop builds
-  exist too, but Android/Mali is the focus.
+- Android-only emulator (Android is the only supported target) with a
+  Kotlin/Jetpack UI and a C++ core tuned for Mali/MediaTek.
 - `main` is the default branch and the only long-lived one. An `upstream` remote
   may point at the original suyu repo for syncing; never push there.
 
@@ -48,7 +48,7 @@ these matches the task:
 - `PERFORMANCE_REPORT.md` — what changed, what was measured, what wasn't
 - `SHADER_WARMUP_AND_CACHE.md` — pipeline/shader caches
 - `THEME_BACKGROUNDS.md` — wallpaper engine and its crypto
-- `docs/Build.md` — desktop and Android build notes
+- `docs/Build.md` — Android build notes
 
 Useful directories:
 
