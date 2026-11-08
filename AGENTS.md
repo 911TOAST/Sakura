@@ -126,7 +126,8 @@ gh run download <run-id> -R 911TOAST/sakura-suyu-mtk -n android-apk-<run-number>
 ```
 
 A cold build takes roughly 40–90 minutes; a Mainline-only build is at the lower
-end. Private-repo Actions minutes are limited (2,000/month on the free plan), so
+end. If the repo is private, Actions minutes are limited (2,000/month on the
+free plan), so
 do not trigger builds for docs-only changes.
 
 ## Step 6 — report back
