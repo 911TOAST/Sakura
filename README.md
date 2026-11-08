@@ -106,6 +106,10 @@ Push, then **Actions → Android CI → Run workflow** and pick a flavor. The ru
 builds it and hands you an APK artifact. Your fans stay quiet, and your laptop
 gets to live (｡•̀ᴗ-)✧
 
+This is how the project is actually built. My ZBook 15 G3 is not surviving a
+four-flavor ninja build 💀 — so the compile happens on GitHub's machines and the
+laptop only ever touches Kotlin and XML.
+
 ```
 assembleMainlineRelease
 ```
