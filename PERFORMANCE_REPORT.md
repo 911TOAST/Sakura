@@ -29,6 +29,11 @@ Files: `src/android/app/build.gradle.kts`, `src/CMakeLists.txt`,
   `drawable/ic_icon_bg.xml`, so it and both legacy-flavor launcher bitmaps are
   deleted as well. `isShrinkResources` stays enabled so future dead resources
   are stripped from release APKs even if a file is left on disk.
+- `menu_game_filters.xml` was never inflated, but it was the only place that
+  declared the `alphabetical`, `filter_recently_played` and
+  `filter_recently_added` IDs that `GamesFragment` persists and compares. Those
+  three IDs now live in `res/values/ids.xml`; the dead menu and its drawable
+  and string dependencies are gone.
 - A 24,616,200-byte `libVkLayer_khronos_validation.so` left in
   `src/android/app/src/main/jniLibs` by an earlier validation-layer build was
   deleted, along with an unused 655,169-byte `externals/spirv-headers-new.zip`.
