@@ -1004,9 +1004,9 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
-                    BooleanSetting.SHOW_UPDATE_WARNING,
-                    titleId = R.string.show_update_warning,
-                    descriptionId = R.string.show_update_warning_description,
+                    BooleanSetting.SHOW_UPDATE_BUTTON,
+                    titleId = R.string.show_update_button,
+                    descriptionId = R.string.show_update_button_description,
                 )
             )
             put(

@@ -21,11 +21,27 @@
             app:exitAnim="@anim/settings_panel_out"
             app:popEnterAnim="@anim/settings_panel_pop_in"
             app:popExitAnim="@anim/settings_panel_pop_out" />
+        <action
+            android:id="@+id/action_gamesFragment_to_updateFragment"
+            app:destination="@id/updateFragment"
+            app:enterAnim="@anim/sakura_fade_through_in"
+            app:exitAnim="@anim/sakura_fade_through_out"
+            app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+            app:popExitAnim="@anim/sakura_fade_through_pop_out" />
 
     <fragment
         android:id="@+id/homeSettingsFragment"
         android:name="org.yuzu.yuzu_emu.fragments.HomeSettingsFragment"
         android:label="HomeSettingsFragment" />
+
+    <fragment
+        android:id="@+id/updateFragment"
+        android:name="org.yuzu.yuzu_emu.fragments.UpdateFragment"
+        android:label="UpdateFragment"
+        app:enterAnim="@anim/sakura_fade_through_in"
+        app:exitAnim="@anim/sakura_fade_through_out"
+        app:popEnterAnim="@anim/sakura_fade_through_pop_in"
+        app:popExitAnim="@anim/sakura_fade_through_pop_out" />
 
     <fragment
         android:id="@+id/firstTimeSetupFragment"

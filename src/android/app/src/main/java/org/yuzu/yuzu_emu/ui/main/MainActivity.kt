@@ -43,6 +43,7 @@ import org.yuzu.yuzu_emu.model.GamesViewModel
 import org.yuzu.yuzu_emu.model.HomeViewModel
 import android.os.Build
 import org.yuzu.yuzu_emu.model.TaskViewModel
+import org.yuzu.yuzu_emu.model.UpdateViewModel
 import org.yuzu.yuzu_emu.utils.*
 import org.yuzu.yuzu_emu.utils.ViewUtils.setVisible
 import androidx.core.content.edit
@@ -71,6 +72,7 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
     private val taskViewModel: TaskViewModel by viewModels()
     private val addonViewModel: AddonViewModel by viewModels()
     private val driverViewModel: DriverViewModel by viewModels()
+    private val updateViewModel: UpdateViewModel by viewModels()
 
     override var themeId: Int = 0
 
@@ -155,11 +157,11 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
         val firstTimeSetup = PreferenceManager.getDefaultSharedPreferences(applicationContext)
                 .getBoolean(Settings.PREF_FIRST_APP_LAUNCH, true)
 
-        if (!firstTimeSetup && NativeLibrary.isUpdateCheckerEnabled() && BooleanSetting.ENABLE_UPDATE_CHECKS.getBoolean()) {
-             checkForUpdates()
-        }
-        if (!firstTimeSetup && BooleanSetting.SHOW_UPDATE_WARNING.getBoolean()) {
-            binding.root.post { showUpdateWarning() }
+        if (!firstTimeSetup && NativeLibrary.isUpdateCheckerEnabled() &&
+            BooleanSetting.ENABLE_UPDATE_CHECKS.getBoolean() &&
+            BooleanSetting.SHOW_UPDATE_BUTTON.getBoolean()
+        ) {
+            checkForUpdates()
         }
         setInsets()
         applyFullscreenPreference()
@@ -203,63 +205,18 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
             val latestVersion = NativeLibrary.checkForUpdate()
             if (latestVersion != null) {
                 runOnUiThread {
-                    showUpdateDialog(latestVersion)
+                    updateViewModel.setAvailableUpdate(latestVersion)
                 }
             }
         }.start()
     }
 
-    private fun showUpdateWarning() {
-        if (isFinishing || isDestroyed) {
-            return
-        }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.update_warning_title)
-            .setMessage(R.string.update_warning_description)
-            .setPositiveButton(R.string.got_it) { dialog, _ -> dialog.dismiss() }
-            .setNeutralButton(R.string.star_on_github) { dialog, _ ->
-                openLink("https://github.com/911TOAST/Sakura")
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.dont_show_again) { dialog, _ ->
-                BooleanSetting.SHOW_UPDATE_WARNING.setBoolean(false)
-                NativeConfig.saveGlobalConfig()
-                dialog.dismiss()
-            }
-            .show()
-    }
-
-    // TODO(crueter): body, "View on Forgejo" button
-    private fun showUpdateDialog(release: NativeLibrary.UpdateResult) {
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.update_available)
-            .setMessage(getString(R.string.update_available_description, release.title))
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val assets = release.assets
-
-                if (assets.isEmpty()) {
-                    openLink(release.url)
-                } else {
-                    downloadAndInstallUpdate(release)
-                }
-            }
-            .setNeutralButton(R.string.cancel) { dialog, _ ->
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.dont_show_again) { dialog, _ ->
-                BooleanSetting.ENABLE_UPDATE_CHECKS.setBoolean(false)
-                NativeConfig.saveGlobalConfig()
-                dialog.dismiss()
-            }
-            .show()
-    }
-
-    private fun openLink(link: String) {
+    fun openLink(link: String) {
         val intent = Intent(Intent.ACTION_VIEW, link.toUri())
         startActivity(intent)
     }
 
-    private fun downloadAndInstallUpdate(release: NativeLibrary.UpdateResult) {
+    fun downloadAndInstallUpdate(release: NativeLibrary.UpdateResult) {
         CoroutineScope(Dispatchers.IO).launch {
             val packageId = applicationContext.packageName
             val asset = release.assets[0]

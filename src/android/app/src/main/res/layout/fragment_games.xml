@@ -97,6 +97,24 @@
             android:layout_height="wrap_content"
             android:layout_weight="1" />
 
+        <!-- Only visible when a newer release is known. Tapping opens the update page. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/update_pill"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:text="@string/update_pill"
+            android:textSize="12sp"
+            android:visibility="gone"
+            app:cornerRadius="18dp"
+            tools:visibility="visible" />
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/view_button"
             style="@style/Widget.Suyu.IconButton"

@@ -43,6 +43,7 @@ import org.yuzu.yuzu_emu.model.AppletInfo
 import org.yuzu.yuzu_emu.model.Game
 import org.yuzu.yuzu_emu.model.GamesViewModel
 import org.yuzu.yuzu_emu.model.HomeViewModel
+import org.yuzu.yuzu_emu.model.UpdateViewModel
 import org.yuzu.yuzu_emu.ui.main.MainActivity
 import org.yuzu.yuzu_emu.utils.SuyuMotion
 import org.yuzu.yuzu_emu.utils.ViewUtils.updateMargins
@@ -79,6 +80,9 @@ class GamesFragment : Fragment() {
 
     /** Tracks the last title-visibility state so returning from settings only rebinds on change. */
     private var appliedHideTitles: Boolean = false
+
+    private val updateViewModel: UpdateViewModel by activityViewModels()
+    private var lastKnownUpdate: NativeLibrary.UpdateResult? = null
 
     companion object {
         private const val SEARCH_TEXT = "SearchText"
@@ -233,6 +237,17 @@ class GamesFragment : Fragment() {
         setInsets()
         LibraryBackgroundApplier.applyTo(binding.root, viewLifecycleOwner)
         appliedHideTitles = BooleanSetting.HIDE_GAME_TITLES.getBoolean()
+
+        updateViewModel.availableUpdate.collect(viewLifecycleOwner) { update ->
+            lastKnownUpdate = update
+            updateUpdatePill()
+        }
+        binding.updatePill.setOnClickListener {
+            if (lastKnownUpdate != null) {
+                findNavController().navigate(R.id.action_gamesFragment_to_updateFragment)
+            }
+        }
+
         if (returningFromSettings) {
             raisePill()
         } else {
@@ -449,6 +464,7 @@ class GamesFragment : Fragment() {
         if (_binding != null) {
             updateButtonsVisibility()
             updateEmptyState()
+            updateUpdatePill()
             // Appearance settings can change while this screen is in the back stack.
             LibraryBackgroundApplier.applyTo(binding.root, viewLifecycleOwner)
             val hideTitles = BooleanSetting.HIDE_GAME_TITLES.getBoolean()
@@ -832,6 +848,14 @@ class GamesFragment : Fragment() {
 
         val shouldShowQLaunch = showQLaunch && isFirmwareAvailable
         binding.navBar.menu.findItem(R.id.nav_qlaunch)?.isVisible = shouldShowQLaunch
+    }
+
+    private fun updateUpdatePill() {
+        if (_binding == null) {
+            return
+        }
+        binding.updatePill.isVisible =
+            lastKnownUpdate != null && BooleanSetting.SHOW_UPDATE_BUTTON.getBoolean()
     }
 
     private fun setInsets() =

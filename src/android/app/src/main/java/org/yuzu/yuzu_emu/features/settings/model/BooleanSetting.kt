@@ -58,7 +58,7 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     ENABLE_QLAUNCH_BUTTON("enable_qlaunch_button"),
 
     ENABLE_UPDATE_CHECKS("enable_update_checks"),
-    SHOW_UPDATE_WARNING("show_update_warning"),
+    SHOW_UPDATE_BUTTON("show_update_button"),
     JOYSTICK_REL_CENTER("joystick_rel_center"),
     DPAD_SLIDE("dpad_slide"),
     HAPTIC_FEEDBACK("haptic_feedback"),

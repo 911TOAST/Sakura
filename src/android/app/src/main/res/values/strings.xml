@@ -250,12 +250,18 @@
     <string name="add_directory_success">New game directory added successfully </string>
     <string name="enable_update_checks">Check for Updates</string>
     <string name="enable_update_checks_description">Check for updates on launch, and optionally download and install the new update.</string>
-    <string name="show_update_warning">Show Update Warning</string>
-    <string name="show_update_warning_description">Shows a short notice on launch about updates, support, and where to report problems.</string>
-    <string name="update_warning_title">Update Warning</string>
-    <string name="update_warning_description">Sakura is a community build, not an official release. Updates arrive when they arrive, performance varies by device and game, and no frame rate is promised.\n\nIf something breaks, please report it on GitHub instead of leaving a rage review - that is how it actually gets fixed. And if Sakura is useful to you, a star helps more than you would think.</string>
+    <string name="show_update_button">Show Update Button</string>
+    <string name="show_update_button_description">Show a small Update pill in the library when a newer release is available.</string>
+    <string name="update_pill">Update</string>
+    <string name="update_page_title">Update</string>
+    <string name="update_page_version">Version %1$s</string>
+    <string name="update_page_no_notes">No release notes were provided for this build.</string>
+    <string name="update_download_install">Download and install</string>
+    <string name="update_open_release_page">Open release page</string>
+    <string name="update_disable_button">Hide the update button</string>
     <string name="star_on_github">Star on GitHub</string>
-    <string name="got_it">Got it</string>
+    <string name="update_page_note">Found a bug? Report it on GitHub instead of a rage review - that is how it gets fixed.</string>
+    <string name="repository_link" translatable="false">https://github.com/911TOAST/Sakura</string>
     <string name="update_available">Update Available</string>
     <string name="update_available_description">A new version is available: %1$s\n\nWould you like to download it?</string>
     <string name="downloading_update">Downloading Update</string>
