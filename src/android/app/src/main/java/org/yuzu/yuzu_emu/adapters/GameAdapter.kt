@@ -5,7 +5,6 @@ package org.yuzu.yuzu_emu.adapters
 
 import android.content.DialogInterface
 import android.text.Html
-import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -135,6 +134,10 @@ class GameAdapter(private val activity: AppCompatActivity) :
      * and whenever the view mode changes).
      */
     fun playEntranceAnimation(tileCount: Int = 24) {
+        if (!SuyuMotion.entrancesEnabled()) {
+            entranceRemaining = 0
+            return
+        }
         // Cap to roughly two screens so later scroll binds never re-animate.
         entranceRemaining = tileCount.coerceAtMost(24)
     }
@@ -201,6 +204,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
             listBinding.textGameTitle.marquee()
             listBinding.cardGameList.setOnClickListener { onClick(model) }
             listBinding.cardGameList.setOnLongClickListener { onLongClick(model) }
+            SuyuMotion.installPressFeedback(listBinding.cardGameList)
 
             // Reset layout params to XML defaults
             listBinding.root.layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
@@ -219,6 +223,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
 
             gridBinding.cardGameGrid.setOnClickListener { onClick(model) }
             gridBinding.cardGameGrid.setOnLongClickListener { onLongClick(model) }
+            SuyuMotion.installPressFeedback(gridBinding.cardGameGrid)
 
             // Reset layout params to XML defaults
             gridBinding.root.layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
@@ -237,6 +242,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
 
             gridCompactBinding.cardGameGridCompact.setOnClickListener { onClick(model) }
             gridCompactBinding.cardGameGridCompact.setOnLongClickListener { onLongClick(model) }
+            SuyuMotion.installPressFeedback(gridCompactBinding.cardGameGridCompact)
 
             // Reset layout params to XML defaults (same as normal grid)
             gridCompactBinding.root.layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
@@ -254,6 +260,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 if (BooleanSetting.HIDE_GAME_TITLES.getBoolean()) View.GONE else View.VISIBLE
             carouselBinding.cardGameCarousel.setOnClickListener { onClick(model) }
             carouselBinding.cardGameCarousel.setOnLongClickListener { onLongClick(model) }
+            SuyuMotion.installPressFeedback(carouselBinding.cardGameCarousel)
 
             carouselBinding.imageGameScreen.contentDescription =
                 binding.root.context.getString(R.string.game_image_desc, model.title)
@@ -282,7 +289,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
             val launch: () -> Unit = {
                 // Physical confirmation on the way into the game: the launch transition starts on
                 // the next frame, so the tap needs its own feedback to feel answered.
-                binding.root.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                SuyuMotion.performHaptic(binding.root)
 
                 val preferences =
                     PreferenceManager.getDefaultSharedPreferences(YuzuApplication.appContext)

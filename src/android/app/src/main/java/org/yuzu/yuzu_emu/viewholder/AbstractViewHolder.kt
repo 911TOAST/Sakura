@@ -28,6 +28,12 @@ fun revealItemOnce(itemView: View, position: Int) {
         return
     }
 
+    if (!SuyuMotion.entrancesEnabled()) {
+        itemView.alpha = 1f
+        itemView.translationY = 0f
+        return
+    }
+
     val context = itemView.context
     val rise = 12f * itemView.resources.displayMetrics.density
     itemView.animate().cancel()
@@ -36,7 +42,7 @@ fun revealItemOnce(itemView: View, position: Int) {
     itemView.animate()
         .alpha(1f)
         .translationY(0f)
-        .setStartDelay((position.coerceAtMost(8) * 28).toLong())
+        .setStartDelay(SuyuMotion.staggerDelay(context, position))
         .setDuration(SuyuMotion.durationMedium2(context))
         .setInterpolator(SuyuMotion.emphasizedDecelerate(context))
         .start()

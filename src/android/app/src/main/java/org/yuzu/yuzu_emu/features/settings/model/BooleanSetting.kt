@@ -59,6 +59,10 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
 
     ENABLE_UPDATE_CHECKS("enable_update_checks"),
     SHOW_UPDATE_BUTTON("show_update_button"),
+    UI_PRESS_FEEDBACK("ui_press_feedback"),
+    UI_HAPTIC_FEEDBACK("ui_haptic_feedback"),
+    UI_ENTRANCE_ANIMATION("ui_entrance_animation"),
+    UI_TRANSITION_ANIMATION("ui_transition_animation"),
     JOYSTICK_REL_CENTER("joystick_rel_center"),
     DPAD_SLIDE("dpad_slide"),
     HAPTIC_FEEDBACK("haptic_feedback"),

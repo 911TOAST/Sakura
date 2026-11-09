@@ -79,6 +79,10 @@ enum class IntSetting(override val key: String) : AbstractIntSetting {
     LIBRARY_BACKGROUND_ZOOM("library_background_zoom"),
     LIBRARY_BACKGROUND_X("library_background_x"),
     LIBRARY_BACKGROUND_Y("library_background_y"),
+    UI_MOTION_STYLE("ui_motion_style"),
+    UI_MOTION_SCALE("ui_motion_scale"),
+    UI_PRESS_SCALE("ui_press_scale"),
+    UI_MOTION_BOUNCE("ui_motion_bounce"),
     DISCORD_PRESENCE_MODE("discord_presence_mode")
     ;
 

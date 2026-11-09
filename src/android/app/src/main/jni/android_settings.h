@@ -76,6 +76,25 @@ namespace AndroidSettings {
                                                   Settings::Category::Android};
         Settings::Setting<bool> show_update_button{linkage, true, "show_update_button",
                                                   Settings::Category::Android};
+
+        // Interface motion. Style 0 = tween, 1 = kinetic (physics), 2 = instant.
+        Settings::Setting<s32> ui_motion_style{linkage, 0, "ui_motion_style",
+                                               Settings::Category::Android};
+        Settings::Setting<s32> ui_motion_scale{linkage, 100, "ui_motion_scale",
+                                               Settings::Category::Android};
+        Settings::Setting<s32> ui_press_scale{linkage, 97, "ui_press_scale",
+                                              Settings::Category::Android};
+        Settings::Setting<s32> ui_motion_bounce{linkage, 22, "ui_motion_bounce",
+                                                Settings::Category::Android};
+        Settings::Setting<bool> ui_press_feedback{linkage, true, "ui_press_feedback",
+                                                  Settings::Category::Android};
+        Settings::Setting<bool> ui_haptic_feedback{linkage, true, "ui_haptic_feedback",
+                                                   Settings::Category::Android};
+        Settings::Setting<bool> ui_entrance_animation{linkage, true, "ui_entrance_animation",
+                                                      Settings::Category::Android};
+        Settings::Setting<bool> ui_transition_animation{linkage, true, "ui_transition_animation",
+                                                        Settings::Category::Android};
+
         Settings::Setting<bool> enable_folder_button{linkage, true, "enable_folder_button",
                                                   Settings::Category::Android};
         Settings::Setting<bool> enable_qlaunch_button{linkage, false, "enable_qlaunch_button",

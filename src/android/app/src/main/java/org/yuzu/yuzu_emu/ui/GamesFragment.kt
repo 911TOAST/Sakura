@@ -355,7 +355,9 @@ class GamesFragment : Fragment() {
         // Ambient brand motion once the entrance settles: a light sweep across the wordmark,
         // width-only breathing, and a slow rock on the mark. Transforms and paint only.
         binding.root.postDelayed({
-            if (_binding == null || !ValueAnimator.areAnimatorsEnabled()) {
+            if (_binding == null || !ValueAnimator.areAnimatorsEnabled() ||
+                !SuyuMotion.animationsEnabled()
+            ) {
                 return@postDelayed
             }
             BrandAnimation.startShimmer(binding.brandWordmarkText, 3000L)

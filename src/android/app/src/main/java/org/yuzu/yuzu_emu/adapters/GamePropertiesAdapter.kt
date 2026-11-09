@@ -8,7 +8,6 @@ package org.yuzu.yuzu_emu.adapters
 
 import android.view.LayoutInflater
 import android.view.MotionEvent
-import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.res.ResourcesCompat
@@ -83,7 +82,7 @@ class GamePropertiesAdapter(
             binding.root.setOnTouchListener { view, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                        SuyuMotion.performHaptic(view)
                         SuyuMotion.pressDown(view)
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> SuyuMotion.pressUp(view)

@@ -4,6 +4,7 @@
 package org.yuzu.yuzu_emu.features.settings.ui
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.os.Build
 import android.widget.Toast
 import org.yuzu.yuzu_emu.NativeLibrary
@@ -1135,17 +1136,17 @@ class SettingsFragmentPresenter(
                 }
             }
 
-            add(HeaderSetting(R.string.app_settings))
-            add(IntSetting.APP_LANGUAGE.key)
+            add(HeaderSetting(R.string.interface_motion))
+            add(IntSetting.UI_MOTION_STYLE.key)
+            add(IntSetting.UI_MOTION_SCALE.key)
+            add(IntSetting.UI_MOTION_BOUNCE.key)
+            add(IntSetting.UI_PRESS_SCALE.key)
+            add(BooleanSetting.UI_PRESS_FEEDBACK.key)
+            add(BooleanSetting.UI_HAPTIC_FEEDBACK.key)
+            add(BooleanSetting.UI_ENTRANCE_ANIMATION.key)
+            add(BooleanSetting.UI_TRANSITION_ANIMATION.key)
 
-            if (NativeLibrary.isUpdateCheckerEnabled()) {
-                add(BooleanSetting.ENABLE_UPDATE_CHECKS.key)
-            }
-
-            add(BooleanSetting.ENABLE_QUICK_SETTINGS.key)
-            add(BooleanSetting.INVERT_CONFIRM_BACK_CONTROLLER_BUTTONS.key)
-
-            add(HeaderSetting(R.string.theme_and_color))
+            add(HeaderSetting(R.string.interface_look))
 
             val themeMode: AbstractIntSetting = object : AbstractIntSetting {
                 override fun getInt(needsGlobal: Boolean): Int = IntSetting.THEME_MODE.getInt()
@@ -1319,11 +1320,51 @@ class SettingsFragmentPresenter(
                 )
             )
 
-            add(HeaderSetting(R.string.buttons))
+            add(HeaderSetting(R.string.interface_library))
+            add(BooleanSetting.HIDE_GAME_TITLES.key)
+            add(
+                RunnableSetting(
+                    titleId = R.string.wallpapers_title,
+                    descriptionId = R.string.wallpapers_description,
+                    isRunnable = true,
+                    iconId = R.drawable.ic_m3_folder_open
+                ) {
+                    val intent = Intent(
+                        activity ?: YuzuApplication.appContext,
+                        SettingsSubscreenActivity::class.java
+                    ).apply {
+                        putExtra("destination", SettingsSubscreen.WALLPAPERS)
+                        if (activity == null) {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                    }
+                    (activity ?: YuzuApplication.appContext).startActivity(intent)
+                }
+            )
+
+            if (!NativeConfig.isPerGameConfigLoaded()) {
+                add(HeaderSetting(R.string.stats_overlay_options))
+                addPerformanceOverlaySettings(this)
+                add(HeaderSetting(R.string.soc_overlay_options))
+                addSocOverlaySettings(this)
+                add(HeaderSetting(R.string.input_overlay_options))
+                addInputOverlaySettings(this)
+            }
+
+            add(HeaderSetting(R.string.interface_buttons))
+            add(BooleanSetting.ENABLE_QUICK_SETTINGS.key)
             add(BooleanSetting.ENABLE_FOLDER_BUTTON.key)
             add(BooleanSetting.ENABLE_QLAUNCH_BUTTON.key)
+            add(BooleanSetting.INVERT_CONFIRM_BACK_CONTROLLER_BUTTONS.key)
             if (!NativeLibrary.isFirmwareAvailable()) {
                 BooleanSetting.ENABLE_QLAUNCH_BUTTON.setBoolean(false)
+            }
+
+            add(HeaderSetting(R.string.interface_updates))
+            add(IntSetting.APP_LANGUAGE.key)
+            if (NativeLibrary.isUpdateCheckerEnabled()) {
+                add(BooleanSetting.ENABLE_UPDATE_CHECKS.key)
+                add(BooleanSetting.SHOW_UPDATE_BUTTON.key)
             }
         }
     }

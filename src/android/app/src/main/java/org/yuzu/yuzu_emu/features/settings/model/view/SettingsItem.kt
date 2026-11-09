@@ -996,6 +996,80 @@ abstract class SettingsItem(
                 )
             )
             put(
+                SingleChoiceSetting(
+                    IntSetting.UI_MOTION_STYLE,
+                    titleId = R.string.ui_motion_style,
+                    descriptionId = R.string.ui_motion_style_description,
+                    choicesId = R.array.uiMotionStyleNames,
+                    valuesId = R.array.uiMotionStyleValues
+                )
+            )
+            put(
+                SliderSetting(
+                    IntSetting.UI_MOTION_SCALE,
+                    titleId = R.string.ui_motion_scale,
+                    descriptionId = R.string.ui_motion_scale_description,
+                    min = 50,
+                    max = 200,
+                    units = "%"
+                )
+            )
+            put(
+                SliderSetting(
+                    IntSetting.UI_PRESS_SCALE,
+                    titleId = R.string.ui_press_scale,
+                    descriptionId = R.string.ui_press_scale_description,
+                    min = 90,
+                    max = 100,
+                    units = "%"
+                )
+            )
+            put(
+                SliderSetting(
+                    IntSetting.UI_MOTION_BOUNCE,
+                    titleId = R.string.ui_motion_bounce,
+                    descriptionId = R.string.ui_motion_bounce_description,
+                    min = 0,
+                    max = 50,
+                    units = "%"
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.UI_PRESS_FEEDBACK,
+                    titleId = R.string.ui_press_feedback,
+                    descriptionId = R.string.ui_press_feedback_description,
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.UI_HAPTIC_FEEDBACK,
+                    titleId = R.string.ui_haptic_feedback,
+                    descriptionId = R.string.ui_haptic_feedback_description,
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.UI_ENTRANCE_ANIMATION,
+                    titleId = R.string.ui_entrance_animation,
+                    descriptionId = R.string.ui_entrance_animation_description,
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.UI_TRANSITION_ANIMATION,
+                    titleId = R.string.ui_transition_animation,
+                    descriptionId = R.string.ui_transition_animation_description,
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.HIDE_GAME_TITLES,
+                    titleId = R.string.library_hide_titles,
+                    descriptionId = R.string.library_hide_titles_description,
+                )
+            )
+            put(
                 SwitchSetting(
                     BooleanSetting.ENABLE_UPDATE_CHECKS,
                     titleId = R.string.enable_update_checks,

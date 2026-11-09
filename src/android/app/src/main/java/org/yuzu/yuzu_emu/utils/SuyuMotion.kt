@@ -10,42 +10,114 @@ import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.OvershootInterpolator
 import androidx.core.view.animation.PathInterpolatorCompat
 import androidx.dynamicanimation.animation.DynamicAnimation
 import androidx.dynamicanimation.animation.SpringAnimation
 import androidx.dynamicanimation.animation.SpringForce
 import com.google.android.material.R
 import com.google.android.material.motion.MotionUtils
+import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
+import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 
 /**
  * Motion tokens, resolved from the theme exactly as Material components resolve them.
  *
- * Screen entrances/exits use the M3 Expressive durations and the "emphasized" easing family.
- * Surfaces that appear over a running scene (the boot/loading card of a launched game) use the
- * expressive spring instead, because an overshoot of a couple of percent is what makes the
- * launch read as alive rather than as a cut.
+ * The user can switch between three interface styles in Interface > Motion:
+ * [STYLE_TWEEN] glides with fixed curves, [STYLE_KINETIC] uses spring physics, and
+ * [STYLE_INSTANT] removes animation. All durations pass through [scaled], so the animation speed
+ * slider applies to every screen that uses these tokens.
  */
 object SuyuMotion {
-    private const val PRESSED_SCALE = 0.97f
+    const val STYLE_TWEEN = 0
+    const val STYLE_KINETIC = 1
+    const val STYLE_INSTANT = 2
 
-    /** Spring damping for launch surfaces: a small overshoot, never a bounce. */
-    private const val SPRING_DAMPING = 0.78f
+    /** Live springs per view/property so a new gesture cancels the animation it replaces. */
+    private val springAnimations:
+        MutableMap<View, MutableMap<DynamicAnimation.ViewProperty, SpringAnimation>> =
+        java.util.WeakHashMap()
+
+    /** Current interface animation style. Falls back to tween if the setting is unavailable. */
+    fun style(): Int = runCatching {
+        IntSetting.UI_MOTION_STYLE.getInt()
+    }.getOrDefault(STYLE_TWEEN).coerceIn(STYLE_TWEEN, STYLE_INSTANT)
+
+    fun isKinetic(): Boolean = style() == STYLE_KINETIC
+
+    fun isInstant(): Boolean = style() == STYLE_INSTANT
+
+    fun animationsEnabled(): Boolean = !isInstant()
+
+    fun pressFeedbackEnabled(): Boolean = runCatching {
+        BooleanSetting.UI_PRESS_FEEDBACK.getBoolean()
+    }.getOrDefault(true)
+
+    fun hapticFeedbackEnabled(): Boolean = runCatching {
+        BooleanSetting.UI_HAPTIC_FEEDBACK.getBoolean()
+    }.getOrDefault(true)
+
+    fun entrancesEnabled(): Boolean = animationsEnabled() && runCatching {
+        BooleanSetting.UI_ENTRANCE_ANIMATION.getBoolean()
+    }.getOrDefault(true)
+
+    fun transitionsEnabled(): Boolean = animationsEnabled() && runCatching {
+        BooleanSetting.UI_TRANSITION_ANIMATION.getBoolean()
+    }.getOrDefault(true)
+
+    private fun motionScale(): Float = runCatching {
+        IntSetting.UI_MOTION_SCALE.getInt()
+    }.getOrDefault(100).coerceIn(50, 200) / 100f
+
+    private fun pressedScale(): Float = runCatching {
+        IntSetting.UI_PRESS_SCALE.getInt()
+    }.getOrDefault(97).coerceIn(90, 100) / 100f
+
+    private fun springDamping(): Float = 1f - runCatching {
+        IntSetting.UI_MOTION_BOUNCE.getInt()
+    }.getOrDefault(22).coerceIn(0, 50) / 100f
+
+    private fun scaled(context: Context, base: Long): Long {
+        if (!animationsEnabled()) {
+            return 0L
+        }
+        return (base * motionScale()).toLong().coerceAtLeast(1L)
+    }
 
     // M3 durations (ms) with the spec defaults as fallbacks.
     fun durationShort2(context: Context): Long =
-        MotionUtils.resolveThemeDuration(context, R.attr.motionDurationShort2, 100).toLong()
+        scaled(
+            context,
+            MotionUtils.resolveThemeDuration(context, R.attr.motionDurationShort2, 100).toLong()
+        )
 
     fun durationShort4(context: Context): Long =
-        MotionUtils.resolveThemeDuration(context, R.attr.motionDurationShort4, 200).toLong()
+        scaled(
+            context,
+            MotionUtils.resolveThemeDuration(context, R.attr.motionDurationShort4, 200).toLong()
+        )
 
     fun durationMedium2(context: Context): Long =
-        MotionUtils.resolveThemeDuration(context, R.attr.motionDurationMedium2, 300).toLong()
+        scaled(
+            context,
+            MotionUtils.resolveThemeDuration(context, R.attr.motionDurationMedium2, 300).toLong()
+        )
 
     fun durationMedium4(context: Context): Long =
-        MotionUtils.resolveThemeDuration(context, R.attr.motionDurationMedium4, 400).toLong()
+        scaled(
+            context,
+            MotionUtils.resolveThemeDuration(context, R.attr.motionDurationMedium4, 400).toLong()
+        )
 
     fun durationLong2(context: Context): Long =
-        MotionUtils.resolveThemeDuration(context, R.attr.motionDurationLong2, 500).toLong()
+        scaled(
+            context,
+            MotionUtils.resolveThemeDuration(context, R.attr.motionDurationLong2, 500).toLong()
+        )
+
+    /** Stagger between successive list rows, in the user's animation speed. */
+    fun staggerDelay(context: Context, position: Int): Long =
+        scaled(context, (position.coerceAtMost(8) * 28).toLong())
 
     // M3 easings, with the Motion spec cubic paths as fallbacks.
     fun emphasized(context: Context): TimeInterpolator =
@@ -69,21 +141,55 @@ object SuyuMotion {
         resolveEasing(context, R.attr.motionEasingStandardInterpolator, 0.2f, 0f, 0f, 1f)
 
     /**
-     * M3 press physics: quick emphasized press-in on touch down.
+     * Press feedback: tween shrink in tween mode, spring to the configured press depth in kinetic
+     * mode. Instant mode and the press-feedback switch both leave the view untouched.
      */
     fun pressDown(view: View) {
+        if (!pressFeedbackEnabled() || isInstant()) {
+            return
+        }
+
+        val target = pressedScale()
+        if (isKinetic()) {
+            animateSpring(
+                view,
+                DynamicAnimation.SCALE_X,
+                target,
+                SpringForce.STIFFNESS_MEDIUM
+            )
+            animateSpring(
+                view,
+                DynamicAnimation.SCALE_Y,
+                target,
+                SpringForce.STIFFNESS_MEDIUM
+            )
+            return
+        }
+
         view.animate()
-            .scaleX(PRESSED_SCALE)
-            .scaleY(PRESSED_SCALE)
+            .scaleX(target)
+            .scaleY(target)
             .setDuration(durationShort2(view.context))
             .setInterpolator(emphasizedAccelerate(view.context))
             .start()
     }
 
     /**
-     * M3 press physics: spring-free emphasized release back to rest.
+     * Releases a pressed view back to rest, using the same style as [pressDown].
      */
     fun pressUp(view: View) {
+        if (!pressFeedbackEnabled() || isInstant()) {
+            view.scaleX = 1f
+            view.scaleY = 1f
+            return
+        }
+
+        if (isKinetic()) {
+            animateSpring(view, DynamicAnimation.SCALE_X, 1f, SpringForce.STIFFNESS_LOW)
+            animateSpring(view, DynamicAnimation.SCALE_Y, 1f, SpringForce.STIFFNESS_LOW)
+            return
+        }
+
         view.animate()
             .scaleX(1f)
             .scaleY(1f)
@@ -92,18 +198,28 @@ object SuyuMotion {
             .start()
     }
 
+    /** Plays the configured UI haptic, if the user has enabled it. */
+    fun performHaptic(view: View, requested: Boolean = true) {
+        if (requested && hapticFeedbackEnabled()) {
+            view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+        }
+    }
+
     /**
-     * Attaches the same press-in/press-out feedback used by the game cards to any tappable
-     * surface. Returns false from the touch listener so the view's own click and long-click
-     * handlers still run untouched.
+     * Attaches press-in/press-out feedback to any tappable surface. Returns false from the touch
+     * listener so the view's own click and long-click handlers still run untouched.
      */
     fun installPressFeedback(view: View, haptic: Boolean = false) {
+        if (!pressFeedbackEnabled() || isInstant()) {
+            view.scaleX = 1f
+            view.scaleY = 1f
+            return
+        }
+
         view.setOnTouchListener { touched, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    if (haptic) {
-                        touched.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                    }
+                    performHaptic(touched, haptic)
                     pressDown(touched)
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> pressUp(touched)
@@ -118,7 +234,16 @@ object SuyuMotion {
      */
     fun fadeIn(view: View, fromAlpha: Float = 0f) {
         view.animate().cancel()
+        cancelSprings(view)
         view.alpha = fromAlpha
+        if (isInstant()) {
+            view.alpha = 1f
+            return
+        }
+        if (isKinetic()) {
+            animateSpring(view, DynamicAnimation.ALPHA, 1f, SpringForce.STIFFNESS_LOW)
+            return
+        }
         view.animate()
             .alpha(1f)
             .setDuration(durationMedium2(view.context))
@@ -132,7 +257,16 @@ object SuyuMotion {
      */
     fun settleIn(view: View) {
         view.animate().cancel()
+        cancelSprings(view)
         view.alpha = 0.55f
+        if (isInstant()) {
+            view.alpha = 1f
+            return
+        }
+        if (isKinetic()) {
+            animateSpring(view, DynamicAnimation.ALPHA, 1f, SpringForce.STIFFNESS_MEDIUM)
+            return
+        }
         view.animate()
             .alpha(1f)
             .setDuration(durationShort4(view.context))
@@ -142,21 +276,41 @@ object SuyuMotion {
 
     /**
      * Expressive entrance for a surface that appears above a scene, e.g. the card shown while a
-     * game boots: emphasized fade up plus a scale spring from [fromScale] to rest. Callers keep
-     * ownership of visibility, so a card that was deliberately hidden stays hidden.
+     * game boots. Callers keep ownership of visibility, so a card that was deliberately hidden
+     * stays hidden.
      */
     fun springIn(view: View, fromScale: Float = 0.92f) {
         view.animate().cancel()
+        cancelSprings(view)
         view.alpha = 0f
         view.scaleX = fromScale
         view.scaleY = fromScale
+
+        if (isInstant()) {
+            view.alpha = 1f
+            view.scaleX = 1f
+            view.scaleY = 1f
+            return
+        }
+
+        if (isKinetic()) {
+            animateSpring(view, DynamicAnimation.ALPHA, 1f, SpringForce.STIFFNESS_LOW)
+            animateSpring(view, DynamicAnimation.SCALE_X, 1f, SpringForce.STIFFNESS_LOW)
+            animateSpring(view, DynamicAnimation.SCALE_Y, 1f, SpringForce.STIFFNESS_LOW)
+            return
+        }
+
         view.animate()
             .alpha(1f)
             .setDuration(durationMedium2(view.context))
             .setInterpolator(emphasizedDecelerate(view.context))
             .start()
-        springScale(view, DynamicAnimation.SCALE_X)
-        springScale(view, DynamicAnimation.SCALE_Y)
+        view.animate()
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(durationMedium4(view.context))
+            .setInterpolator(OvershootInterpolator(0.7f))
+            .start()
     }
 
     /**
@@ -165,6 +319,17 @@ object SuyuMotion {
      */
     fun springOut(view: View, toScale: Float = 0.92f, onEnd: (() -> Unit)? = null) {
         view.animate().cancel()
+        cancelSprings(view)
+
+        if (isInstant()) {
+            view.alpha = 0f
+            view.scaleX = 1f
+            view.scaleY = 1f
+            view.visibility = View.INVISIBLE
+            onEnd?.invoke()
+            return
+        }
+
         view.animate()
             .alpha(0f)
             .scaleX(toScale)
@@ -180,14 +345,32 @@ object SuyuMotion {
             .start()
     }
 
-    private fun springScale(view: View, property: DynamicAnimation.ViewProperty) {
-        SpringAnimation(view, property, 1f).apply {
-            spring = SpringForce(1f).apply {
-                stiffness = SpringForce.STIFFNESS_LOW
-                dampingRatio = SPRING_DAMPING
+    private fun cancelSprings(view: View) {
+        springAnimations.remove(view)?.values?.forEach { it.cancel() }
+    }
+
+    private fun animateSpring(
+        view: View,
+        property: DynamicAnimation.ViewProperty,
+        target: Float,
+        stiffness: Float
+    ) {
+        val perView = springAnimations.getOrPut(view) { HashMap() }
+        perView[property]?.cancel()
+
+        val animation = SpringAnimation(view, property, target).apply {
+            spring = SpringForce(target).apply {
+                this.stiffness = stiffness
+                dampingRatio = springDamping()
             }
-            start()
         }
+        perView[property] = animation
+        animation.addEndListener { _, _, _, _ ->
+            if (perView[property] === animation) {
+                perView.remove(property)
+            }
+        }
+        animation.start()
     }
 
     /**
@@ -197,23 +380,32 @@ object SuyuMotion {
      * laid out yet.
      */
     fun applyEnterTransition(activity: Activity) {
+        val enabled = transitionsEnabled()
+        val enter = if (enabled) {
+            org.yuzu.yuzu_emu.R.anim.launch_open_in
+        } else {
+            org.yuzu.yuzu_emu.R.anim.sakura_no_animation
+        }
+        val exit = if (enabled) {
+            org.yuzu.yuzu_emu.R.anim.launch_open_out
+        } else {
+            org.yuzu.yuzu_emu.R.anim.sakura_no_animation
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             activity.overrideActivityTransition(
                 Activity.OVERRIDE_TRANSITION_OPEN,
-                org.yuzu.yuzu_emu.R.anim.launch_open_in,
-                org.yuzu.yuzu_emu.R.anim.launch_open_out
+                enter,
+                exit
             )
             activity.overrideActivityTransition(
                 Activity.OVERRIDE_TRANSITION_CLOSE,
-                org.yuzu.yuzu_emu.R.anim.launch_open_in,
-                org.yuzu.yuzu_emu.R.anim.launch_open_out
+                enter,
+                exit
             )
         } else {
             @Suppress("DEPRECATION")
-            activity.overridePendingTransition(
-                org.yuzu.yuzu_emu.R.anim.launch_open_in,
-                org.yuzu.yuzu_emu.R.anim.launch_open_out
-            )
+            activity.overridePendingTransition(enter, exit)
         }
     }
 
