@@ -175,7 +175,12 @@ function(get_cache_path package key out)
 endfunction()
 
 # Download a URL to file, with a sha512 hash
-# And retry 5 times
+# And retry with exponential backoff
+#
+# Most artifacts come from GitHub release downloads, which intermittently
+# answer 5xx for a few minutes at a time. Six attempts with a fixed five second
+# pause only covered about 30 seconds, so a short outage failed the whole cold
+# build. Eight attempts with a growing pause ride out roughly four minutes.
 function(cpm_download url file)
     echo("Downloading ${url} to ${file}")
     list(LENGTH ARGN argn_len)
@@ -186,7 +191,12 @@ function(cpm_download url file)
         unset(args)
     endif()
 
-    foreach(i RANGE 5)
+    set(delay 5)
+    set(max_delay 60)
+    set(attempts 8)
+    math(EXPR last_attempt "${attempts} - 1")
+
+    foreach(i RANGE ${last_attempt})
         file(DOWNLOAD ${url} ${file}
             ${args}
             STATUS ret)
@@ -196,13 +206,19 @@ function(cpm_download url file)
             break()
         endif()
 
-        echo_error("Download failed. Trying again in 5 seconds")
-        sleep(5)
+        if (i LESS ${last_attempt})
+            echo_error("Download failed. Trying again in ${delay} seconds")
+            sleep(${delay})
+            math(EXPR delay "${delay} * 2")
+            if (delay GREATER max_delay)
+                set(delay ${max_delay})
+            endif()
+        endif()
     endforeach()
 
     # TODO: use return code or something
     if (NOT code EQUAL 0)
-        fatal("Download for ${pkg_url} failed after 5 tries")
+        fatal("Download for ${url} failed after ${attempts} tries")
     endif()
 endfunction()
 
