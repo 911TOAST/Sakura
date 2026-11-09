@@ -225,7 +225,9 @@
     <string name="keys">Keys</string>
     <string name="keys_description">Select your &lt;b>prod.keys&lt;/b> file with the button below.</string>
     <string name="firmware">Firmware</string>
-    <string name="firmware_description">Select your &lt;b>firmware.zip&lt;/b> file with the button below.</string>
+    <string name="firmware_description">Optional. Select your &lt;b>firmware.zip&lt;/b> only if you want system applets, updates, and the system font.</string>
+    <string name="optional">Optional</string>
+    <string name="setup_optional_toggle">Optional — install firmware only if you want it</string>
     <string name="games">Games</string>
     <string name="games_description">Select your &lt;b>Games&lt;/b> folder with the button below.</string>
     <string name="done">Done</string>
@@ -304,7 +306,7 @@
     <string name="install_prod_keys_warning_help">https://suyu.dev/help/quickstart/#guide-introduction</string>
     <string name="install_firmware_warning">Skip adding firmware?</string>
     <string name="emulator_data">Setup Emulator Data</string>
-    <string name="emulator_data_description">Keys are required in order for the emulator to work and firmware is recommended and required for using the QLaunch applet</string>
+    <string name="emulator_data_description">Keys unlock retail games and are required. Firmware is optional — install it only if you want system applets, updates, and the system font.</string>
     <string name="permissions">Grant Permissions</string>
     <string name="permissions_description">Grant optional permissions to use specific features of the emulator</string>
     <string name="install_firmware_warning_description">Many games require access to firmware to run properly.</string>

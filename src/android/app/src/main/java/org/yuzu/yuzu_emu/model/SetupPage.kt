@@ -13,6 +13,10 @@ data class SetupPage(
     val pageButtons: List<PageButton>? = null,
     val pageSteps: () -> PageState = { PageState.COMPLETE },
 
+    // When any button on the page is optional, the page shows a switch that can hide it.
+    // `optionalDisabled` keeps the choice across ViewPager rebinds.
+    var optionalDisabled: Boolean = false,
+
     )
 
 data class PageButton(
@@ -23,6 +27,7 @@ data class PageButton(
     val buttonState: () -> ButtonState = { ButtonState.BUTTON_ACTION_UNDEFINED },
     val isUnskippable: Boolean = false,
     val hasWarning: Boolean = false,
+    val isOptional: Boolean = false,
     val warningTitleId: Int = 0,
     val warningDescriptionId: Int = 0,
     val warningHelpLinkId: Int = 0

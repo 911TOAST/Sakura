@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.res.ResourcesCompat
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.MaterialColors
 import org.yuzu.yuzu_emu.databinding.PageSetupBinding
 import org.yuzu.yuzu_emu.model.PageState
 import org.yuzu.yuzu_emu.model.SetupCallback
@@ -42,6 +43,21 @@ class SetupAdapter(val activity: AppCompatActivity, pages: List<SetupPage>) :
                 onStepCompleted(0, pageFullyCompleted = true)
             }
 
+            val optionalButtons = model.pageButtons?.filter { it.isOptional }.orEmpty()
+            binding.optionalToggleRow.visibility =
+                if (optionalButtons.isEmpty()) View.GONE else View.VISIBLE
+            if (optionalButtons.isNotEmpty()) {
+                binding.optionalSwitch.setOnCheckedChangeListener(null)
+                binding.optionalSwitch.isChecked = !model.optionalDisabled
+                binding.optionalSwitch.setOnCheckedChangeListener { _, isChecked ->
+                    model.optionalDisabled = !isChecked
+                    optionalButtons.forEach { button ->
+                        binding.pageButtonContainer.findViewById<View>(button.titleId)
+                            ?.visibility = if (model.optionalDisabled) View.GONE else View.VISIBLE
+                    }
+                }
+            }
+
             if (model.pageButtons != null && model.pageSteps.invoke() != PageState.COMPLETE) {
                 model.pageButtons.forEachIndexed { index, pageButton ->
                     val pageButtonView = LayoutInflater.from(activity)
@@ -59,13 +75,43 @@ class SetupAdapter(val activity: AppCompatActivity, pages: List<SetupPage>) :
                             activity.theme
                         )
                         text = activity.resources.getString(pageButton.titleId)
+                        // Optional steps read as secondary: a darker container and the
+                        // muted on-surface colour, so firmware never looks mandatory.
+                        if (pageButton.isOptional) {
+                            val background = MaterialColors.getColor(
+                                this,
+                                com.google.android.material.R.attr.colorSurfaceContainerHighest
+                            )
+                            val foreground = MaterialColors.getColor(
+                                this,
+                                com.google.android.material.R.attr.colorOnSurfaceVariant
+                            )
+                            backgroundTintList = ColorStateList.valueOf(background)
+                            setTextColor(foreground)
+                            iconTint = ColorStateList.valueOf(foreground)
+                            text = activity.resources.getString(pageButton.titleId) +
+                                "  ·  " + activity.resources.getString(R.string.optional)
+                        }
                     }
 
                     pageButtonView.setOnClickListener {
                         pageButton.buttonAction.invoke(this@SetupPageViewHolder)
                     }
 
-                    binding.pageButtonContainer.addView(pageButtonView)
+                    // Optional steps the user already declined stay in the tree but hidden, so
+                    // the switch can bring them back without a rebind.
+                    pageButtonView.visibility =
+                        if (pageButton.isOptional && model.optionalDisabled) {
+                            View.GONE
+                        } else {
+                            View.VISIBLE
+                        }
+
+                    // Keep the optional switch last in the column.
+                    binding.pageButtonContainer.addView(
+                        pageButtonView,
+                        binding.pageButtonContainer.childCount - 1
+                    )
 
                     // Disable buton add if its already completed
                     if (pageButton.buttonState.invoke() == ButtonState.BUTTON_ACTION_COMPLETE) {

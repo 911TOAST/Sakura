@@ -690,4 +690,18 @@
         <item>3</item>
         <item>4</item>
     </integer-array>
+
+    <!-- Rotating jokes shown under the boot card while a game starts. -->
+    <string-array name="loading_tips">
+        <item>Tip: Shaders compile faster if you believe in them.</item>
+        <item>Tip: 60 FPS is a lifestyle, not a promise.</item>
+        <item>Tip: If it stutters, blame the game. We do.</item>
+        <item>Tip: Your Switch is taking a nap in a drawer somewhere.</item>
+        <item>Tip: Emulation is just two CPUs becoming friends.</item>
+        <item>Tip: The dock was holding you back all along.</item>
+        <item>Tip: This tip is optional, like the firmware.</item>
+        <item>Tip: Malikan mode: now with extra kanji.</item>
+        <item>Tip: Turning it off and on again is now a settings toggle.</item>
+        <item>Tip: No frames were harmed in the making of this build.</item>
+    </string-array>
 </resources>

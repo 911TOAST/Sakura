@@ -194,10 +194,8 @@ class SetupFragment : Fragment() {
                                     }
                                 },
                                 false,
-                                true,
-                                R.string.install_firmware_warning,
-                                R.string.install_firmware_warning_description,
-                                R.string.install_firmware_warning_help,
+                                false,
+                                isOptional = true,
                             )
                         )
                         add(

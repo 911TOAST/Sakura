@@ -159,6 +159,8 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
 
     private var perfStatsRunnable: Runnable? = null
     private var socRunnable: Runnable? = null
+    private var loadingTipRunnable: Runnable? = null
+    private val loadingTipHandler = Handler(Looper.getMainLooper())
     private var isAmiiboPickerOpen = false
     private var amiiboLoadJob: Job? = null
 
@@ -514,6 +516,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
 
                                 if (_binding != null) {
                                     // Hide loading indicator immediately for intent launches
+                                    stopLoadingTips()
                                     binding.loadingIndicator.visibility = View.GONE
                                     binding.surfaceEmulation.visibility = View.VISIBLE
 
@@ -656,6 +659,44 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         completeViewSetup()
     }
 
+    /**
+     * Rotate the joke tips under the boot card. The card is often visible for tens of seconds
+     * while shaders compile, so a static label reads as a stall.
+     */
+    private fun startLoadingTips() {
+        stopLoadingTips()
+        val tips = resources.getStringArray(R.array.loading_tips)
+        if (tips.isEmpty() || _binding == null) {
+            return
+        }
+
+        var index = 0
+        binding.loadingTip.text = tips[index]
+        binding.loadingTip.alpha = 0f
+        binding.loadingTip.animate().alpha(0.72f).setDuration(220).start()
+
+        val runnable = object : Runnable {
+            override fun run() {
+                val b = _binding ?: return
+                index = (index + 1) % tips.size
+                b.loadingTip.animate().cancel()
+                b.loadingTip.animate().alpha(0f).setDuration(160).withEndAction {
+                    val current = _binding ?: return@withEndAction
+                    current.loadingTip.text = tips[index]
+                    current.loadingTip.animate().alpha(0.72f).setDuration(220).start()
+                }.start()
+                loadingTipHandler.postDelayed(this, 3600)
+            }
+        }
+        loadingTipRunnable = runnable
+        loadingTipHandler.postDelayed(runnable, 3600)
+    }
+
+    private fun stopLoadingTips() {
+        loadingTipRunnable?.let { loadingTipHandler.removeCallbacks(it) }
+        loadingTipRunnable = null
+        _binding?.loadingTip?.animate()?.cancel()
+    }
 
     private fun setupOverlayGamelessEditMode() {
         binding.surfaceInputOverlay.post {
@@ -671,6 +712,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         binding.drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
         binding.surfaceInputOverlay.visibility = View.VISIBLE
         binding.loadingIndicator.visibility = View.GONE
+        stopLoadingTips()
 
         // in gameless edit mode, back = done
         requireActivity().onBackPressedDispatcher.addCallback(
@@ -978,6 +1020,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         // Intent launches hide the card outright, so only animate a card that is actually shown.
         if (binding.loadingIndicator.visibility == View.VISIBLE) {
             SuyuMotion.springIn(binding.loadingIndicator)
+            startLoadingTips()
         }
 
         WindowInfoTracker.getOrCreate(requireContext())
@@ -1012,6 +1055,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                 binding.drawerLayout.setDrawerLockMode(IntSetting.LOCK_DRAWER.getInt())
                 ViewUtils.showView(binding.surfaceInputOverlay)
                 // Hand the scene over: the boot card shrinks away instead of vanishing.
+                stopLoadingTips()
                 SuyuMotion.springOut(binding.loadingIndicator)
 
                 emulationState.updateSurface()
@@ -1052,6 +1096,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                 }
                 deferGameSetupUntilStopCompletes = false
                 finishGameSetup()
+                startLoadingTips()
             }
         }
         emulationViewModel.drawerOpen.collect(viewLifecycleOwner) {
@@ -1070,6 +1115,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                     .setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
                 ViewUtils.hideView(binding.surfaceInputOverlay)
                 ViewUtils.showView(binding.loadingIndicator)
+                startLoadingTips()
             }
         }
 
@@ -1574,6 +1620,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        stopLoadingTips()
         amiiboLoadJob?.cancel()
         amiiboLoadJob = null
         perfStatsRunnable?.let { perfStatsUpdateHandler.removeCallbacks(it) }

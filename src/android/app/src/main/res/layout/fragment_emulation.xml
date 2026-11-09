@@ -113,6 +113,21 @@
                         app:wavyWaveAmplitude="4dp"
                         app:wavyWaveLength="34dp" />
 
+                    <!-- Rotating joke tip while the game boots. -->
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/loading_tip"
+                        style="@style/TextAppearance.Material3.BodySmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:alpha="0.72"
+                        android:gravity="center"
+                        android:maxWidth="248dp"
+                        android:textAlignment="center"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:textSize="12sp"
+                        tools:text="Tip: Shaders compile faster if you believe in them." />
+
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>
