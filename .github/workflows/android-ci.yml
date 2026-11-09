@@ -51,6 +51,14 @@ jobs:
             printf '// Forwarding header\n#include <boost/variant/variant.hpp>\n#include <boost/variant/recursive_variant.hpp>\n#include <boost/variant/recursive_wrapper.hpp>\n#include <boost/variant/get.hpp>\n#include <boost/variant/apply_visitor.hpp>\n#include <boost/variant/static_visitor.hpp>\n#include <boost/variant/visitor_ptr.hpp>\n' > "$f"
           fi
 
+      - name: Cache CPM downloads
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cpmfile.json') }}
+          restore-keys: |
+            cpm-${{ runner.os }}-
+
       - uses: actions/setup-java@v4
         with:
           distribution: microsoft
@@ -66,8 +74,8 @@ jobs:
         working-directory: src/android
         run: |
           chmod +x gradlew
-          # The distribution is served by downloads.gradle.org, but a cold CDN
-          # or a proxy can still answer 5xx. Retry before failing the job.
+          # The distribution comes from a mirror, but a cold connection can
+          # still fail. Retry before failing the job.
           for attempt in 1 2 3 4 5; do
             if ./gradlew --version; then
               exit 0

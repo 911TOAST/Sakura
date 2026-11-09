@@ -1067,23 +1067,32 @@ function(AddCIPackage)
         set(sha512sum_file
             "${CMAKE_CURRENT_BINARY_DIR}/.cpmutil_${ARTIFACT}_sha512sum")
 
-        # Flaky TLS handshakes against the release CDN are common on some
-        # networks; retry a few times before giving up rather than failing
-        # the whole configure on the first hiccup.
+        # GitHub release assets intermittently answer 5xx for minutes at a
+        # time. Five attempts two seconds apart covered about eight seconds,
+        # which is not enough; back off exponentially for roughly four
+        # minutes, the same budget cpm_download uses for the artifacts.
         set(sha512sum_error 1)
-        foreach(sha512sum_attempt RANGE 1 5)
+        set(sha512sum_delay 2)
+        foreach(sha512sum_attempt RANGE 1 8)
             file(DOWNLOAD "${sha512sum_url}" "${sha512sum_file}"
                 STATUS sha512sum_status)
             list(GET sha512sum_status 0 sha512sum_error)
             if(NOT sha512sum_error)
                 break()
             endif()
-            execute_process(COMMAND ${CMAKE_COMMAND} -E sleep 2)
+            if(sha512sum_attempt LESS 8)
+                execute_process(COMMAND ${CMAKE_COMMAND} -E sleep
+                    ${sha512sum_delay})
+                math(EXPR sha512sum_delay "${sha512sum_delay} * 2")
+                if(sha512sum_delay GREATER 60)
+                    set(sha512sum_delay 60)
+                endif()
+            endif()
         endforeach()
 
         if(sha512sum_error)
             message(FATAL_ERROR "[CPMUtil] Failed to download sha512sum "
-                "for ${ARTIFACT_NAME} from ${sha512sum_url} after 5 attempts")
+                "for ${ARTIFACT_NAME} from ${sha512sum_url} after 8 attempts")
         endif()
 
         file(READ "${sha512sum_file}" sha512sum_hash)
