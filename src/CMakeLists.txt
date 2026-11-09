@@ -34,6 +34,15 @@ endif()
 
 if (SAKURA_OPTIMIZED)
     add_compile_definitions(SAKURA_OPTIMIZED)
+    if (ANDROID)
+        # Split every function and datum into its own section, then let lld drop the ones no
+        # live path reaches and fold the ones that compile to identical machine code. The
+        # optimized flavor is an LTO build, so this is the final pass that removes code the
+        # translation units could not see was dead, and the smaller text footprint leaves more
+        # of the hot JIT/renderer path in the instruction cache.
+        add_compile_options(-ffunction-sections -fdata-sections)
+        add_link_options(-Wl,--gc-sections -Wl,--icf=safe -Wl,-O2)
+    endif()
 endif()
 
 # Build ID (mingw only right now)

@@ -1,6 +1,79 @@
 # Sakura optimized build — performance reports
 
-Date: 2026-10-24 (CPU pass), updated 2026-11-07 (shader warmup + device-wide pipeline cache)
+Date: 2026-10-24 (CPU pass), updated 2026-11-09 (dead-weight removal + per-frame query cache)
+
+## 2026-11-09 update — dead resource removal and per-frame driver query cache
+
+Files: `src/android/app/build.gradle.kts`, `src/CMakeLists.txt`,
+`src/android/app/src/main/res/...` (53 deleted resource files),
+`src/video_core/vulkan_common/vulkan_device.{h,cpp}`.
+
+### Removed assets
+
+- `neotron_logo.png` (262,221 bytes) and `ic_yuzu_splash.png` (84,092
+  bytes) had no reference anywhere in the tree: no `@drawable/`/`R.drawable.`,
+  no string lookup, no manifest or theme use. Both are deleted.
+- The release build type now sets `isShrinkResources = true`. R8 already
+  removes dead Kotlin/Java, so the resource shrinker can compute the real
+  reference graph from the surviving code and strip every unreferenced
+  drawable, layout, string, style and colour at package time.
+- The same tree-wide audit of `res/` (all qualifiers, view-binding class names
+  included) found 48 more unreferenced files, and they are deleted too: dead
+  layouts (`fragment_early_access.xml`, `fragment_search.xml`,
+  `dialog_bottom_sheet.xml`, two netplay items), the unused
+  `menu_navigation.xml` pair and `menu_game_filters.xml`, the remaining
+  `ic_*`/`suyu_*` drawables, seven `sakura_*` animations, the
+  `raw/sakura_flower.svg` source, and the two duplicate
+  `drawable*/ic_launcher.xml` adaptive icons (the manifest only uses
+  `@mipmap/ic_launcher`). Removing those last two orphaned
+  `drawable/ic_icon_bg.xml`, so it and both legacy-flavor launcher bitmaps are
+  deleted as well. `isShrinkResources` stays enabled so future dead resources
+  are stripped from release APKs even if a file is left on disk.
+- A 24,616,200-byte `libVkLayer_khronos_validation.so` left in
+  `src/android/app/src/main/jniLibs` by an earlier validation-layer build was
+  deleted, along with an unused 655,169-byte `externals/spirv-headers-new.zip`.
+  The Gradle build already passes `-DYUZU_DOWNLOAD_ANDROID_VVL=OFF`, so nothing
+  regenerates or needs the layer, but with `jniLibs.useLegacyPackaging = true`
+  it would have been packaged into any APK built while it was present.
+- Only one runtime name lookup exists in the app
+  (`resources.getIdentifier("config_navBarInteractionMode", "integer",
+  "android")`, a framework resource), so shrinking cannot drop anything the
+  code still needs.
+
+### Cached memory budget query
+
+`TextureCache::TickFrame()` and `BufferCache::TickFrame()` both called
+`Device::GetDeviceMemoryUsage()` once per frame to size their garbage
+collection. That call issues `vkGetPhysicalDeviceMemoryProperties2` - a driver
+round-trip, which Mali serialises against the GPU - so the GPU thread paid two
+driver queries per frame to read a value that changes slowly.
+
+`Device::GetDeviceMemoryUsage()` now caches the reading and refreshes it every
+15 frames (about four times a second at 60 FPS) via mutable members. Both
+caches share the cached value, so the steady-state cost drops from two driver
+queries per frame to roughly one every 15 frames. The value is still far more
+accurate than the pre-existing byte estimate the caches fall back to when
+`VK_EXT_memory_budget` is missing, and a few frames of staleness cannot change
+a collection decision in any meaningful way.
+
+### Link-time section GC and identical-code folding
+
+The `optimized` flavor now compiles with `-ffunction-sections -fdata-sections`
+and links with `-Wl,--gc-sections -Wl,--icf=safe -Wl,-O2` (see the
+`SAKURA_OPTIMIZED` block in `src/CMakeLists.txt`). ThinLTO can only remove code
+from the call graph it can see; the section pass also discards unreachable
+unwind/registration tables and folds functions that lower to identical
+instructions. This is applied only to the aggressive Android flavor, so the
+mainline and legacy builds keep their previous link settings.
+
+### Verification
+
+Static only. No build and no device were used, so there is no FPS, frametime or
+memory measurement to report; the effect claimed above is the removed work
+(two driver calls per frame, 26,010,109 bytes of unreferenced assets), not a
+benchmark result. `git diff` review, reference scans over every `res/`
+qualifier and view-binding class name, and XML parsing of the touched resource
+tree were used to confirm the edits.
 
 ## 2026-11-07 update — shader warmup and cross-title GPU pipeline cache
 

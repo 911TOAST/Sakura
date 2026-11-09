@@ -1160,6 +1160,11 @@ private:
     mutable std::mutex image_compression_mutex;
     mutable std::map<std::array<u32, 5>, ImageCompressionSupport> image_compression_cache;
     u64 device_access_memory{};                ///< Total size of device local memory in bytes.
+    /// Last vkGetPhysicalDeviceMemoryProperties2 budget reading. The texture cache and the
+    /// buffer cache both poll usage every frame to size their garbage collection, and on Mali
+    /// that query is a driver round-trip. It is refreshed every few frames instead.
+    mutable u64 cached_memory_usage{};
+    mutable u32 memory_usage_refresh_ticks{};
     u32 sets_per_pool{};                       ///< Sets per Description Pool
     NvidiaArchitecture nvidia_arch{NvidiaArchitecture::Arch_AmpereOrNewer};
 

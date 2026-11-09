@@ -188,6 +188,11 @@ android {
             }
 
             isMinifyEnabled = true
+            // R8 already knows which code survives; let the resource shrinker drop every
+            // drawable, layout, string and style that no surviving reference reaches. Nothing in
+            // this APK looks resources up by name at runtime (the only getIdentifier call targets
+            // a framework integer), so this is pure dead weight removal.
+            isShrinkResources = true
             isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

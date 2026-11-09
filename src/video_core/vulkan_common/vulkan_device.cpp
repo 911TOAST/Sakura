@@ -1560,6 +1560,17 @@ std::optional<size_t> Device::GetSamplerHeapBudget() const {
 }
 
 u64 Device::GetDeviceMemoryUsage() const {
+    // The texture cache and the buffer cache both call this once per frame to size their
+    // garbage collection. vkGetPhysicalDeviceMemoryProperties2 is a driver round-trip that
+    // Mali serializes against the GPU, so reading it twice per frame is pure overhead. A
+    // reading that is a few frames old is still far more accurate than the running byte
+    // estimate and is good enough to drive the collection thresholds. Only GPU-thread callers
+    // exist, so the cache does not need a lock.
+    constexpr u32 REFRESH_INTERVAL = 15;
+    if (memory_usage_refresh_ticks != 0 && --memory_usage_refresh_ticks != 0) {
+        return cached_memory_usage;
+    }
+
     VkPhysicalDeviceMemoryBudgetPropertiesEXT budget;
     budget.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
     budget.pNext = nullptr;
@@ -1568,6 +1579,9 @@ u64 Device::GetDeviceMemoryUsage() const {
     for (const size_t heap : valid_heap_memory) {
         result += budget.heapUsage[heap];
     }
+
+    memory_usage_refresh_ticks = REFRESH_INTERVAL;
+    cached_memory_usage = result;
     return result;
 }
 
