@@ -1004,6 +1004,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.SHOW_UPDATE_WARNING,
+                    titleId = R.string.show_update_warning,
+                    descriptionId = R.string.show_update_warning_description,
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.ENABLE_QUICK_SETTINGS,
                     titleId = R.string.enable_quick_settings,
                     descriptionId = R.string.enable_quick_settings_description,

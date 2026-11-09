@@ -74,6 +74,8 @@ namespace AndroidSettings {
         Settings::Setting<s32> app_language{linkage, 0, "app_language", Settings::Category::Android};
         Settings::Setting<bool> enable_update_checks{linkage, true, "enable_update_checks",
                                                   Settings::Category::Android};
+        Settings::Setting<bool> show_update_warning{linkage, true, "show_update_warning",
+                                                  Settings::Category::Android};
         Settings::Setting<bool> enable_folder_button{linkage, true, "enable_folder_button",
                                                   Settings::Category::Android};
         Settings::Setting<bool> enable_qlaunch_button{linkage, false, "enable_qlaunch_button",

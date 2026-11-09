@@ -250,6 +250,12 @@
     <string name="add_directory_success">New game directory added successfully </string>
     <string name="enable_update_checks">Check for Updates</string>
     <string name="enable_update_checks_description">Check for updates on launch, and optionally download and install the new update.</string>
+    <string name="show_update_warning">Show Update Warning</string>
+    <string name="show_update_warning_description">Shows a short notice on launch about updates, support, and where to report problems.</string>
+    <string name="update_warning_title">Update Warning</string>
+    <string name="update_warning_description">Sakura is a community build, not an official release. Updates arrive when they arrive, performance varies by device and game, and no frame rate is promised.\n\nIf something breaks, please report it on GitHub instead of leaving a rage review - that is how it actually gets fixed. And if Sakura is useful to you, a star helps more than you would think.</string>
+    <string name="star_on_github">Star on GitHub</string>
+    <string name="got_it">Got it</string>
     <string name="update_available">Update Available</string>
     <string name="update_available_description">A new version is available: %1$s\n\nWould you like to download it?</string>
     <string name="downloading_update">Downloading Update</string>

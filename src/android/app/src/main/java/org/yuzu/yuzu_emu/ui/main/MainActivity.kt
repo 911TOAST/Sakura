@@ -158,6 +158,9 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
         if (!firstTimeSetup && NativeLibrary.isUpdateCheckerEnabled() && BooleanSetting.ENABLE_UPDATE_CHECKS.getBoolean()) {
              checkForUpdates()
         }
+        if (!firstTimeSetup && BooleanSetting.SHOW_UPDATE_WARNING.getBoolean()) {
+            binding.root.post { showUpdateWarning() }
+        }
         setInsets()
         applyFullscreenPreference()
 
@@ -204,6 +207,26 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
                 }
             }
         }.start()
+    }
+
+    private fun showUpdateWarning() {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.update_warning_title)
+            .setMessage(R.string.update_warning_description)
+            .setPositiveButton(R.string.got_it) { dialog, _ -> dialog.dismiss() }
+            .setNeutralButton(R.string.star_on_github) { dialog, _ ->
+                openLink("https://github.com/911TOAST/Sakura")
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.dont_show_again) { dialog, _ ->
+                BooleanSetting.SHOW_UPDATE_WARNING.setBoolean(false)
+                NativeConfig.saveGlobalConfig()
+                dialog.dismiss()
+            }
+            .show()
     }
 
     // TODO(crueter): body, "View on Forgejo" button
