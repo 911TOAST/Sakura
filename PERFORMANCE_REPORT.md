@@ -49,9 +49,10 @@ round-trip, which Mali serialises against the GPU - so the GPU thread paid two
 driver queries per frame to read a value that changes slowly.
 
 `Device::GetDeviceMemoryUsage()` now caches the reading and refreshes it every
-15 frames (about four times a second at 60 FPS) via mutable members. Both
-caches share the cached value, so the steady-state cost drops from two driver
-queries per frame to roughly one every 15 frames. The value is still far more
+15 accessor calls (about every 7-8 frames with both caches ticking, so roughly
+eight times a second at 60 FPS) via mutable members. Both caches share the
+cached value, so the steady-state cost drops from two driver queries per frame
+to roughly one every 15 accessor calls. The value is still far more
 accurate than the pre-existing byte estimate the caches fall back to when
 `VK_EXT_memory_budget` is missing, and a few frames of staleness cannot change
 a collection decision in any meaningful way.
