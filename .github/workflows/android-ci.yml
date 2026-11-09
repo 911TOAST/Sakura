@@ -62,11 +62,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build glslang-tools
 
-      - name: Build APKs
+      - name: Warm Gradle wrapper
         working-directory: src/android
         run: |
           chmod +x gradlew
-          ./gradlew ${{ inputs.flavors || 'assembleMainlineRelease' }} --stacktrace
+          # The distribution is served by downloads.gradle.org, but a cold CDN
+          # or a proxy can still answer 5xx. Retry before failing the job.
+          for attempt in 1 2 3 4 5; do
+            if ./gradlew --version; then
+              exit 0
+            fi
+            echo "::warning::Gradle wrapper provisioning failed (attempt $attempt/5); retrying"
+            sleep $((attempt * 10))
+          done
+          exit 1
+
+      - name: Build APKs
+        working-directory: src/android
+        run: ./gradlew ${{ inputs.flavors || 'assembleMainlineRelease' }} --stacktrace
 
       - name: Collect APKs
         if: always()
