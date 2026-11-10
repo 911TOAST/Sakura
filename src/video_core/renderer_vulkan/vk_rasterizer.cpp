@@ -240,6 +240,9 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func) {
     };
     FlushWork();
     gpu_memory->FlushCaching();
+    // Any guest draw invalidates a static frame: the presentation path compares this counter with
+    // the one captured when the displayed frame was composed (see renderer_static_frame_skip).
+    ++total_draws;
 
     GraphicsPipeline* const pipeline{pipeline_cache.CurrentGraphicsPipeline()};
     if (!pipeline) {

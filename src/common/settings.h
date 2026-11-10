@@ -450,6 +450,17 @@ struct Values {
     SwitchableSetting<bool> renderer_draw_state_cache{linkage, false, "renderer_draw_state_cache",
                                                       Category::RendererDebug,
                                                       Specialization::Default, true, true};
+    // Presents the frame that is already on screen instead of re-compositing it when the layer
+    // layout is unchanged and the guest recorded no draw since the last presented frame. The
+    // composition pass is then not recorded at all, so a static menu, pause screen or dialogue box
+    // costs no GPU bandwidth: nothing is drawn, copied or presented for that frame. The pixels are
+    // identical by construction, because the guest produced nothing new to show. Developer switch,
+    // off by default: an update that reaches guest memory without a draw (a decoder writing the
+    // displayed surface in place, for example) is not seen by the predicate and would hold the
+    // previous frame until the next real one.
+    SwitchableSetting<bool> renderer_static_frame_skip{linkage, false, "renderer_static_frame_skip",
+                                                       Category::RendererDebug,
+                                                       Specialization::Default, true, true};
     // *nix platforms may have issues with the borderless windowed fullscreen mode.
     // Default to exclusive fullscreen on these platforms for now.
     SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,

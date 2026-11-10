@@ -730,6 +730,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.RENDERER_STATIC_FRAME_SKIP,
+                    titleId = R.string.renderer_static_frame_skip,
+                    descriptionId = R.string.renderer_static_frame_skip_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_CORE_PINNING,
                     titleId = R.string.renderer_core_pinning,
                     descriptionId = R.string.renderer_core_pinning_description

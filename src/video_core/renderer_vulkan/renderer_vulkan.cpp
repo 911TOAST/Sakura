@@ -228,6 +228,18 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
     }
 
     RenderScreenshot(framebuffers);
+
+    // Static frame elision: the composition pass would read the guest layer and write the same
+    // pixels back into a freshly acquired swapchain image. When the guest recorded no draw since
+    // the last presented frame and the layer layout is unchanged, nothing about the displayed
+    // image can differ, so the pass is skipped and the presentation engine keeps the frame it
+    // already has. That removes a full-screen read plus write for the frame at zero quality cost.
+    if (CanSkipStaticFrame(framebuffers)) {
+        gpu.RendererFrameEndNotify();
+        rasterizer.TickFrame();
+        return;
+    }
+
     Frame* frame = present_manager.GetRenderFrame();
 
     scheduler.RequestOutsideRenderPassOperationContext();
@@ -240,9 +252,67 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
     scheduler.Flush(*frame->render_ready, present_manager.GetPresentWaitSemaphore());
 
     present_manager.Present(frame);
+    RememberCompositedFrame(framebuffers);
 
     gpu.RendererFrameEndNotify();
     rasterizer.TickFrame();
+}
+
+bool RendererVulkan::CanSkipStaticFrame(
+    std::span<const Tegra::FramebufferConfig> framebuffers) const {
+    if (!Settings::values.renderer_static_frame_skip.GetValue() || is_headless) {
+        return false;
+    }
+    // Only the Mali profile composites straight into the acquired swapchain image; the copy path
+    // re-presents an intermediate image and keeps its own ownership rules.
+    if (!device.IsMalikanMode() || !has_composited_frame) {
+        return false;
+    }
+    // A resize, a resolution change or a lost surface has to go through the normal path so the
+    // swapchain is recreated at the new extent and the new scale is used by the next composition.
+    const Layout::FramebufferLayout& layout = render_window.GetFramebufferLayout();
+    if (swapchain.NeedsRecreation() || applied_resolution_setup != composited_resolution_setup ||
+        layout.width != composited_layout.width ||
+        layout.height != composited_layout.height || layout.is_srgb != composited_layout.is_srgb ||
+        layout.screen.left != composited_layout.screen.left ||
+        layout.screen.top != composited_layout.screen.top ||
+        layout.screen.right != composited_layout.screen.right ||
+        layout.screen.bottom != composited_layout.screen.bottom) {
+        return false;
+    }
+    // Any draw recorded since the last presented frame means the guest produced new pixels.
+    if (rasterizer.TotalDraws() != composited_draw_count) {
+        return false;
+    }
+    // The guest can also hand over a different surface without drawing, for example on a flip.
+    if (framebuffers.size() != composited_layers.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < framebuffers.size(); ++i) {
+        const Tegra::FramebufferConfig& current = framebuffers[i];
+        const Tegra::FramebufferConfig& previous = composited_layers[i];
+        if (current.address != previous.address || current.offset != previous.offset ||
+            current.width != previous.width || current.height != previous.height ||
+            current.stride != previous.stride || current.pixel_format != previous.pixel_format ||
+            current.transform_flags != previous.transform_flags ||
+            current.blending != previous.blending ||
+            current.crop_rect.left != previous.crop_rect.left ||
+            current.crop_rect.top != previous.crop_rect.top ||
+            current.crop_rect.right != previous.crop_rect.right ||
+            current.crop_rect.bottom != previous.crop_rect.bottom) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void RendererVulkan::RememberCompositedFrame(
+    std::span<const Tegra::FramebufferConfig> framebuffers) {
+    composited_layers.assign(framebuffers.begin(), framebuffers.end());
+    composited_layout = render_window.GetFramebufferLayout();
+    composited_draw_count = rasterizer.TotalDraws();
+    composited_resolution_setup = applied_resolution_setup;
+    has_composited_frame = true;
 }
 
 void RendererVulkan::ApplyPendingResolutionChange() {

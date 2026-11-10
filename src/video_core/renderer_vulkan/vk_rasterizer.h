@@ -121,6 +121,11 @@ public:
     void TiledCacheBarrier() override;
     void FlushCommands() override;
     void TickFrame() override;
+    /// Monotonic count of guest draws recorded since the renderer was created. The presentation
+    /// path uses it to tell whether the frame on screen still reflects guest output.
+    [[nodiscard]] u64 TotalDraws() const noexcept {
+        return total_draws;
+    }
     bool AccelerateConditionalRendering() override;
     bool HasDrawTransformFeedback() override;
     bool AccelerateSurfaceCopy(const Tegra::Engines::Fermi2D::Surface& src,
@@ -235,6 +240,8 @@ private:
     boost::container::static_vector<VkSampler, MAX_TEXTURES> sampler_handles;
 
     u32 draw_counter = 0;
+    /// Guest draws since renderer creation; see TotalDraws() and renderer_static_frame_skip.
+    u64 total_draws = 0;
 
         /// Steady-state draw cache (see renderer_draw_state_cache). Records what the last successful
         /// Configure emitted: which pipeline, from which engine and epochs, inside which render pass.

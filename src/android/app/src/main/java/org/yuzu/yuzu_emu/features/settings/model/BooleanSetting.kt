@@ -33,6 +33,7 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     RENDERER_CLEAR_LOADOP("renderer_clear_loadop"),
     RENDERER_OPTIMAL_ATTACHMENTS("renderer_optimal_attachments"),
     RENDERER_DRAW_STATE_CACHE("renderer_draw_state_cache"),
+    RENDERER_STATIC_FRAME_SKIP("renderer_static_frame_skip"),
     RENDERER_CORE_PINNING("renderer_core_pinning"),
     RENDERER_ASYNC_PRESENTATION("async_presentation"),
     RENDERER_ASYNC_DIRECT_PRESENT("async_direct_present"),

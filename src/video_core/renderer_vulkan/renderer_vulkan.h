@@ -11,6 +11,7 @@
 #include <variant>
 
 #include "common/dynamic_library.h"
+#include "core/frontend/framebuffer_layout.h"
 #include "video_core/host1x/gpu_device_memory_manager.h"
 #include "video_core/renderer_base.h"
 #include "video_core/renderer_vulkan/vk_blit_screen.h"
@@ -88,6 +89,13 @@ private:
     /// cache can drop its rescaled allocations safely.
     void ApplyPendingResolutionChange();
 
+    /// True when the frame already on screen still describes the guest's output, so the
+    /// composition pass can be skipped entirely. See renderer_static_frame_skip.
+    bool CanSkipStaticFrame(std::span<const Tegra::FramebufferConfig> framebuffers) const;
+
+    /// Records the guest output that the frame just presented corresponds to.
+    void RememberCompositedFrame(std::span<const Tegra::FramebufferConfig> framebuffers);
+
     Tegra::MaxwellDeviceMemoryManager& device_memory;
     Tegra::GPU& gpu;
 
@@ -126,6 +134,13 @@ private:
     /// Internal-resolution setup the renderer's scaling state was last derived from. Compared as a
     /// plain integer so this header does not need the settings enums.
     u32 applied_resolution_setup{};
+
+    /// Last frame that actually reached the swapchain, kept for the static-frame predicate.
+    std::vector<Tegra::FramebufferConfig> composited_layers;
+    Layout::FramebufferLayout composited_layout{};
+    u64 composited_draw_count{};
+    u32 composited_resolution_setup{};
+    bool has_composited_frame{false};
 };
 
 } // namespace Vulkan
