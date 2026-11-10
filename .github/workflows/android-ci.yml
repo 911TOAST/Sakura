@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - assembleMainlineRelease
+          - assembleOptimizedRelease
           - assembleLegacyRelease
           - 'assembleMainlineRelease assembleLegacyRelease'
           - 'assembleMainlineRelease assembleLegacyRelease assembleChromeOSRelease assembleGenshinSpoofRelease'
