@@ -168,7 +168,12 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
     dependencies.push_back(VkSubpassDependency{
         .srcSubpass = 0,
         .dstSubpass = VK_SUBPASS_EXTERNAL,
-        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+        // Early fragment tests are part of the source scope so depth/stencil writes from shaders
+        // that run their tests early are ordered too. This dependency is now the only thing that
+        // publishes attachment writes after the pass; the explicit image barrier that used to do
+        // it was removed from Scheduler::EndRenderPass.
+        .srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
         .dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
         .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |

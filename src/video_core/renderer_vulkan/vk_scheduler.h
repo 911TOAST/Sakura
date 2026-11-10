@@ -334,10 +334,7 @@ private:
 
     State state;
 
-    u32 num_renderpass_images = 0;
-        u64 render_pass_serial = 0;
-    std::array<VkImage, 9> renderpass_images{};
-    std::array<VkImageSubresourceRange, 9> renderpass_image_ranges{};
+    u64 render_pass_serial = 0;
 
     std::queue<std::unique_ptr<CommandChunk>> work_queue;
     std::vector<std::unique_ptr<CommandChunk>> chunk_reserve;
