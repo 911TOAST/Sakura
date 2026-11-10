@@ -248,8 +248,30 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func) {
     std::scoped_lock lock{buffer_cache.mutex, texture_cache.mutex};
     // update engine as channel may be different.
     pipeline->SetEngine(maxwell3d, gpu_memory);
-    if (!pipeline->Configure(is_indexed))
-        return;
+
+    // Steady-state draw: the pipeline, its bindings, the guest memory they point into and the
+    // render pass are all unchanged since the last Configure, so the pipeline and descriptor sets
+    // that Configure emitted are still the ones in the command stream. Re-deriving them would read
+    // every guest descriptor again and rewrite identical descriptor sets for a draw that repeats.
+    bool reuse_draw_state = false;
+    if (Settings::values.renderer_draw_state_cache.GetValue()) {
+        reuse_draw_state = cached_pipeline == pipeline && cached_engine == maxwell3d &&
+                           cached_is_indexed == is_indexed &&
+                           cached_register_epoch == maxwell3d->register_epoch &&
+                           cached_invalidation_epoch == invalidation_epoch &&
+                           cached_renderpass_serial == scheduler.RenderPassSerial();
+    }
+    if (!reuse_draw_state) {
+        if (!pipeline->Configure(is_indexed)) {
+            return;
+        }
+        cached_pipeline = pipeline;
+        cached_engine = maxwell3d;
+        cached_is_indexed = is_indexed;
+        cached_register_epoch = maxwell3d->register_epoch;
+        cached_invalidation_epoch = invalidation_epoch;
+        cached_renderpass_serial = scheduler.RenderPassSerial();
+    }
 
     UpdateDynamicStates(pipeline);
 
@@ -356,6 +378,8 @@ void RasterizerVulkan::DrawTexture() {
         gpu.TickWork();
     };
     FlushWork();
+    // The blit binds its own pipeline and render pass.
+    cached_pipeline = nullptr;
 
     std::scoped_lock l{texture_cache.mutex};
     texture_cache.SynchronizeDescriptors(false);
@@ -400,6 +424,8 @@ void RasterizerVulkan::DrawTexture() {
 void RasterizerVulkan::Clear(u32 layer_count) {
     FlushWork();
     gpu_memory->FlushCaching();
+    // Clears begin their own render pass and may blit through a different pipeline.
+    cached_pipeline = nullptr;
 
     auto& regs = maxwell3d->regs;
     const bool use_color = regs.clear_surface.R || regs.clear_surface.G || regs.clear_surface.B ||
@@ -619,6 +645,8 @@ void RasterizerVulkan::Clear(u32 layer_count) {
 void RasterizerVulkan::DispatchCompute() {
     FlushWork();
     gpu_memory->FlushCaching();
+    // A compute pipeline replaces whatever graphics pipeline was bound.
+    cached_pipeline = nullptr;
 
     ComputePipeline* const pipeline{pipeline_cache.CurrentComputePipeline()};
     if (!pipeline) {
@@ -748,6 +776,8 @@ void RasterizerVulkan::InvalidateRegion(DAddr addr, u64 size, VideoCommon::Cache
     if (addr == 0 || size == 0) {
         return;
     }
+    ++invalidation_epoch;
+    cached_pipeline = nullptr;
     if (True(which & VideoCommon::CacheType::TextureCache)) {
         std::scoped_lock lock{texture_cache.mutex};
         texture_cache.WriteMemory(addr, size);
@@ -765,6 +795,8 @@ void RasterizerVulkan::InvalidateRegion(DAddr addr, u64 size, VideoCommon::Cache
 }
 
 void RasterizerVulkan::InnerInvalidation(std::span<const std::pair<DAddr, std::size_t>> sequences) {
+    ++invalidation_epoch;
+    cached_pipeline = nullptr;
     {
         std::scoped_lock lock{texture_cache.mutex};
         for (const auto& [addr, size] : sequences) {
@@ -787,6 +819,8 @@ void RasterizerVulkan::InnerInvalidation(std::span<const std::pair<DAddr, std::s
 
 bool RasterizerVulkan::OnCPUWrite(DAddr addr, u64 size) {
     DEBUG_ASSERT(addr != 0 || size != 0);
+    ++invalidation_epoch;
+    cached_pipeline = nullptr;
     {
         std::scoped_lock lock{buffer_cache.mutex};
         if (buffer_cache.OnCPUWrite(addr, size)) {
@@ -805,6 +839,8 @@ void RasterizerVulkan::OnCacheInvalidation(DAddr addr, u64 size) {
     if (addr == 0 || size == 0) {
         return;
     }
+    ++invalidation_epoch;
+    cached_pipeline = nullptr;
 
     {
         std::scoped_lock lock{texture_cache.mutex};
@@ -822,6 +858,8 @@ void RasterizerVulkan::InvalidateGPUCache() {
 }
 
 void RasterizerVulkan::UnmapMemory(DAddr addr, u64 size) {
+    ++invalidation_epoch;
+    cached_pipeline = nullptr;
     {
         std::scoped_lock lock{texture_cache.mutex};
         texture_cache.UnmapMemory(addr, size);
@@ -834,6 +872,8 @@ void RasterizerVulkan::UnmapMemory(DAddr addr, u64 size) {
 }
 
 void RasterizerVulkan::ModifyGPUMemory(size_t as_id, GPUVAddr addr, u64 size) {
+    ++invalidation_epoch;
+    cached_pipeline = nullptr;
     {
         std::scoped_lock lock{texture_cache.mutex};
         texture_cache.UnmapGPUMemory(as_id, addr, size);
@@ -946,6 +986,8 @@ Tegra::Engines::AccelerateDMAInterface& RasterizerVulkan::AccessAccelerateDMA() 
 
 void RasterizerVulkan::AccelerateInlineToMemory(GPUVAddr address, size_t copy_size,
                                                 std::span<const u8> memory) {
+    ++invalidation_epoch;
+    cached_pipeline = nullptr;
     auto cpu_addr = gpu_memory->GpuToCpuAddress(address);
     if (!cpu_addr) [[unlikely]] {
         gpu_memory->WriteBlock(address, memory.data(), copy_size);

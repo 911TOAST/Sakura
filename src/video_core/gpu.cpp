@@ -149,13 +149,16 @@ struct GPU::Impl {
         if (!Settings::values.use_fast_gpu_time.GetValue()) {
             return gpu_tick;
         }
-        Settings::GpuOverclock overclock = Settings::values.fast_gpu_time.GetValue();
+        const auto overclock = Settings::values.fast_gpu_time.GetValue();
 
         if (overclock != Settings::GpuOverclock::Normal) {
             // Divide by 128 * 2^level: Medium = 256, High = 512, VeryHigh = 1024,
             // Extreme = 2048. Higher levels make the emulated GPU appear to finish
             // sooner, trading timing accuracy for fewer CPU/GPU sync stalls.
-            gpu_tick /= 128ull << static_cast<u32>(overclock);
+            // The divisor is always a power of two, so shift instead: the runtime divisor made
+            // the compiler emit a 64-bit division on every GPU tick read (query reports, semaphore
+            // timestamps), and the result is bit-identical.
+            gpu_tick >>= 7 + static_cast<u32>(overclock);
         }
 
         return gpu_tick;

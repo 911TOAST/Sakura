@@ -30,6 +30,12 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer, Core::Fronten
     thread = std::jthread([&](std::stop_token stop_token) {
         Common::SetCurrentThreadName("GPU");
         Common::SetCurrentThreadPriority(Common::ThreadPriority::Critical);
+        // This thread records every draw. On big.LITTLE, letting the scheduler park it on a little
+        // core costs more than any per-draw micro-optimisation, so keep it on the fast cores.
+        if (Settings::values.renderer_core_pinning.GetValue() &&
+            Common::PinCurrentThreadToFastCores()) {
+            LOG_INFO(Render_Vulkan, "[GPU] Pinned to the highest-capacity CPU cores");
+        }
         system.RegisterHostThread();
 
         auto current_context = context.Acquire();

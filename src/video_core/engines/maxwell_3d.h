@@ -3166,6 +3166,11 @@ public:
     /// the derivation when nothing it depends on was written.
     u64 pipeline_state_epoch{};
 
+    /// Incremented on every register write that can change bindings. Streamed constant-buffer data
+    /// is excluded: it only rewrites the contents of a buffer that stays bound, so it must not
+    /// invalidate a renderer's steady-state draw cache.
+    u64 register_epoch{};
+
     DrawManager draw_manager;
 
     GPUVAddr GetMacroAddress(size_t index) const {

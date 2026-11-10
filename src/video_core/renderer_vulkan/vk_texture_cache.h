@@ -162,8 +162,8 @@ public:
         return *framebuffer;
     }
 
-    [[nodiscard]] VkRenderPass RenderPass() const noexcept {
-        return renderpass;
+    [[nodiscard]] VkRenderPass RenderPass(bool general_layout = false) const noexcept {
+        return general_layout ? general_renderpass : renderpass;
     }
 
     [[nodiscard]] VkExtent2D RenderArea() const noexcept {
@@ -208,14 +208,18 @@ public:
 
     /// Variant of RenderPass() whose attachments are defined at pass begin rather than loaded.
     /// VK_NULL_HANDLE when the framebuffer has no such variant.
-    [[nodiscard]] VkRenderPass ClearRenderPass() const noexcept {
-        return clear_renderpass;
+    [[nodiscard]] VkRenderPass ClearRenderPass(bool general_layout = false) const noexcept {
+        return general_layout ? general_clear_renderpass : clear_renderpass;
     }
 
 private:
     vk::Framebuffer framebuffer;
     VkRenderPass renderpass{};
     VkRenderPass clear_renderpass{};
+    /// Variants of the two passes above whose attachment references use GENERAL. Draws that sample
+    /// the render target they write to must use these.
+    VkRenderPass general_renderpass{};
+    VkRenderPass general_clear_renderpass{};
     VkExtent2D render_area{};
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     u32 num_color_buffers = 0;

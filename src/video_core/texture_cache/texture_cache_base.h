@@ -169,8 +169,9 @@ public:
     /// Fill image_view_ids with the graphics/compute images in indices
     void FillImageViews(std::span<ImageViewInOut> views, bool compute, bool blacklist = true);
 
-    /// Handle feedback loops during draws.
-    void CheckFeedbackLoop(std::span<const ImageViewInOut> views);
+    /// Handle feedback loops during draws. Returns true when any bound view samples an image that
+    /// is also an active render target, in which case the draw must use a GENERAL render pass.
+    [[nodiscard]] bool CheckFeedbackLoop(std::span<const ImageViewInOut> views);
 
     /// Get the sampler from the graphics/compute descriptor table in the specified index
     Sampler* GetSampler(u32 index, bool compute);
@@ -186,6 +187,9 @@ public:
 
     /// Refresh the state for graphics/compute image view and sampler descriptors
     void SynchronizeDescriptors(bool compute);
+
+    /// Drop every cached descriptor-table host span. Needed whenever a guest mapping can move.
+    void InvalidateDescriptorSpans();
 
     /// Updates the Render Targets if they can be rescaled
     /// @retval True if the Render Targets have been rescaled.

@@ -715,6 +715,27 @@ abstract class SettingsItem(
                 )
             )
             put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_OPTIMAL_ATTACHMENTS,
+                    titleId = R.string.renderer_optimal_attachments,
+                    descriptionId = R.string.renderer_optimal_attachments_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_DRAW_STATE_CACHE,
+                    titleId = R.string.renderer_draw_state_cache,
+                    descriptionId = R.string.renderer_draw_state_cache_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_CORE_PINNING,
+                    titleId = R.string.renderer_core_pinning,
+                    descriptionId = R.string.renderer_core_pinning_description
+                )
+            )
+            put(
                 SingleChoiceSetting(
                     IntSetting.DMA_ACCURACY,
                     titleId = R.string.dma_accuracy,

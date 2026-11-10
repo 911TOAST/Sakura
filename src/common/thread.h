@@ -104,6 +104,13 @@ enum class ThreadPriority : u32 {
 };
 
 void SetCurrentThreadPriority(ThreadPriority new_priority);
+
+/**
+ * Pins the calling thread to the highest-capacity cores of the system.
+ * @param max_cores Upper bound on how many cores to include, 0 for every core at peak capacity.
+ * @returns True when the affinity mask was applied. Always false where unsupported.
+ */
+bool PinCurrentThreadToFastCores(u32 max_cores = 0);
 void SetCurrentThreadName(const char* name);
 
 } // namespace Common

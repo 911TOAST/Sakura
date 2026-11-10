@@ -254,67 +254,62 @@ void TextureCache<P>::FillImageViews(std::span<ImageViewInOut> views, bool compu
 }
 
 template <class P>
-void TextureCache<P>::CheckFeedbackLoop(std::span<const ImageViewInOut> views) {
-    if (!Settings::values.barrier_feedback_loops.GetValue()) {
-        return;
-    }
+bool TextureCache<P>::CheckFeedbackLoop(std::span<const ImageViewInOut> views) {
+    if (render_targets_serial != last_feedback_loop_serial ||
+        texture_bindings_serial != last_feedback_texture_serial) {
+        if (rt_active_mask == 0) {
+            last_feedback_loop_serial = render_targets_serial;
+            last_feedback_texture_serial = texture_bindings_serial;
+            last_feedback_loop_result = false;
+        } else {
+            const u32 depth_bit = 1u << NUM_RT;
+            const bool depth_active = (rt_active_mask & depth_bit) != 0;
 
-    if (render_targets_serial == last_feedback_loop_serial &&
-        texture_bindings_serial == last_feedback_texture_serial) {
-        if (last_feedback_loop_result) {
-            runtime.BarrierFeedbackLoop();
+            last_feedback_loop_result = [&] {
+                for (const auto& view : views) {
+                    if (!view.id) {
+                        continue;
+                    }
+
+                    {
+                        bool is_continue = false;
+                        for (size_t i = 0; i < 8; ++i)
+                            is_continue |= (rt_active_mask & (1u << i)) &&
+                                           view.id == render_targets.color_buffer_ids[i];
+                        if (is_continue)
+                            continue;
+                    }
+
+                    if (depth_active && view.id == render_targets.depth_buffer_id)
+                        continue;
+
+                    const ImageId view_image_id = slot_image_views[view.id].image_id;
+                    for (size_t i = 0; i < 8; ++i) {
+                        if ((rt_active_mask & (1u << i)) && view_image_id == rt_image_id[i]) {
+                            return true;
+                        }
+                    }
+                    if (depth_active && view_image_id == rt_depth_image_id) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }();
+            last_feedback_loop_serial = render_targets_serial;
+            last_feedback_texture_serial = texture_bindings_serial;
         }
-        return;
     }
 
-    if (rt_active_mask == 0) {
-        last_feedback_loop_serial = render_targets_serial;
-        last_feedback_texture_serial = texture_bindings_serial;
-        last_feedback_loop_result = false;
-        return;
-    }
-    const u32 depth_bit = 1u << NUM_RT;
-    const bool depth_active = (rt_active_mask & depth_bit) != 0;
-
-    const bool requires_barrier = [&] {
-        for (const auto& view : views) {
-            if (!view.id) {
-                continue;
-            }
-
-            {
-                bool is_continue = false;
-                for (size_t i = 0; i < 8; ++i)
-                    is_continue |= (rt_active_mask & (1u << i)) && view.id == render_targets.color_buffer_ids[i];
-                if (is_continue)
-                    continue;
-            }
-
-            if (depth_active && view.id == render_targets.depth_buffer_id)
-                continue;
-
-            const ImageId view_image_id = slot_image_views[view.id].image_id;
-            {
-                bool is_continue = false;
-                for (size_t i = 0; i < 8; ++i)
-                    is_continue |= (rt_active_mask & (1u << i)) && view_image_id == rt_image_id[i];
-                if (is_continue)
-                    continue;
-            }
-            if (depth_active && view_image_id == rt_depth_image_id) {
-                return true;
-            }
-        }
-
+    if (!last_feedback_loop_result) {
         return false;
-    }();
-
-    last_feedback_loop_serial = render_targets_serial;
-    last_feedback_texture_serial = texture_bindings_serial;
-    last_feedback_loop_result = requires_barrier;
-    if (requires_barrier) {
+    }
+    // The barrier is optional (and its setting can be turned off), but the GENERAL layout is not:
+    // sampling an attachment in an attachment-optimal layout is invalid.
+    if (Settings::values.barrier_feedback_loops.GetValue()) {
         runtime.BarrierFeedbackLoop();
     }
+    return true;
 }
 
 template <class P>
@@ -694,6 +689,9 @@ void TextureCache<P>::UnmapMemory(DAddr cpu_addr, size_t size) {
         UnregisterImage(id);
         DeleteImage(id);
     }
+    // Descriptor tables cache a host span over the guest mapping. A CPU-side unmap can move any
+    // of them, and this path has no GPU address to compare against, so drop the spans wholesale.
+    InvalidateDescriptorSpans();
 }
 
 template <class P>
@@ -713,6 +711,18 @@ void TextureCache<P>::UnmapGPUMemory(size_t as_id, GPUVAddr gpu_addr, size_t siz
             continue;
         }
         image.flags |= ImageFlagBits::Remapped;
+    }
+    InvalidateDescriptorSpans();
+}
+
+template <class P>
+void TextureCache<P>::InvalidateDescriptorSpans() {
+    for (size_t c : active_channel_ids) {
+        auto& channel_info = channel_storage[c];
+        channel_info.graphics_image_table.Invalidate();
+        channel_info.compute_image_table.Invalidate();
+        channel_info.graphics_sampler_table.Invalidate();
+        channel_info.compute_sampler_table.Invalidate();
     }
 }
 

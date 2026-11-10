@@ -83,6 +83,15 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
     }
     boost::container::static_vector<VkAttachmentDescription, 9> descriptions;
     std::array<VkAttachmentReference, 8> references{};
+    // The attachments rest in GENERAL; only the layout used during the subpass changes. Vulkan
+    // considers render passes that differ only in attachment-reference layout compatible, so the
+    // pipelines and framebuffers built for the GENERAL variant accept this one too.
+    const VkImageLayout color_layout = key.optimal_layout
+                                           ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                                           : VK_IMAGE_LAYOUT_GENERAL;
+    const VkImageLayout depth_layout = key.optimal_layout
+                                           ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                                           : VK_IMAGE_LAYOUT_GENERAL;
     u32 num_attachments{};
     u32 num_colors{};
     for (size_t index = 0; index < key.color_formats.size(); ++index) {
@@ -90,7 +99,7 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
         const bool is_valid{format != PixelFormat::Invalid};
         references[index] = VkAttachmentReference{
             .attachment = is_valid ? num_colors : VK_ATTACHMENT_UNUSED,
-            .layout = VK_IMAGE_LAYOUT_GENERAL,
+            .layout = color_layout,
         };
         if (is_valid) {
             descriptions.push_back(AttachmentDescription(*device, format, key.samples,
@@ -105,7 +114,7 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
     if (key.depth_format != PixelFormat::Invalid) {
         depth_reference = VkAttachmentReference{
             .attachment = num_colors,
-            .layout = VK_IMAGE_LAYOUT_GENERAL,
+            .layout = depth_layout,
         };
         descriptions.push_back(AttachmentDescription(*device, key.depth_format, key.samples,
                                                      key.color_clear, key.depth_clear,
@@ -123,18 +132,50 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
         .preserveAttachmentCount = 0,
         .pPreserveAttachments = nullptr,
     };
-    const VkSubpassDependency dependency{
-            .srcSubpass = 0,  // Current subpass
-            .dstSubpass = 0,  // Same subpass (self-dependency)
-            .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-            .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT
-    };
+    // Both layout variants must carry an identical dependency list: dependencies are part of
+    // render pass compatibility, and a pipeline built for one variant is used with the other.
+    // The self-dependency makes attachment writes visible to same-subpass fragment shader reads,
+    // which is what the GENERAL variant needs for feedback loops. The two external dependencies
+    // synchronize the automatic attachment layout transitions the optimal variant performs when
+    // the images enter and leave GENERAL.
+    boost::container::static_vector<VkSubpassDependency, 3> dependencies;
+    dependencies.push_back(VkSubpassDependency{
+        .srcSubpass = 0,  // Current subpass
+        .dstSubpass = 0,  // Same subpass (self-dependency)
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+    });
+    dependencies.push_back(VkSubpassDependency{
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        .srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+    });
+    dependencies.push_back(VkSubpassDependency{
+        .srcSubpass = 0,
+        .dstSubpass = VK_SUBPASS_EXTERNAL,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+    });
     pair->second = device->GetLogical().CreateRenderPass({
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .pNext = nullptr,
@@ -143,8 +184,8 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
         .pAttachments = descriptions.empty() ? nullptr : descriptions.data(),
         .subpassCount = 1,
         .pSubpasses = &subpass,
-        .dependencyCount = 1,
-        .pDependencies = &dependency,
+        .dependencyCount = static_cast<u32>(dependencies.size()),
+        .pDependencies = dependencies.data(),
     });
     return *pair->second;
 }

@@ -2668,16 +2668,28 @@ void Framebuffer::CreateFramebuffer(TextureCacheRuntime& runtime,
         renderpass_key.depth_format = PixelFormat::Invalid;
     }
     renderpass_key.samples = samples;
+    renderpass_key.optimal_layout = Settings::values.renderer_optimal_attachments.GetValue();
+
+    RenderPassKey clear_key = renderpass_key;
+    clear_key.color_clear = true;
+    clear_key.depth_clear = has_depth;
+    clear_key.stencil_clear = has_stencil;
 
     renderpass = runtime.render_pass_cache.Get(renderpass_key);
     // A second variant that defines its attachments at pass begin. Building it here keeps both
     // handles cached with the framebuffer; the render pass cache deduplicates the object itself.
-    {
-        RenderPassKey clear_key = renderpass_key;
-        clear_key.color_clear = true;
-        clear_key.depth_clear = has_depth;
-        clear_key.stencil_clear = has_stencil;
-        clear_renderpass = runtime.render_pass_cache.Get(clear_key);
+    clear_renderpass = runtime.render_pass_cache.Get(clear_key);
+    // Draws that sample the render target they are writing to cannot use the optimal attachment
+    // layouts, so keep a GENERAL variant of both passes around for them. When the setting is off
+    // the primary passes are already GENERAL and these aliases avoid creating anything new.
+    if (renderpass_key.optimal_layout) {
+        renderpass_key.optimal_layout = false;
+        clear_key.optimal_layout = false;
+        general_renderpass = runtime.render_pass_cache.Get(renderpass_key);
+        general_clear_renderpass = runtime.render_pass_cache.Get(clear_key);
+    } else {
+        general_renderpass = renderpass;
+        general_clear_renderpass = clear_renderpass;
     }
     render_area.width = (std::min)(render_area.width, width);
     render_area.height = (std::min)(render_area.height, height);

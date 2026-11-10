@@ -4,10 +4,14 @@
 // SPDX-FileCopyrightText: 2014 Citra Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <limits>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #include "common/error.h"
 #include "common/logging.h"
@@ -134,6 +138,77 @@ void SetCurrentThreadPriority(ThreadPriority new_priority) {
     pthread_setschedparam(this_thread, scheduling_type, &params);
 #endif
 }
+
+#if defined(__linux__)
+namespace {
+/// Capacity of one CPU in the units schedutil publishes (cpu_capacity), falling back to the
+/// maximum frequency when that file is unavailable. 0 means "unknown".
+std::size_t ReadCoreCapacity(std::size_t cpu) {
+    const std::string base =
+        "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/";
+    for (const char* file : {"cpu_capacity", "cpuinfo_max_freq"}) {
+        std::FILE* handle = std::fopen((base + file).c_str(), "r");
+        if (handle == nullptr) {
+            continue;
+        }
+        unsigned long value = 0;
+        const int scanned = std::fscanf(handle, "%lu", &value);
+        std::fclose(handle);
+        if (scanned == 1 && value != 0) {
+            return static_cast<std::size_t>(value);
+        }
+    }
+    return 0;
+}
+} // Anonymous namespace
+
+bool PinCurrentThreadToFastCores(u32 max_cores) {
+    const long cpu_count = sysconf(_SC_NPROCESSORS_CONF);
+    if (cpu_count <= 0) {
+        return false;
+    }
+    const long last_cpu = (std::min)(cpu_count, static_cast<long>(CPU_SETSIZE));
+
+    std::vector<std::pair<std::size_t, long>> cores;
+    cores.reserve(static_cast<std::size_t>(last_cpu));
+    std::size_t best_capacity = 0;
+    for (long cpu = 0; cpu < last_cpu; ++cpu) {
+        const std::size_t capacity = ReadCoreCapacity(static_cast<std::size_t>(cpu));
+        best_capacity = (std::max)(best_capacity, capacity);
+        cores.emplace_back(capacity, cpu);
+    }
+    if (best_capacity == 0) {
+        // No cpufreq/schedutil information: leave the scheduler alone rather than guess.
+        return false;
+    }
+
+    cpu_set_t mask;
+    CPU_ZERO(&mask);
+    u32 pinned = 0;
+    for (const auto& [capacity, cpu] : cores) {
+        if (capacity != best_capacity) {
+            continue;
+        }
+        if (max_cores != 0 && pinned >= max_cores) {
+            break;
+        }
+        CPU_SET(static_cast<int>(cpu), &mask);
+        ++pinned;
+    }
+    if (pinned == 0) {
+        return false;
+    }
+    if (sched_setaffinity(0, sizeof(mask), &mask) != 0) {
+        LOG_WARNING(Common, "Thread affinity refused by the kernel (errno={})", errno);
+        return false;
+    }
+    return true;
+}
+#else
+bool PinCurrentThreadToFastCores(u32) {
+    return false;
+}
+#endif
 
 void SetCurrentThreadName(const char* name) {
 #ifdef _MSC_VER

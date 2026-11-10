@@ -475,7 +475,7 @@ void RecordShaderReadBarrier(Scheduler& scheduler, const ImageView& image_view) 
 }
 
 void BeginRenderPass(vk::CommandBuffer& cmdbuf, const Framebuffer* framebuffer) {
-    const VkRenderPass render_pass = framebuffer->RenderPass();
+    const VkRenderPass render_pass = framebuffer->RenderPass(true);
     const VkFramebuffer framebuffer_handle = framebuffer->Handle();
     const VkExtent2D render_area = framebuffer->RenderArea();
     const VkRenderPassBeginInfo renderpass_bi{
@@ -542,7 +542,7 @@ void BlitImageHelper::BlitColor(const Framebuffer* dst_framebuffer, const ImageV
                                 Tegra::Engines::Fermi2D::Operation operation) {
     const bool is_linear = filter == Tegra::Engines::Fermi2D::Filter::Bilinear;
     const BlitImagePipelineKey key{
-        .renderpass = dst_framebuffer->RenderPass(),
+        .renderpass = dst_framebuffer->RenderPass(true),
         .operation = operation,
     };
     const VkPipelineLayout layout = *one_texture_pipeline_layout;
@@ -551,7 +551,7 @@ void BlitImageHelper::BlitColor(const Framebuffer* dst_framebuffer, const ImageV
     const VkImageView src_view = src_image_view.Handle(Shader::TextureType::Color2D);
 
     RecordShaderReadBarrier(scheduler, src_image_view);
-    scheduler.RequestRenderpass(dst_framebuffer);
+    scheduler.RequestRenderpass(dst_framebuffer, true);
     scheduler.Record([this, dst_region, src_region, pipeline, layout, sampler,
                       src_view](vk::CommandBuffer cmdbuf) {
         const VkDescriptorSet descriptor_set = one_texture_descriptor_allocator.Commit();
@@ -570,7 +570,7 @@ void BlitImageHelper::BlitColor(const Framebuffer* dst_framebuffer, VkImageView 
                                 const Region2D& dst_region, const Region2D& src_region,
                                 const Extent3D& src_size) {
     const BlitImagePipelineKey key{
-        .renderpass = dst_framebuffer->RenderPass(),
+        .renderpass = dst_framebuffer->RenderPass(true),
         .operation = Tegra::Engines::Fermi2D::Operation::SrcCopy,
     };
     const VkPipelineLayout layout = *one_texture_pipeline_layout;
@@ -602,7 +602,7 @@ void BlitImageHelper::BlitDepthStencil(const Framebuffer* dst_framebuffer,
     ASSERT(filter == Tegra::Engines::Fermi2D::Filter::Point);
     ASSERT(operation == Tegra::Engines::Fermi2D::Operation::SrcCopy);
     const BlitImagePipelineKey key{
-        .renderpass = dst_framebuffer->RenderPass(),
+        .renderpass = dst_framebuffer->RenderPass(true),
         .operation = operation,
     };
     const VkPipelineLayout layout = *two_textures_pipeline_layout;
@@ -612,7 +612,7 @@ void BlitImageHelper::BlitDepthStencil(const Framebuffer* dst_framebuffer,
     const VkImageView src_stencil_view = src_image_view.StencilView();
 
     RecordShaderReadBarrier(scheduler, src_image_view);
-    scheduler.RequestRenderpass(dst_framebuffer);
+    scheduler.RequestRenderpass(dst_framebuffer, true);
     scheduler.Record([dst_region, src_region, pipeline, layout, sampler, src_depth_view,
                       src_stencil_view, this](vk::CommandBuffer cmdbuf) {
         const VkDescriptorSet descriptor_set = two_textures_descriptor_allocator.Commit();
@@ -629,25 +629,25 @@ void BlitImageHelper::BlitDepthStencil(const Framebuffer* dst_framebuffer,
 
 void BlitImageHelper::ConvertD32ToR32(const Framebuffer* dst_framebuffer,
                                       const ImageView& src_image_view) {
-    ConvertDepthToColorPipeline(convert_d32_to_r32_pipeline, dst_framebuffer->RenderPass());
+    ConvertDepthToColorPipeline(convert_d32_to_r32_pipeline, dst_framebuffer->RenderPass(true));
     Convert(*convert_d32_to_r32_pipeline, dst_framebuffer, src_image_view);
 }
 
 void BlitImageHelper::ConvertR32ToD32(const Framebuffer* dst_framebuffer,
                                       const ImageView& src_image_view) {
-    ConvertColorToDepthPipeline(convert_r32_to_d32_pipeline, dst_framebuffer->RenderPass());
+    ConvertColorToDepthPipeline(convert_r32_to_d32_pipeline, dst_framebuffer->RenderPass(true));
     Convert(*convert_r32_to_d32_pipeline, dst_framebuffer, src_image_view);
 }
 
 void BlitImageHelper::ConvertD16ToR16(const Framebuffer* dst_framebuffer,
                                       const ImageView& src_image_view) {
-    ConvertDepthToColorPipeline(convert_d16_to_r16_pipeline, dst_framebuffer->RenderPass());
+    ConvertDepthToColorPipeline(convert_d16_to_r16_pipeline, dst_framebuffer->RenderPass(true));
     Convert(*convert_d16_to_r16_pipeline, dst_framebuffer, src_image_view);
 }
 
 void BlitImageHelper::ConvertR16ToD16(const Framebuffer* dst_framebuffer,
                                       const ImageView& src_image_view) {
-    ConvertColorToDepthPipeline(convert_r16_to_d16_pipeline, dst_framebuffer->RenderPass());
+    ConvertColorToDepthPipeline(convert_r16_to_d16_pipeline, dst_framebuffer->RenderPass(true));
     Convert(*convert_r16_to_d16_pipeline, dst_framebuffer, src_image_view);
 }
 
@@ -658,35 +658,35 @@ void BlitImageHelper::ConvertABGR8ToD24S8(const Framebuffer* dst_framebuffer,
         LOG_WARNING(Render_Vulkan, "ConvertABGR8ToD24S8 requires shader_stencil_export, skipping");
         return;
     }
-    ConvertPipelineDepthTargetEx(convert_abgr8_to_d24s8_pipeline, dst_framebuffer->RenderPass(),
+    ConvertPipelineDepthTargetEx(convert_abgr8_to_d24s8_pipeline, dst_framebuffer->RenderPass(true),
                                  convert_abgr8_to_d24s8_frag);
     Convert(*convert_abgr8_to_d24s8_pipeline, dst_framebuffer, src_image_view);
 }
 
 void BlitImageHelper::ConvertABGR8ToD32F(const Framebuffer* dst_framebuffer,
                                          const ImageView& src_image_view) {
-    ConvertPipelineDepthTargetEx(convert_abgr8_to_d32f_pipeline, dst_framebuffer->RenderPass(),
+    ConvertPipelineDepthTargetEx(convert_abgr8_to_d32f_pipeline, dst_framebuffer->RenderPass(true),
                                  convert_abgr8_to_d32f_frag);
     Convert(*convert_abgr8_to_d32f_pipeline, dst_framebuffer, src_image_view);
 }
 
 void BlitImageHelper::ConvertD32FToABGR8(const Framebuffer* dst_framebuffer,
                                          ImageView& src_image_view) {
-    ConvertPipelineColorTargetEx(convert_d32f_to_abgr8_pipeline, dst_framebuffer->RenderPass(),
+    ConvertPipelineColorTargetEx(convert_d32f_to_abgr8_pipeline, dst_framebuffer->RenderPass(true),
                                  convert_d32f_to_abgr8_frag);
     ConvertDepthStencil(*convert_d32f_to_abgr8_pipeline, dst_framebuffer, src_image_view);
 }
 
 void BlitImageHelper::ConvertD24S8ToABGR8(const Framebuffer* dst_framebuffer,
                                           ImageView& src_image_view) {
-    ConvertPipelineColorTargetEx(convert_d24s8_to_abgr8_pipeline, dst_framebuffer->RenderPass(),
+    ConvertPipelineColorTargetEx(convert_d24s8_to_abgr8_pipeline, dst_framebuffer->RenderPass(true),
                                  convert_d24s8_to_abgr8_frag);
     ConvertDepthStencil(*convert_d24s8_to_abgr8_pipeline, dst_framebuffer, src_image_view);
 }
 
 void BlitImageHelper::ConvertS8D24ToABGR8(const Framebuffer* dst_framebuffer,
                                           ImageView& src_image_view) {
-    ConvertPipelineColorTargetEx(convert_s8d24_to_abgr8_pipeline, dst_framebuffer->RenderPass(),
+    ConvertPipelineColorTargetEx(convert_s8d24_to_abgr8_pipeline, dst_framebuffer->RenderPass(true),
                                  convert_s8d24_to_abgr8_frag);
     ConvertDepthStencil(*convert_s8d24_to_abgr8_pipeline, dst_framebuffer, src_image_view);
 }
@@ -747,7 +747,7 @@ void BlitImageHelper::Convert(VkPipeline pipeline, const Framebuffer* dst_frameb
     const VkExtent2D extent = GetConversionExtent(src_image_view);
 
     RecordShaderReadBarrier(scheduler, src_image_view);
-    scheduler.RequestRenderpass(dst_framebuffer);
+    scheduler.RequestRenderpass(dst_framebuffer, true);
     scheduler.Record([pipeline, layout, sampler, src_view, extent, this](vk::CommandBuffer cmdbuf) {
         const VkOffset2D offset{
             .x = 0,
@@ -792,7 +792,7 @@ void BlitImageHelper::ConvertDepthStencil(VkPipeline pipeline, const Framebuffer
     const VkExtent2D extent = GetConversionExtent(src_image_view);
 
     RecordShaderReadBarrier(scheduler, src_image_view);
-    scheduler.RequestRenderpass(dst_framebuffer);
+    scheduler.RequestRenderpass(dst_framebuffer, true);
     scheduler.Record([pipeline, layout, sampler, src_depth_view, src_stencil_view, extent,
                       this](vk::CommandBuffer cmdbuf) {
         const VkOffset2D offset{

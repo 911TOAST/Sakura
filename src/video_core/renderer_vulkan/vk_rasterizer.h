@@ -235,6 +235,19 @@ private:
     boost::container::static_vector<VkSampler, MAX_TEXTURES> sampler_handles;
 
     u32 draw_counter = 0;
+
+        /// Steady-state draw cache (see renderer_draw_state_cache). Records what the last successful
+        /// Configure emitted: which pipeline, from which engine and epochs, inside which render pass.
+        /// An identical follow-up draw reuses those bindings instead of re-deriving every one of them.
+        const GraphicsPipeline* cached_pipeline{};
+        const Tegra::Engines::Maxwell3D* cached_engine{};
+        bool cached_is_indexed{};
+        u64 cached_register_epoch{};
+        u64 cached_invalidation_epoch{};
+        u64 cached_renderpass_serial{};
+
+        /// Bumped whenever guest memory that bound descriptors point into may have changed.
+        u64 invalidation_epoch{};
 };
 
 } // namespace Vulkan

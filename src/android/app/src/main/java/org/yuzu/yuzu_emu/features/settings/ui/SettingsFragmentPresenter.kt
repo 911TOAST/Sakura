@@ -124,6 +124,7 @@ class SettingsFragmentPresenter(
             MenuTag.SECTION_SYSTEM -> addSystemSettings(sl)
             MenuTag.SECTION_RENDERER -> addGraphicsSettings(sl)
             MenuTag.SECTION_RENDERER_ADVANCED -> addGraphicsAdvancedSettings(sl)
+            MenuTag.SECTION_EXPERIMENTS -> addExperimentSettings(sl)
             MenuTag.SECTION_PERFORMANCE_STATS -> addPerformanceOverlaySettings(sl)
             MenuTag.SECTION_SOC_OVERLAY -> addSocOverlaySettings(sl)
             MenuTag.SECTION_INPUT_OVERLAY -> addInputOverlaySettings(sl)
@@ -167,6 +168,14 @@ class SettingsFragmentPresenter(
                     descriptionId = R.string.preferences_graphics_description,
                     iconId = R.drawable.ic_graphics,
                     menuKey = MenuTag.SECTION_RENDERER
+                )
+            )
+            add(
+                SubmenuSetting(
+                    titleId = R.string.experiments,
+                    descriptionId = R.string.experiments_description,
+                    iconId = R.drawable.ic_m3_tune,
+                    menuKey = MenuTag.SECTION_EXPERIMENTS
                 )
             )
             if (!NativeConfig.isPerGameConfigLoaded()) {
@@ -366,6 +375,72 @@ class SettingsFragmentPresenter(
             add(IntSetting.RENDERER_DYNA_STATE.key)
             add(BooleanSetting.RENDERER_VERTEX_INPUT_DYNAMIC_STATE.key)
             add(IntSetting.RENDERER_SAMPLE_SHADING.key)
+        }
+    }
+
+    // Every quality-neutral performance switch the build actually implements, in one place, so a
+    // regression can be bisected one row at a time instead of comparing the whole advanced screen
+    // against a default. Resolution, scaling, filtering and compression are deliberately absent:
+    // nothing on this page changes the rendered image. Resolution scaling is the one setting that
+    // is guaranteed to move frame time by tens of percent, and it is excluded because it trades
+    // image quality for it.
+    private val experimentSettings = listOf(
+        BooleanSetting.RENDERER_MAXWELL_BYPASS,
+        BooleanSetting.RENDERER_DRAW_STATE_CACHE,
+        BooleanSetting.RENDERER_CLEAR_LOADOP,
+        BooleanSetting.RENDERER_OPTIMAL_ATTACHMENTS,
+        BooleanSetting.RENDERER_CORE_PINNING,
+        BooleanSetting.RENDERER_ASYNC_DIRECT_PRESENT,
+        BooleanSetting.USE_OPTIMIZED_VERTEX_BUFFERS,
+        BooleanSetting.ENABLE_BUFFER_HISTORY,
+        BooleanSetting.ENABLE_GPU_BUFFER_READBACK,
+        BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS,
+        BooleanSetting.NO_WELL,
+        BooleanSetting.RENDERER_ASYNC_PRESENTATION,
+        BooleanSetting.RENDERER_REACTIVE_FLUSHING,
+        BooleanSetting.SKIP_CPU_INNER_INVALIDATION
+    )
+
+    private fun addExperimentSettings(sl: ArrayList<SettingsItem>) {
+        sl.apply {
+            // A switch that flips every row to off in one tap. Turning experiments on one at a time
+            // only means something against a known baseline, and resetting them by hand across
+            // three screens is exactly how a bisect gets silently mixed up.
+            add(
+                RunnableSetting(
+                    titleId = R.string.experiments_reset_all,
+                    descriptionId = R.string.experiments_reset_all_description,
+                    isRunnable = true,
+                    iconId = R.drawable.ic_restore
+                ) {
+                    experimentSettings.forEach { it.setBoolean(false) }
+                    settingsViewModel.setShouldReloadSettingsList(true)
+                }
+            )
+
+            add(HeaderSetting(R.string.experiments_group_draw))
+            add(BooleanSetting.RENDERER_MAXWELL_BYPASS.key)
+            add(BooleanSetting.RENDERER_DRAW_STATE_CACHE.key)
+            add(BooleanSetting.RENDERER_CLEAR_LOADOP.key)
+            add(BooleanSetting.RENDERER_OPTIMAL_ATTACHMENTS.key)
+
+            add(HeaderSetting(R.string.experiments_group_present))
+            add(BooleanSetting.RENDERER_CORE_PINNING.key)
+            add(BooleanSetting.RENDERER_ASYNC_DIRECT_PRESENT.key)
+
+            add(HeaderSetting(R.string.experiments_group_memory))
+            add(BooleanSetting.USE_OPTIMIZED_VERTEX_BUFFERS.key)
+            add(BooleanSetting.ENABLE_BUFFER_HISTORY.key)
+            add(BooleanSetting.ENABLE_GPU_BUFFER_READBACK.key)
+
+            add(HeaderSetting(R.string.experiments_group_shaders))
+            add(BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS.key)
+            add(BooleanSetting.NO_WELL.key)
+
+            add(HeaderSetting(R.string.experiments_group_risky))
+            add(BooleanSetting.RENDERER_ASYNC_PRESENTATION.key)
+            add(BooleanSetting.RENDERER_REACTIVE_FLUSHING.key)
+            add(BooleanSetting.SKIP_CPU_INNER_INVALIDATION.key)
         }
     }
 

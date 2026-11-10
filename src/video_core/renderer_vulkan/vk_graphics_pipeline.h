@@ -163,6 +163,9 @@ private:
     size_t num_image_elements{};
     u32 num_textures{};
     bool fragment_has_color0_output{};
+    /// Set by ConfigureImpl when this draw samples an active render target and therefore has to
+    /// use the framebuffer's GENERAL render pass variant.
+    bool uses_general_render_pass{};
 
     vk::DescriptorSetLayout descriptor_set_layout;
     DescriptorAllocator descriptor_allocator;

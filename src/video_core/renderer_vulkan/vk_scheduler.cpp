@@ -109,8 +109,8 @@ void Scheduler::DispatchWork() {
     }
 }
 
-void Scheduler::RequestRenderpass(const Framebuffer* framebuffer) {
-    const VkRenderPass renderpass = framebuffer->RenderPass();
+void Scheduler::RequestRenderpass(const Framebuffer* framebuffer, bool general_layout) {
+    const VkRenderPass renderpass = framebuffer->RenderPass(general_layout);
     const VkFramebuffer framebuffer_handle = framebuffer->Handle();
     const VkExtent2D render_area = framebuffer->RenderArea();
     if (renderpass == state.renderpass && framebuffer_handle == state.framebuffer &&
@@ -119,8 +119,10 @@ void Scheduler::RequestRenderpass(const Framebuffer* framebuffer) {
         return;
     }
     // The pass that is already open for this framebuffer defines its attachments at begin. Ending it
-    // to reopen the loading variant would store the tile and read it straight back.
+    // to reopen the loading variant would store the tile and read it straight back. Only keep it
+    // when it is the layout variant this draw needs.
     if (state.renderpass_is_clear && framebuffer_handle == state.framebuffer &&
+        state.renderpass == framebuffer->ClearRenderPass(general_layout) &&
         render_area.width == state.render_area.width &&
         render_area.height == state.render_area.height) {
         return;
@@ -130,6 +132,7 @@ void Scheduler::RequestRenderpass(const Framebuffer* framebuffer) {
     state.framebuffer = framebuffer_handle;
     state.render_area = render_area;
     state.renderpass_is_clear = false;
+    ++render_pass_serial;
 
     // Log render pass begin
     if (GPU::Logging::IsActive() &&
@@ -179,6 +182,7 @@ bool Scheduler::RequestRenderpassClear(const Framebuffer* framebuffer,
     state.framebuffer = framebuffer_handle;
     state.render_area = render_area;
     state.renderpass_is_clear = true;
+    ++render_pass_serial;
 
     std::array<VkClearValue, 9> values{};
     const size_t count = std::min<size_t>(clear_values.size(), values.size());
@@ -443,6 +447,10 @@ void Scheduler::AllocateNewContext() {
 }
 
 void Scheduler::InvalidateState() {
+    // Everything bound into the current command stream is gone: a new command buffer was started,
+    // or a blit rebound the dynamic state behind the renderer's back. Either way a cached
+    // "still bound" answer is no longer true.
+    ++render_pass_serial;
     state.graphics_pipeline = nullptr;
     state.rescaling_defined = false;
     state_tracker.InvalidateCommandBufferState();
@@ -458,6 +466,7 @@ void Scheduler::EndRenderPass()
         if (!state.renderpass) {
             return;
         }
+        ++render_pass_serial;
 
         query_cache->CounterClose(VideoCommon::QueryType::StreamingByteCount);
 

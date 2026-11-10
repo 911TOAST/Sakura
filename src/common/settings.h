@@ -420,15 +420,36 @@ struct Values {
     // Experimental: skip the NVIDIA Maxwell shader workaround pass. This does not bypass
     // Maxwell shader translation; Switch shaders are still translated to SPIR-V.
     SwitchableSetting<bool> no_well{linkage, false, "no_well", Category::RendererDebug};
+    // Draw-path experiments are read when the draw or the render pass is built, never cached at
+    // startup, so they can be flipped mid-session to bisect a regression without relaunching.
+    //
     // Skips re-deriving the fixed-function pipeline state on draws where the guest wrote no
     // register that can reach the pipeline key, so a steady-state draw only re-emits the draw
     // command itself. Requires the full extended dynamic state set; a no-op without it.
     SwitchableSetting<bool> renderer_maxwell_bypass{linkage, false, "renderer_maxwell_bypass",
-                                                    Category::RendererDebug};
+                                                    Category::RendererDebug,
+                                                    Specialization::Default, true, true};
     // Expresses a full-surface guest clear as the render pass's load operation instead of loading
     // the attachments and clearing them inside the pass. Removes a full attachment read on tilers.
     SwitchableSetting<bool> renderer_clear_loadop{linkage, true, "renderer_clear_loadop",
-                                                  Category::RendererDebug};
+                                                  Category::RendererDebug,
+                                                  Specialization::Default, true, true};
+    // Draw with COLOR_ATTACHMENT_OPTIMAL / DEPTH_STENCIL_ATTACHMENT_OPTIMAL attachment references
+    // while leaving the attachments' initial/final layout at GENERAL. The textures still rest in
+    // GENERAL, so the texture cache needs no changes. Draws that sample the render target they
+    // write to (feedback loops) must use GENERAL and are given the GENERAL render pass variant.
+    // Turn this off to make every draw use GENERAL again if a driver misbehaves.
+    SwitchableSetting<bool> renderer_optimal_attachments{linkage, true, "renderer_optimal_attachments",
+                                                         Category::RendererDebug,
+                                                         Specialization::Default, true, true};
+    // Second half of the steady-state draw: when the same pipeline is configured again and no
+    // register write, guest-memory invalidation or render pass start happened in between, the
+    // pipeline and descriptor sets the previous Configure emitted are still the ones bound in the
+    // command stream, so the per-draw re-resolution of every binding can be skipped entirely.
+    // The pipeline key derivation is unaffected; renderer_maxwell_bypass covers that half.
+    SwitchableSetting<bool> renderer_draw_state_cache{linkage, false, "renderer_draw_state_cache",
+                                                      Category::RendererDebug,
+                                                      Specialization::Default, true, true};
     // *nix platforms may have issues with the borderless windowed fullscreen mode.
     // Default to exclusive fullscreen on these platforms for now.
     SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
@@ -556,6 +577,19 @@ struct Values {
 #endif
                                                      "force_max_clock",
                                                      Category::RendererAdvanced};
+
+    // big.LITTLE: a hot thread that the scheduler parks on a little core loses most of its
+    // throughput, and the GPU thread is the one that records every draw. Pinning it to the set of
+    // highest-capacity cores (read from schedutil's cpu_capacity) removes that lottery. Silently
+    // ignored when the kernel refuses the affinity mask.
+    SwitchableSetting<bool> renderer_core_pinning{linkage,
+#if defined(__ANDROID__)
+                                                  true,
+#else
+                                                  false,
+#endif
+                                                  "renderer_core_pinning",
+                                                  Category::RendererAdvanced};
 
     SwitchableSetting<bool> use_disk_shader_cache{linkage, true, "use_disk_shader_cache",
                                                   Category::RendererAdvanced};

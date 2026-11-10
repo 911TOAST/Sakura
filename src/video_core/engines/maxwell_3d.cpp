@@ -405,6 +405,13 @@ void Maxwell3D::CallMethod(Core::System& system, u32 method, u32 method_argument
     }
 
     ASSERT(method < Regs::NUM_REGS && "Invalid Maxwell3D register, increase the size of the Regs structure");
+    // Keep the binding epoch honest for renderers that reuse the descriptors of the previous draw.
+    // Constant-buffer data is streamed through the same method space but only rewrites the contents
+    // of an already-bound buffer, so it is deliberately not an epoch bump.
+    constexpr u32 cb_data_first = MAXWELL3D_REG_INDEX(const_buffer.buffer);
+    if (method < cb_data_first || method > cb_data_first + 15) {
+        ++register_epoch;
+    }
     const u32 argument = ProcessShadowRam(method, method_argument);
     ProcessDirtyRegisters(method, argument);
     ProcessMethodCall(method, argument, method_argument, is_last_call);

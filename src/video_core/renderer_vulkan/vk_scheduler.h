@@ -78,14 +78,22 @@ public:
     /// Sends currently recorded work to the worker thread.
     void DispatchWork();
 
-    /// Requests to begin a renderpass.
-    void RequestRenderpass(const Framebuffer* framebuffer);
+    /// Requests to begin a renderpass. general_layout selects the variant whose attachment
+    /// references use GENERAL, required by draws that sample the target they write to.
+    void RequestRenderpass(const Framebuffer* framebuffer, bool general_layout = false);
 
     /// Requests to begin the variant of the framebuffer's render pass whose attachments are
     /// defined at pass begin instead of loaded. Returns false when no such pass was begun, in which
     /// case the caller has to clear explicitly as usual.
     bool RequestRenderpassClear(const Framebuffer* framebuffer,
                                 std::span<const VkClearValue> clear_values);
+
+    /// Bumped every time a render pass begins or ends, or the command stream's bound state is
+    /// dropped. A renderer that caches command-stream state (bound pipeline, descriptor sets) uses
+    /// it to notice that the binding it remembers is no longer the one in effect.
+    [[nodiscard]] u64 RenderPassSerial() const noexcept {
+        return render_pass_serial;
+    }
 
     /// Requests the current execution context to be able to execute operations only allowed outside
     /// of a renderpass.
@@ -327,6 +335,7 @@ private:
     State state;
 
     u32 num_renderpass_images = 0;
+        u64 render_pass_serial = 0;
     std::array<VkImage, 9> renderpass_images{};
     std::array<VkImageSubresourceRange, 9> renderpass_image_ranges{};
 

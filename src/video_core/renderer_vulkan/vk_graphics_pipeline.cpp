@@ -135,6 +135,7 @@ RenderPassKey MakeRenderPassKey(const FixedPipelineState& state) {
         key.depth_format = PixelFormat::Invalid;
     }
     key.samples = MaxwellToVK::MsaaMode(state.msaa_mode);
+    key.optimal_layout = Settings::values.renderer_optimal_attachments.GetValue();
     return key;
 }
 
@@ -521,8 +522,8 @@ bool GraphicsPipeline::ConfigureImpl(bool is_indexed) {
         buffer_cache.any_buffer_uploaded = false;
     }
     texture_cache.UpdateRenderTargets(false);
-    texture_cache.CheckFeedbackLoop(std::span<const VideoCommon::ImageViewInOut>{views.data(),
-                                                                                 views.size()});
+    uses_general_render_pass = texture_cache.CheckFeedbackLoop(
+        std::span<const VideoCommon::ImageViewInOut>{views.data(), views.size()});
     ConfigureDraw(rescaling, render_area);
 
     return true;
@@ -530,7 +531,7 @@ bool GraphicsPipeline::ConfigureImpl(bool is_indexed) {
 
 void GraphicsPipeline::ConfigureDraw(const RescalingPushConstant& rescaling,
                                      const RenderAreaPushConstant& render_area) {
-    scheduler.RequestRenderpass(texture_cache.GetFramebuffer());
+    scheduler.RequestRenderpass(texture_cache.GetFramebuffer(), uses_general_render_pass);
     if (!is_built.load(std::memory_order::relaxed)) {
         // Wait for the pipeline to be built
         scheduler.Record([this](vk::CommandBuffer) {

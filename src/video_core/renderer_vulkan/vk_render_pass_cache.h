@@ -26,6 +26,11 @@ struct RenderPassKey {
     bool color_clear{};
     bool depth_clear{};
     bool stencil_clear{};
+    /// Use COLOR_ATTACHMENT_OPTIMAL / DEPTH_STENCIL_ATTACHMENT_OPTIMAL attachment references for
+    /// the subpass while keeping the attachments' initial and final layout at GENERAL. The images
+    /// still rest in GENERAL, so the texture cache does not need to know about this. Draws that
+    /// sample the render target they write to need the GENERAL variant instead.
+    bool optimal_layout{};
 };
 
 } // namespace Vulkan
@@ -42,6 +47,7 @@ struct hash<Vulkan::RenderPassKey> {
         value ^= static_cast<size_t>(key.color_clear) << 58;
         value ^= static_cast<size_t>(key.depth_clear) << 59;
         value ^= static_cast<size_t>(key.stencil_clear) << 60;
+        value ^= static_cast<size_t>(key.optimal_layout) << 61;
         return value;
     }
 };
