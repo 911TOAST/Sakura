@@ -1,6 +1,14 @@
 <div align="center">
 
+<details>
+<summary>
 <img src="docs/assets/sakura-banner.png" alt="Sakura, a suyu-based Android emulator" width="760">
+<sub>click the logo to see it move</sub>
+</summary>
+
+<img src="docs/assets/sakura-logo-loop.webp" alt="The Sakura logo animating: a glowing pink blossom over the wordmark, on a dark rounded card" width="760">
+
+</details>
 
 **a suyu fork built for Mali GPUs on MediaTek phones** (´｡• ᵕ •｡`)
 
