@@ -36,6 +36,7 @@ import org.yuzu.yuzu_emu.databinding.FragmentHomeSettingsBinding
 import org.yuzu.yuzu_emu.features.DocumentProvider
 import org.yuzu.yuzu_emu.features.dashboard.PerfDashboardActivity
 import org.yuzu.yuzu_emu.features.dashboard.showTweaksSheet
+import org.yuzu.yuzu_emu.features.stats.PlaytimeStatsActivity
 import org.yuzu.yuzu_emu.features.fetcher.SpacingItemDecoration
 import org.yuzu.yuzu_emu.features.settings.model.Settings
 import org.yuzu.yuzu_emu.features.settings.model.IntSetting
@@ -49,6 +50,7 @@ import org.yuzu.yuzu_emu.utils.FileUtil
 import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.Log
 import org.yuzu.yuzu_emu.utils.NativeConfig
+import org.yuzu.yuzu_emu.utils.background.WallpaperSettings
 
 class HomeSettingsFragment : Fragment() {
     private var _binding: FragmentHomeSettingsBinding? = null
@@ -114,6 +116,14 @@ class HomeSettingsFragment : Fragment() {
             )
             add(
                 HomeSetting(
+                    R.string.library_aurora,
+                    R.string.library_aurora_description,
+                    R.drawable.ic_m3_new_releases,
+                    { toggleAurora() }
+                )
+            )
+            add(
+                HomeSetting(
                     R.string.wallpapers_title,
                     R.string.wallpapers_description,
                     R.drawable.ic_m3_folder_open,
@@ -135,6 +145,18 @@ class HomeSettingsFragment : Fragment() {
                     {
                         startActivity(
                             Intent(requireContext(), PerfDashboardActivity::class.java)
+                        )
+                    }
+                )
+            )
+            add(
+                HomeSetting(
+                    R.string.playtime_title,
+                    R.string.playtime_description,
+                    R.drawable.ic_m3_history,
+                    {
+                        startActivity(
+                            Intent(requireContext(), PlaytimeStatsActivity::class.java)
                         )
                     }
                 )
@@ -408,6 +430,22 @@ class HomeSettingsFragment : Fragment() {
             if (hideTitles) R.string.library_titles_hidden else R.string.library_titles_shown,
             Toast.LENGTH_SHORT
         ).show()
+    }
+
+    private fun toggleAurora() {
+        val appearance = WallpaperSettings.appearance()
+        val updated = appearance.copy(aurora = !appearance.aurora)
+        runCatching { WallpaperSettings.setAppearance(updated) }
+            .onSuccess {
+                Toast.makeText(
+                    requireContext(),
+                    if (updated.aurora) R.string.library_aurora_on else R.string.library_aurora_off,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            .onFailure {
+                Toast.makeText(requireContext(), R.string.wallpaper_save_error, Toast.LENGTH_SHORT).show()
+            }
     }
 
     private fun showPerformancePresetDialog() {

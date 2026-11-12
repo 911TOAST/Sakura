@@ -263,7 +263,8 @@ class GamesFragment : Fragment() {
      * colour fought the theme instead of complementing it.
      */
     private fun themeFromCoverArt() {
-        if (ArtworkColors.seed.value != null) {
+        // A wallpaper seed may already be published; only a cover-owned seed skips resampling.
+        if (ArtworkColors.coverOwnsSeed()) {
             return
         }
         val game = gamesViewModel.games.value.firstOrNull() ?: return

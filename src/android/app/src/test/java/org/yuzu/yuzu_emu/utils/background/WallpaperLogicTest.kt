@@ -24,6 +24,82 @@ class WallpaperLogicTest {
     }
 
     @Test
+    fun safebooruSearchUsesTagQueryAndScoreSort() {
+        val url = safebooruSearchUrl(WallpaperSearchSpec(query = "forest landscape", sort = 2), 3)
+        assertEquals("dapi", url.queryParameter("page"))
+        assertEquals("1", url.queryParameter("json"))
+        assertEquals("2", url.queryParameter("pid"))
+        assertEquals("forest landscape sort:score", url.queryParameter("tags"))
+        assertEquals("", safebooruSearchUrl(WallpaperSearchSpec(), 1).queryParameter("tags"))
+    }
+
+    @Test
+    fun safebooruResultsKeepOnlyStaticSafeImages() {
+        val text = """[
+            {"id":1,"directory":"aa","image":"pic.jpg","hash":"ab12","width":1920,"height":1080,"owner":"artist","rating":"s"},
+            {"id":2,"directory":"bb","image":"clip.webm","hash":"cd34","width":1920,"height":1080},
+            {"id":3,"directory":"../evil","image":"pic.png","hash":"ef56","width":100,"height":100},
+            {"id":4,"directory":"cc","image":"pic.png","hash":"gh78","width":1080,"height":1920,"rating":"e"}
+        ]"""
+        val page = parseSafebooruPage(text, 1)
+        assertEquals(listOf("safebooru-1"), page.items.map { it.id })
+        assertEquals("https://safebooru.org/images/aa/pic.jpg", page.items[0].full)
+        assertEquals("https://safebooru.org/thumbnails/aa/thumbnail_ab12.jpg", page.items[0].thumb)
+        assertEquals(1, page.lastPage)
+    }
+
+    @Test
+    fun safebooruFullRawPageImpliesNextPage() {
+        val posts = (1..24).joinToString(",", "[", "]") {
+            """{"id":$it,"directory":"aa","image":"pic$it.jpg","hash":"ab$it","width":100,"height":100}"""
+        }
+        assertEquals(2, parseSafebooruPage(posts, 1).lastPage)
+    }
+
+    @Test
+    fun bingImagesUseFixedRenditionsAndRejectForeignPaths() {
+        val text = """{"images":[
+            {"urlbase":"/th?id=OHR.Aurora_EN-US123","title":"Aurora night","copyright":"Photographer"},
+            {"urlbase":"/th?id=OHR.City_EN-US456","title":"","copyright":"Another"},
+            {"urlbase":"https://evil.example/x","title":"Bad","copyright":""}
+        ]}"""
+        val page = parseBingPage(text, 1)
+        assertEquals(listOf("bing-OHR.Aurora_EN-US123", "bing-OHR.City_EN-US456"), page.items.map { it.id })
+        assertEquals("https://www.bing.com/th?id=OHR.Aurora_EN-US123_1920x1080.jpg", page.items[0].full)
+        assertEquals("Another", page.items[1].title)
+        assertEquals(1, page.lastPage)
+    }
+
+    @Test
+    fun bingQueryFiltersTitlesLocally() {
+        val items = listOf(
+            OnlineBackground(id = "a", title = "Aurora night", author = "Photographer"),
+            OnlineBackground(id = "b", title = "City lights", author = "Another")
+        )
+        assertEquals(listOf("a"), filterBingResults(items, WallpaperSearchSpec(query = "aurora")).map { it.id })
+        assertEquals(listOf("b"), filterBingResults(items, WallpaperSearchSpec(query = "another")).map { it.id })
+        assertEquals(items, filterBingResults(items, WallpaperSearchSpec(query = " ")))
+    }
+
+    @Test
+    fun unknownProvidersFallBackToWallhaven() {
+        assertEquals(WallpaperProviders.WALLHAVEN, WallpaperProviders.normalize("nope"))
+        assertEquals(WallpaperProviders.SAFEBOORU, WallpaperProviders.normalize("safebooru"))
+        assertEquals(WallpaperProviders.BING, WallpaperProviders.normalize("bing"))
+    }
+
+    @Test
+    fun atmosphereDefaultsOnAndSurvivesSerializationRoundTrip() {
+        val appearance = WallpaperAppearance()
+        assertTrue(appearance.aurora)
+        assertTrue(appearance.parallax)
+        val encoded = kotlinx.serialization.json.Json.encodeToString(WallpaperAppearance.serializer(), appearance)
+        assertEquals(appearance, kotlinx.serialization.json.Json.decodeFromString(WallpaperAppearance.serializer(), encoded))
+        // Older saved state without the new keys must keep the atmosphere on.
+        assertEquals(appearance, kotlinx.serialization.json.Json.decodeFromString(WallpaperAppearance.serializer(), "{}"))
+    }
+
+    @Test
     fun searchResultsAreDeduplicatedAcrossPages() {
         val first = listOf(item("a"), item("b"))
         val second = listOf(item("b"), item("c"))
@@ -44,19 +120,34 @@ class WallpaperLogicTest {
         val now = 1_000_000_000_000L
         val dayMillis = 24 * 60 * 60 * 1000L
         val games = listOf(
-            RecentWallpaperGame("  Zelda\u2122  ", now - dayMillis),
-            RecentWallpaperGame("zelda", now),
-            RecentWallpaperGame("Mario", now - 31 * dayMillis),
-            RecentWallpaperGame("Pokemon", now - 2 * dayMillis),
-            RecentWallpaperGame("Metroid", now - 3 * dayMillis),
-            RecentWallpaperGame("Kirby", now - 4 * dayMillis)
+            RecentWallpaperGame("  Aurora\u2122  ", now - dayMillis),
+            RecentWallpaperGame("aurora", now),
+            RecentWallpaperGame("Comet", now - 31 * dayMillis),
+            RecentWallpaperGame("Starfall", now - 2 * dayMillis),
+            RecentWallpaperGame("Nebula", now - 3 * dayMillis),
+            RecentWallpaperGame("Pixel", now - 4 * dayMillis)
         )
-        assertEquals(listOf("zelda", "Pokemon", "Metroid"), recentWallpaperGames(games, now).map { it.title })
+        assertEquals(listOf("aurora", "Starfall", "Nebula"), recentWallpaperGames(games, now).map { it.title })
+    }
+
+    @Test
+    fun restrictedFranchiseTitlesNeverSeedRecommendations() {
+        val now = 1_000_000_000_000L
+        val games = listOf(
+            RecentWallpaperGame("The Legend of Zelda: Tears of the Kingdom", now),
+            RecentWallpaperGame("Super Mario Odyssey", now - 1),
+            RecentWallpaperGame("Aurora", now - 2)
+        )
+        assertEquals(listOf("Aurora"), recentWallpaperGames(games, now).map { it.title })
+        assertTrue(isRestrictedWallpaperTitle("Pokémon Scarlet"))
+        assertTrue(isRestrictedWallpaperTitle("Metroid Prime Remastered"))
+        assertFalse(isRestrictedWallpaperTitle("Celeste"))
+        assertFalse(isRestrictedWallpaperTitle("Hollow Knight"))
     }
 
     @Test
     fun recommendationsInvalidateOnNewDayOrDifferentGames() {
-        val games = listOf(RecentWallpaperGame("Zelda", 1), RecentWallpaperGame("Mario", 2))
+        val games = listOf(RecentWallpaperGame("Aurora", 1), RecentWallpaperGame("Comet", 2))
         val key = recommendationKey(games, day)
         assertTrue(key == recommendationKey(games.reversed(), day))
         assertFalse(key == recommendationKey(games, day.plusDays(1)))

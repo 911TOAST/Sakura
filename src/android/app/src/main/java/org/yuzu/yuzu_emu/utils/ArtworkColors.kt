@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import org.yuzu.yuzu_emu.model.Game
+import org.yuzu.yuzu_emu.utils.background.WallpaperPalette
 
 /**
  * Artwork-powered colour, the way music players tint themselves from album art: pull the most
@@ -30,6 +31,14 @@ object ArtworkColors {
 
     private val _seed = MutableStateFlow<Int?>(null)
     val seed: StateFlow<Int?> = _seed
+
+    /** Direct publish for palette sources that already sampled off the main thread. */
+    fun setSeed(seed: Int?) {
+        _seed.value = seed
+    }
+
+    /** True while a game cover, not the wallpaper, owns the published seed. */
+    fun coverOwnsSeed(): Boolean = WallpaperPalette.coverActive
 
     /**
      * Picks the most characterful colour of the cover: saturated pixels win, near-white and
@@ -101,7 +110,7 @@ object ArtworkColors {
     /** Loads the cover for [game] and publishes its seed. Runs off the main thread. */
     suspend fun applyFromArtwork(lifecycleOwner: LifecycleOwner, game: Game?) {
         if (game == null) {
-            _seed.value = null
+            WallpaperPalette.onCoverSeedChanged(null)
             return
         }
         // Decoding a cover is a disk read plus a native metadata call, and the sample pass touches
@@ -110,11 +119,11 @@ object ArtworkColors {
             val bitmap = runCatching { GameIconUtils.getGameIcon(lifecycleOwner, game) }.getOrNull()
             seedFromArtwork(bitmap)
         }
-        _seed.value = seed
+        WallpaperPalette.onCoverSeedChanged(seed)
     }
 
     fun clear() {
-        _seed.value = null
+        WallpaperPalette.onCoverSeedChanged(null)
     }
 
     private fun lightScheme(seed: Int): ColorScheme {

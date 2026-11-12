@@ -18,9 +18,12 @@
     <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none">
         <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:orientation="horizontal" android:paddingHorizontal="16dp">
+            <com.google.android.material.chip.Chip android:id="@+id/wallpaper_provider"
+                style="@style/SuyuFilterChip" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="@string/wallpaper_provider" android:checkable="false" />
             <com.google.android.material.chip.Chip android:id="@+id/wallpaper_orientation"
                 style="@style/SuyuFilterChip" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="@string/wallpaper_orientation" android:checkable="false" />
+                android:layout_marginStart="8dp" android:text="@string/wallpaper_orientation" android:checkable="false" />
             <com.google.android.material.chip.Chip android:id="@+id/wallpaper_resolution"
                 style="@style/SuyuFilterChip" android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:layout_marginStart="8dp" android:text="@string/wallpaper_resolution" android:checkable="false" />
@@ -30,6 +33,9 @@
             <com.google.android.material.chip.Chip android:id="@+id/wallpaper_advanced"
                 style="@style/SuyuFilterChip" android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:layout_marginStart="8dp" android:text="@string/wallpaper_advanced" android:checkable="false" />
+            <com.google.android.material.chip.Chip android:id="@+id/wallpaper_surprise"
+                style="@style/SuyuFilterChip" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" android:text="@string/wallpaper_surprise" android:checkable="false" />
         </LinearLayout>
     </HorizontalScrollView>
     <TextView android:id="@+id/wallpaper_suggestions_label"
@@ -54,9 +60,16 @@
             android:layout_width="match_parent" android:layout_height="wrap_content"
             android:textAppearance="?attr/textAppearanceBodyMedium" android:accessibilityLiveRegion="polite"
             android:textColor="?attr/colorOnSurfaceVariant" />
-        <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/wallpaper_search_progress"
-            android:layout_width="match_parent" android:layout_height="wrap_content" android:indeterminate="true"
-            android:visibility="gone" />
+        <org.yuzu.yuzu_emu.views.WavyProgressIndicator android:id="@+id/wallpaper_search_progress"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:contentDescription="@string/wallpaper_loading"
+            android:visibility="gone"
+            app:wavyIndeterminate="true"
+            app:wavyIndicatorColor="?attr/colorPrimary"
+            app:wavyTrackColor="?attr/colorSurfaceContainerHighest"
+            app:wavyTrackThickness="6dp"
+            app:wavyWaveAmplitude="3dp"
+            app:wavyWaveLength="30dp" />
         <com.google.android.material.button.MaterialButton android:id="@+id/wallpaper_search_more"
             style="@style/SuyuButton.Tonal" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="@string/wallpaper_more" android:visibility="gone" />

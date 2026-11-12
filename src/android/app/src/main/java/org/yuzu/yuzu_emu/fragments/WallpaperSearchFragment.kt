@@ -35,6 +35,7 @@ import org.yuzu.yuzu_emu.features.settings.ui.respectReducedMotion
 import org.yuzu.yuzu_emu.features.settings.ui.wallpaperColumns
 import org.yuzu.yuzu_emu.utils.background.OnlineBackground
 import org.yuzu.yuzu_emu.utils.background.OnlineBackgroundCatalog
+import org.yuzu.yuzu_emu.utils.background.WallpaperProviders
 import org.yuzu.yuzu_emu.utils.background.WallpaperSelection
 
 class WallpaperSearchFragment : Fragment() {
@@ -80,10 +81,12 @@ class WallpaperSearchFragment : Fragment() {
                 false
             }
         }
+        binding.wallpaperProvider.setOnClickListener { chooseProvider() }
         binding.wallpaperOrientation.setOnClickListener { chooseFilter(Filter.ORIENTATION) }
         binding.wallpaperResolution.setOnClickListener { chooseFilter(Filter.RESOLUTION) }
         binding.wallpaperSort.setOnClickListener { chooseFilter(Filter.SORT) }
         binding.wallpaperAdvanced.setOnClickListener { showAdvancedDialog() }
+        binding.wallpaperSurprise.setOnClickListener { viewModel.surpriseMe() }
         binding.wallpaperSearchMore.setOnClickListener {
             if (viewModel.search.value.error != null) viewModel.retrySearch() else viewModel.nextPage()
         }
@@ -120,6 +123,22 @@ class WallpaperSearchFragment : Fragment() {
     }
 
     private enum class Filter { ORIENTATION, RESOLUTION, SORT }
+
+    private fun chooseProvider() {
+        val spec = viewModel.search.value.spec
+        val selected = WallpaperProviders.ids.indexOf(WallpaperProviders.normalize(spec.provider))
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.wallpaper_provider_title)
+            .setSingleChoiceItems(R.array.wallpaper_provider_names, selected) { dialog, which ->
+                val provider = WallpaperProviders.ids[which]
+                // A persisted catalog would override the provider, so leave it behind explicitly.
+                OnlineBackgroundCatalog.setCatalogUrl(requireContext(), "")
+                viewModel.search(spec.copy(provider = provider, catalogUrl = ""), debounce = false)
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
 
     private fun chooseFilter(filter: Filter) {
         val spec = viewModel.search.value.spec
@@ -167,7 +186,10 @@ class WallpaperSearchFragment : Fragment() {
             .setView(container)
             .setNeutralButton(R.string.wallpaper_source_wallhaven) { _, _ ->
                 OnlineBackgroundCatalog.setCatalogUrl(requireContext(), "")
-                viewModel.search(viewModel.search.value.spec.copy(catalogUrl = ""), debounce = false)
+                viewModel.search(
+                    viewModel.search.value.spec.copy(catalogUrl = "", provider = WallpaperProviders.WALLHAVEN),
+                    debounce = false
+                )
             }
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.wallpaper_source_catalog, null)
@@ -227,6 +249,12 @@ class WallpaperSearchFragment : Fragment() {
         adapter?.submit(state.items) {
             if (isAdded && state.items.isNotEmpty()) restoreScroll()
         }
+        val provider = WallpaperProviders.normalize(state.spec.provider)
+        binding.wallpaperProvider.text = resources.getString(
+            R.string.wallpaper_filter_value,
+            getString(R.string.wallpaper_provider),
+            resources.getStringArray(R.array.wallpaper_provider_names)[WallpaperProviders.ids.indexOf(provider)]
+        )
         binding.wallpaperOrientation.text = resources.getString(
             R.string.wallpaper_filter_value,
             getString(R.string.wallpaper_orientation),
@@ -246,9 +274,14 @@ class WallpaperSearchFragment : Fragment() {
         binding.wallpaperAdvanced.setText(
             if (state.spec.catalogUrl.isBlank()) R.string.wallpaper_advanced else R.string.wallpaper_source_catalog
         )
-        binding.wallpaperSort.isEnabled = state.spec.catalogUrl.isBlank()
+        binding.wallpaperSort.isEnabled = state.spec.catalogUrl.isBlank() && provider != WallpaperProviders.BING
         binding.wallpaperSourceNotice.setText(
-            if (state.spec.catalogUrl.isBlank()) R.string.wallpaper_discovery_note else R.string.wallpaper_catalog_notice
+            when {
+                state.spec.catalogUrl.isNotBlank() -> R.string.wallpaper_catalog_notice
+                provider == WallpaperProviders.SAFEBOORU -> R.string.wallpaper_safebooru_note
+                provider == WallpaperProviders.BING -> R.string.wallpaper_bing_note
+                else -> R.string.wallpaper_discovery_note
+            }
         )
         binding.wallpaperSearchProgress.isVisible = state.loading
         binding.wallpaperSearchStatus.text = when {

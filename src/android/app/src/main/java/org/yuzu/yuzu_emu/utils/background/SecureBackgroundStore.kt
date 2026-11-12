@@ -148,7 +148,11 @@ object SecureBackgroundStore {
         if (!file.exists()) {
             return null
         }
-        bitmapCache.get(file.absolutePath)?.let { return it }
+        bitmapCache.get(file.absolutePath)?.let { cached ->
+            // A recycled bitmap must never be handed back to an ImageView; drop it and re-decode.
+            if (!cached.isRecycled) return cached
+            bitmapCache.remove(file.absolutePath)
+        }
         val bitmap = runCatching {
             val raw = file.inputStream().use {
                 WallpaperHttp.readBounded(it, OnlineBackgroundCatalog.MAX_IMAGE_BYTES + 64)

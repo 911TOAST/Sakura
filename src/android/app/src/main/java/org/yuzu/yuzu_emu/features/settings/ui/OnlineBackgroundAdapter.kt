@@ -4,10 +4,12 @@
 package org.yuzu.yuzu_emu.features.settings.ui
 
 import android.graphics.Bitmap
+import android.provider.Settings
 import android.util.LruCache
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
@@ -34,6 +36,10 @@ class OnlineBackgroundAdapter(
 
     /** Id of the item currently downloading, so only that tile shows a spinner. */
     var busyId: String? = null
+
+    /** Each tile reveals once per session; pagination and provider switches animate only newcomers. */
+    private val revealed = mutableSetOf<String>()
+    private var motionEnabled: Boolean? = null
 
     fun submit(list: List<OnlineBackground>, onCommitted: (() -> Unit)? = null) =
         submitList(list.toList(), onCommitted?.let { callback -> Runnable { callback() } })
@@ -70,7 +76,27 @@ class OnlineBackgroundAdapter(
             binding.backgroundMetadata.visibility = if (binding.backgroundMetadata.text.isEmpty()) View.GONE else View.VISIBLE
             binding.root.isEnabled = busyId == null
             binding.root.setOnClickListener { if (busyId == null) onClick(value) }
+            reveal()
             loadThumbnail()
+        }
+
+        private fun reveal() {
+            val value = item ?: return
+            val position = bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION || !revealed.add(value.id)) return
+            val enabled = motionEnabled ?: (Settings.Global.getFloat(
+                binding.root.context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f
+            ) != 0f).also { motionEnabled = it }
+            if (!enabled) return
+            binding.root.alpha = 0f
+            binding.root.scaleX = 0.94f
+            binding.root.scaleY = 0.94f
+            binding.root.animate()
+                .alpha(1f).scaleX(1f).scaleY(1f)
+                .setStartDelay((position % 8) * 24L)
+                .setDuration(220L)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
         }
 
         fun loadThumbnail() {
@@ -108,6 +134,10 @@ class OnlineBackgroundAdapter(
         fun clear() {
             cancel()
             item = null
+            binding.root.animate().cancel()
+            binding.root.alpha = 1f
+            binding.root.scaleX = 1f
+            binding.root.scaleY = 1f
             binding.backgroundThumb.setImageDrawable(null)
             binding.root.setOnClickListener(null)
         }

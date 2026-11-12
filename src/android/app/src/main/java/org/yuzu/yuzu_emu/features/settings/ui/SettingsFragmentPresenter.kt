@@ -368,6 +368,9 @@ class SettingsFragmentPresenter(
             add(BooleanSetting.RENDERER_ASYNC_DIRECT_PRESENT.key)
             add(BooleanSetting.RENDERER_MAXWELL_BYPASS.key)
             add(BooleanSetting.RENDERER_CLEAR_LOADOP.key)
+            add(BooleanSetting.RENDERER_STORE_ELISION.key)
+            add(BooleanSetting.RENDERER_BCN_TO_ASTC.key)
+            add(BooleanSetting.RENDERER_AFBC_LAYOUTS.key)
             add(SettingsItem.GPU_UNSWIZZLE_COMBINED)
 
             add(HeaderSetting(R.string.extensions))
@@ -388,7 +391,11 @@ class SettingsFragmentPresenter(
         BooleanSetting.RENDERER_MAXWELL_BYPASS,
         BooleanSetting.RENDERER_DRAW_STATE_CACHE,
         BooleanSetting.RENDERER_CLEAR_LOADOP,
+        BooleanSetting.RENDERER_STORE_ELISION,
+        BooleanSetting.RENDERER_BCN_TO_ASTC,
+        BooleanSetting.RENDERER_AFBC_LAYOUTS,
         BooleanSetting.RENDERER_OPTIMAL_ATTACHMENTS,
+        BooleanSetting.RENDERER_FEEDBACK_LOOP_LAYOUT,
         BooleanSetting.RENDERER_CORE_PINNING,
         BooleanSetting.RENDERER_ASYNC_DIRECT_PRESENT,
         BooleanSetting.USE_OPTIMIZED_VERTEX_BUFFERS,
@@ -422,7 +429,11 @@ class SettingsFragmentPresenter(
             add(BooleanSetting.RENDERER_MAXWELL_BYPASS.key)
             add(BooleanSetting.RENDERER_DRAW_STATE_CACHE.key)
             add(BooleanSetting.RENDERER_CLEAR_LOADOP.key)
+            add(BooleanSetting.RENDERER_STORE_ELISION.key)
+            add(BooleanSetting.RENDERER_BCN_TO_ASTC.key)
+            add(BooleanSetting.RENDERER_AFBC_LAYOUTS.key)
             add(BooleanSetting.RENDERER_OPTIMAL_ATTACHMENTS.key)
+            add(BooleanSetting.RENDERER_FEEDBACK_LOOP_LAYOUT.key)
 
             add(HeaderSetting(R.string.experiments_group_present))
             add(BooleanSetting.RENDERER_CORE_PINNING.key)

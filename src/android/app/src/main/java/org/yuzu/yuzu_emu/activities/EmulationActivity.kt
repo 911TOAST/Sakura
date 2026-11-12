@@ -27,6 +27,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.navigation.NavOptions
 import org.yuzu.yuzu_emu.fragments.EmulationFragment
 import org.yuzu.yuzu_emu.utils.CustomSettingsHandler
@@ -54,6 +55,7 @@ import org.yuzu.yuzu_emu.features.input.NativeInput
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.features.settings.model.Settings
+import org.yuzu.yuzu_emu.features.stats.PlaytimeStore
 import org.yuzu.yuzu_emu.model.EmulationViewModel
 import org.yuzu.yuzu_emu.model.Game
 import org.yuzu.yuzu_emu.network.DiscordPresence
@@ -103,6 +105,10 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
     private var hasEmulationSession = processHasEmulationSession
     private val romSwapStopTimeoutRunnable = Runnable { onRomSwapStopTimeout() }
 
+    // Playtime segments use the monotonic clock so wall-clock changes never inflate stats.
+    private var playtimeGameKey: String? = null
+    private var playtimeSegmentStart = 0L
+
     private fun onRomSwapStopTimeout() {
         if (!isWaitingForRomSwapStop) {
             return
@@ -126,6 +132,9 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
         ThemeHelper.setTheme(this)
 
         super.onCreate(savedInstanceState)
+
+        playtimeGameKey = resolvePlaytimeKey(intent)
+        playtimeGameKey?.let { key -> runCatching { PlaytimeStore.record(key, 0, newSession = true) } }
 
         NativeConfig.reloadGlobalConfig()
 
@@ -251,6 +260,7 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
 
     override fun onResume() {
         super.onResume()
+        playtimeSegmentStart = SystemClock.elapsedRealtime()
         nfcReader.startScanning()
         startMotionSensorListener()
         InputHandler.updateControllerData()
@@ -260,6 +270,7 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
     }
 
     override fun onPause() {
+        flushPlaytimeSegment()
         nfcReader.stopScanning()
         stopMotionSensorListener()
         super.onPause()
@@ -285,9 +296,27 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // A ROM swap ends the old game's segment and starts the new game's story.
+        flushPlaytimeSegment()
+        playtimeGameKey = resolvePlaytimeKey(intent)
+        playtimeGameKey?.let { key -> runCatching { PlaytimeStore.record(key, 0, newSession = true) } }
+        playtimeSegmentStart = SystemClock.elapsedRealtime()
         handleSwapIntent(intent)
         nfcReader.onNewIntent(intent)
         InputHandler.updateControllerData()
+    }
+
+    private fun resolvePlaytimeKey(from: Intent): String? =
+        from.extras?.let { BundleCompat.getParcelable(it, EXTRA_SELECTED_GAME, Game::class.java) }?.path
+            ?: from.data?.toString()
+
+    private fun flushPlaytimeSegment() {
+        val key = playtimeGameKey ?: return
+        if (playtimeSegmentStart == 0L) return
+        val now = SystemClock.elapsedRealtime()
+        val seconds = (now - playtimeSegmentStart) / 1000
+        playtimeSegmentStart = now
+        if (seconds > 0) runCatching { PlaytimeStore.record(key, seconds) }
     }
 
     private fun isSwapIntent(intent: Intent): Boolean {

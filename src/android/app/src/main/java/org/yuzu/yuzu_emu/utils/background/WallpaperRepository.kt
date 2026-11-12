@@ -6,6 +6,7 @@ package org.yuzu.yuzu_emu.utils.background
 import android.content.Context
 import androidx.preference.PreferenceManager
 import java.time.LocalDate
+import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -27,7 +28,8 @@ data class WallpaperSearchSpec(
     val orientation: Int = 0,
     val resolution: Int = 0,
     val sort: Int = 0,
-    val catalogUrl: String = ""
+    val catalogUrl: String = "",
+    val provider: String = WallpaperProviders.WALLHAVEN
 )
 
 data class WallpaperPage(val items: List<OnlineBackground>, val page: Int, val lastPage: Int)
@@ -94,12 +96,23 @@ class WallpaperRepository(context: Context) {
     private val prefs = app.getSharedPreferences("wallpaper_discovery", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
     private var catalog: Pair<String, List<OnlineBackground>>? = null
+    @Volatile private var lastProvider = WallpaperProviders.WALLHAVEN
     private val recommendationLock = Any()
     private var recommendationGeneration = 0L
 
     suspend fun search(spec: WallpaperSearchSpec, page: Int): WallpaperPage = withContext(Dispatchers.IO) {
         if (spec.catalogUrl.isNotBlank()) return@withContext searchCatalog(spec, page)
-        val result = parseWallhavenPage(WallpaperHttp.get(wallhavenSearchUrl(spec, page).toString(), api = true).decodeToString())
+        lastProvider = WallpaperProviders.normalize(spec.provider)
+        val result = when (WallpaperProviders.normalize(spec.provider)) {
+            WallpaperProviders.SAFEBOORU -> parseSafebooruPage(
+                WallpaperHttp.get(safebooruSearchUrl(spec, page).toString(), api = true).decodeToString(), page
+            )
+            WallpaperProviders.BING -> {
+                val bing = parseBingPage(WallpaperHttp.get(bingWallpaperUrl(page).toString(), api = true).decodeToString(), page)
+                bing.copy(items = filterBingResults(bing.items, spec))
+            }
+            else -> parseWallhavenPage(WallpaperHttp.get(wallhavenSearchUrl(spec, page).toString(), api = true).decodeToString())
+        }
         result.copy(items = filterWallpaperResults(result.items, spec))
     }
 
@@ -122,6 +135,29 @@ class WallpaperRepository(context: Context) {
                 }
         }
         return WallpaperPage(items.drop((page - 1) * 24).take(24), page, ((items.size + 23) / 24).coerceAtLeast(1))
+    }
+
+    /** One-tap discovery: each provider contributes its own flavour of random. */
+    suspend fun surprise(): WallpaperPage = withContext(Dispatchers.IO) {
+        when (lastProvider) {
+            WallpaperProviders.SAFEBOORU -> parseSafebooruPage(
+                WallpaperHttp.get(
+                    safebooruSearchUrl(WallpaperSearchSpec(sort = 2), Random.nextInt(1, 41)).toString(),
+                    api = true
+                ).decodeToString(), 1
+            )
+            WallpaperProviders.BING -> parseBingPage(
+                WallpaperHttp.get(bingWallpaperUrl(Random.nextInt(1, 3)).toString(), api = true)
+                    .decodeToString(), 1
+            )
+            else -> parseWallhavenPage(
+                WallpaperHttp.get(
+                    wallhavenSearchUrl(WallpaperSearchSpec(), 1).newBuilder()
+                        .setQueryParameter("sorting", "random").build().toString(),
+                    api = true
+                ).decodeToString()
+            )
+        }
     }
 
     suspend fun recentGames(): List<RecentWallpaperGame> = withContext(Dispatchers.IO) {

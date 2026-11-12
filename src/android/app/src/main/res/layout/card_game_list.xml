@@ -51,7 +51,7 @@
             app:layout_constraintStart_toEndOf="@+id/image_game_screen"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintVertical_chainStyle="packed"
-            tools:text="The Legend of Zelda: Tears of the Kingdom" />
+            tools:text="Your Game Title" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/text_game_developer"
@@ -72,7 +72,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@+id/image_game_screen"
             app:layout_constraintTop_toBottomOf="@+id/text_game_title"
-            tools:text="Nintendo" />
+            tools:text="Game Publisher" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

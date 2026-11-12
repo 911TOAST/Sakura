@@ -13,6 +13,10 @@ import org.yuzu.yuzu_emu.utils.NativeConfig
 @Serializable
 data class WallpaperSettingsSnapshot(val uri: String = "", val tuning: WallpaperTuning = WallpaperTuning())
 
+/** Library atmosphere switches, independent of the selected picture and its tuning. */
+@Serializable
+data class WallpaperAppearance(val aurora: Boolean = true, val parallax: Boolean = true)
+
 /** All wallpaper settings are global, including when an unrelated per-game config is loaded. */
 object WallpaperSettings {
     fun read(): WallpaperSettingsSnapshot = synchronized(NativeConfig) {
@@ -30,6 +34,25 @@ object WallpaperSettings {
     }
 
     fun personalized(): Boolean = BooleanSetting.WALLPAPER_RECENT_GAMES.getBoolean(true)
+
+    fun appearance(): WallpaperAppearance = synchronized(NativeConfig) {
+        WallpaperAppearance(
+            BooleanSetting.LIBRARY_AURORA.getBoolean(true),
+            BooleanSetting.LIBRARY_PARALLAX.getBoolean(true)
+        )
+    }
+
+    fun setAppearance(appearance: WallpaperAppearance) = synchronized(NativeConfig) {
+        val old = appearance()
+        NativeConfig.setBoolean(BooleanSetting.LIBRARY_AURORA.key, appearance.aurora)
+        NativeConfig.setBoolean(BooleanSetting.LIBRARY_PARALLAX.key, appearance.parallax)
+        if (!NativeConfig.saveWallpaperConfig()) {
+            NativeConfig.setBoolean(BooleanSetting.LIBRARY_AURORA.key, old.aurora)
+            NativeConfig.setBoolean(BooleanSetting.LIBRARY_PARALLAX.key, old.parallax)
+            NativeConfig.saveWallpaperConfig()
+            throw IOException("Could not save library appearance preferences")
+        }
+    }
 
     fun setPersonalized(enabled: Boolean) = synchronized(NativeConfig) {
         val key = BooleanSetting.WALLPAPER_RECENT_GAMES.key

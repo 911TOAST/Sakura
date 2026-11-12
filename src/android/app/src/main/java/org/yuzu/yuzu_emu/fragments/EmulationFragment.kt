@@ -40,6 +40,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import org.yuzu.yuzu_emu.features.dashboard.PerfDashboardActivity
+import org.yuzu.yuzu_emu.features.dashboard.showAutoTuneSheet
 import org.yuzu.yuzu_emu.features.dashboard.showTweaksSheet
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -904,6 +905,12 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                     emulationActivity?.let {
                         it.startActivity(Intent(it, PerfDashboardActivity::class.java))
                     }
+                    true
+                }
+
+                R.id.menu_auto_tune -> {
+                    binding.drawerLayout.closeDrawers()
+                    emulationActivity?.let { showAutoTuneSheet(it) }
                     true
                 }
 

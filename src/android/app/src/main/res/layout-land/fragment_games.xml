@@ -31,6 +31,18 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Aurora veil: same layer as the portrait variant so landscape is not a silent no-op. -->
+    <org.yuzu.yuzu_emu.views.AuroraVeilView
+        android:id="@+id/library_aurora"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <!-- Compact landscape brand row. The section headline lives here so the
          limited vertical space goes to the library itself. -->
     <LinearLayout

@@ -72,6 +72,7 @@ private val graphicsToggles = listOf(
     OverlayToggle(BooleanSetting.MALI_AFRC, R.string.tweaks_afrc),
     OverlayToggle(BooleanSetting.RENDERER_CLEAR_LOADOP, R.string.tweaks_clear_loadop),
     OverlayToggle(BooleanSetting.RENDERER_OPTIMAL_ATTACHMENTS, R.string.tweaks_optimal_attachments),
+    OverlayToggle(BooleanSetting.RENDERER_FEEDBACK_LOOP_LAYOUT, R.string.tweaks_feedback_loop_layout),
     OverlayToggle(BooleanSetting.RENDERER_MAXWELL_BYPASS, R.string.tweaks_maxwell_bypass),
     OverlayToggle(BooleanSetting.RENDERER_DRAW_STATE_CACHE, R.string.tweaks_draw_state_cache),
     OverlayToggle(BooleanSetting.RENDERER_CORE_PINNING, R.string.tweaks_core_pinning),
@@ -284,6 +285,24 @@ private fun TweaksSheet(activity: ComponentActivity, onDismiss: () -> Unit) {
             }
 
             Spacer(Modifier.height(16.dp))
+
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    showAutoTuneSheet(activity)
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
+            ) {
+                Text(
+                    text = stringResource(R.string.autotune_title),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
 
             Button(
                 modifier = Modifier.fillMaxWidth(),

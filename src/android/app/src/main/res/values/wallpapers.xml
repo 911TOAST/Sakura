@@ -5,6 +5,11 @@
     <string name="wallpaper_thumbnail_failed">Preview unavailable. Tap to try the full image.</string>
     <string name="wallpapers_title">Wallpapers</string>
     <string name="wallpapers_description">Discover wallpapers and fine-tune your library background.</string>
+    <string name="library_aurora">Aurora veil</string>
+    <string name="library_aurora_description">Ambient glow and theme colours drawn from your wallpaper, with gentle tilt parallax.</string>
+    <string name="library_aurora_on">Aurora veil on</string>
+    <string name="library_aurora_off">Aurora veil off</string>
+    <string name="wallpaper_surprise">Surprise me</string>
     <string name="wallpaper_current">Your library, your style</string>
     <string name="wallpaper_edit">Edit background</string>
     <string name="wallpaper_search">Search wallpapers</string>
@@ -13,7 +18,7 @@
     <string name="wallpaper_restore_message">Remove your custom wallpaper and return to the default library surface? Your fit and dimming settings are kept.</string>
     <string name="wallpaper_refresh">Refresh recommendations</string>
     <string name="wallpaper_personalized">Use recently played games</string>
-    <string name="wallpaper_privacy">Optional: send the titles of your three most recently played games to Wallhaven for daily suggestions. ROM paths, identifiers, and play history stay on your device.</string>
+    <string name="wallpaper_privacy">Optional: send the titles of your three most recently played games to Wallhaven for daily suggestions. First-party franchise titles are never sent. ROM paths, identifiers, and play history stay on your device.</string>
     <string name="wallpaper_because">Because you played %1$s</string>
     <string name="wallpaper_popular">Popular today</string>
     <string name="wallpaper_discovery_note">Safe-for-work results from Wallhaven. Availability depends on the provider; recommendations never change your background automatically.</string>
@@ -25,13 +30,12 @@
     <string name="wallpaper_loading_image">Preparing your image…</string>
     <string name="wallpaper_saving">Applying wallpaper…</string>
     <string name="wallpaper_network_error">Could not load wallpapers. Check your connection and try again.</string>
-    <string name="wallpaper_rate_error">Wallhaven is limiting requests. Wait a little, then try again.</string>
+    <string name="wallpaper_rate_error">The wallpaper service is limiting requests. Wait a little, then try again.</string>
     <string name="wallpaper_image_error">Could not open this image. Choose a readable JPEG, PNG, or WebP up to 24 MiB.</string>
     <string name="wallpaper_save_error">Could not save. Your previous wallpaper was kept. Please try again.</string>
     <string name="wallpaper_retry">Try again</string>
     <string name="wallpaper_more">Load more</string>
     <string name="wallpaper_search_hint">Games, nature, space, anything…</string>
-    <string name="wallpaper_search_help">Search any topic on Wallhaven</string>
     <string name="wallpaper_history">Recent searches</string>
     <string name="wallpaper_clear_history">Clear history</string>
     <string name="wallpaper_topics">Try a topic</string>
@@ -44,12 +48,19 @@
     <string name="wallpaper_catalog_notice">Filtering this custom catalog, not searching the internet. Results stay in catalog order; missing dimensions cannot match size filters. Catalog content is controlled by its owner.</string>
     <string name="wallpaper_source_wallhaven">Use Wallhaven</string>
     <string name="wallpaper_source_catalog">Use catalog</string>
+    <string name="wallpaper_provider">Source</string>
+    <string name="wallpaper_provider_title">Wallpaper source</string>
+    <string name="wallpaper_safebooru_note">Safe-for-work game and anime art from Safebooru. Short keyword tags work best; Popular sorts by score.</string>
+    <string name="wallpaper_bing_note">Bing’s daily photography, newest first. The query only filters titles; sort and 4K filters do not apply.</string>
     <string name="wallpaper_invalid_url">Enter an HTTPS URL without a username or password.</string>
     <string name="wallpaper_editor_title">Tune your wallpaper</string>
     <string name="wallpaper_preview">Library preview</string>
     <string name="wallpaper_preview_games">Your games</string>
     <string name="wallpaper_preview_note">Preview uses the same fit, dimming, blur, and position as your library. Changes are saved only when you tap Apply.</string>
     <string name="wallpaper_fit">Image fit</string>
+    <string name="wallpaper_section_adjust">Fine-tune</string>
+    <string name="wallpaper_section_position">Position</string>
+    <string name="wallpaper_section_discover">Discover</string>
     <string name="wallpaper_fill">Fill</string>
     <string name="wallpaper_fit_complete">Fit</string>
     <string name="wallpaper_stretch">Stretch</string>
@@ -75,6 +86,7 @@
     <string-array name="wallpaper_orientations"><item>Any</item><item>Landscape</item><item>Portrait</item><item>Square</item></string-array>
     <string-array name="wallpaper_resolutions"><item>Any</item><item>HD (1080p)</item><item>4K (2160p)</item></string-array>
     <string-array name="wallpaper_sorts"><item>Relevance</item><item>Newest</item><item>Popular</item></string-array>
+    <string-array name="wallpaper_provider_names"><item>Wallhaven</item><item>Safebooru</item><item>Bing daily</item></string-array>
     <string-array name="wallpaper_topic_names"><item>Space</item><item>Nature</item><item>Abstract</item><item>Architecture</item><item>Games</item></string-array>
     <string-array name="wallpaper_topic_queries" translatable="false"><item>space</item><item>nature</item><item>abstract</item><item>architecture</item><item>video games</item></string-array>
 </resources>

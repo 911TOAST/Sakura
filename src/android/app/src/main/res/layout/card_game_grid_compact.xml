@@ -61,7 +61,7 @@
                 android:textAlignment="viewStart"
                 android:textColor="@android:color/white"
                 android:textSize="12sp"
-                tools:text="The Legend of Zelda: Skyward Sword" />
+                tools:text="Your Game Title" />
 
         </FrameLayout>
 

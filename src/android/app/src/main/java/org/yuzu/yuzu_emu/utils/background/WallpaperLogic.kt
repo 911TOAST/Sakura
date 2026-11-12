@@ -61,11 +61,23 @@ data class RecentWallpaperGame(val title: String, val lastPlayed: Long)
 fun normalizeWallpaperQuery(title: String): String =
     title.replace(Regex("[™®©]"), "").replace(Regex("[\\s\\p{Z}]+"), " ").trim().take(200)
 
+/**
+ * First-party franchise names must never seed the app's own recommendation rows or leave the
+ * device as search queries in a public build. User-typed searches are unaffected.
+ */
+private val RESTRICTED_TITLE_WORDS = Regex(
+    "\\b(zelda|mario|luigi|pokemon|pokémon|metroid|kirby|splatoon|fire emblem|xenoblade|" +
+        "animal crossing|donkey kong|star fox|pikmin|bayonetta|smash bros|nintendo|wii)\\b",
+    RegexOption.IGNORE_CASE
+)
+
+fun isRestrictedWallpaperTitle(title: String): Boolean = RESTRICTED_TITLE_WORDS.containsMatchIn(title)
+
 fun recentWallpaperGames(games: List<RecentWallpaperGame>, now: Long): List<RecentWallpaperGame> =
     games.asSequence()
         .filter { it.lastPlayed in (now - 30L * 24 * 60 * 60 * 1000)..now && it.lastPlayed > 0 }
         .map { it.copy(title = normalizeWallpaperQuery(it.title)) }
-        .filter { it.title.isNotEmpty() }
+        .filter { it.title.isNotEmpty() && !isRestrictedWallpaperTitle(it.title) }
         .sortedByDescending { it.lastPlayed }
         .distinctBy { it.title.lowercase(Locale.ROOT) }
         .take(3).toList()

@@ -33,6 +33,19 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Aurora veil: palette-tinted ambient glow above the picture, below the content.
+         Driven by LibraryBackgroundApplier; stays gone without a wallpaper. -->
+    <org.yuzu.yuzu_emu.views.AuroraVeilView
+        android:id="@+id/library_aurora"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <!-- Brand row: logo, wordmark, and the two primary actions. -->
     <LinearLayout
         android:id="@+id/header"

@@ -29,6 +29,7 @@ import org.yuzu.yuzu_emu.utils.background.OnlineBackgroundCatalog
 import org.yuzu.yuzu_emu.utils.background.SecureBackgroundStore
 import org.yuzu.yuzu_emu.utils.background.WallpaperImages
 import org.yuzu.yuzu_emu.utils.background.WallpaperRateLimitException
+import org.yuzu.yuzu_emu.utils.background.WallpaperProviders
 import org.yuzu.yuzu_emu.utils.background.WallpaperRecommendation
 import org.yuzu.yuzu_emu.utils.background.WallpaperRepository
 import org.yuzu.yuzu_emu.utils.background.WallpaperRequestGeneration
@@ -130,7 +131,8 @@ class WallpaperViewModel(application: Application, private val saved: SavedState
             _history.value = repository.history()
         }
         val normalized = spec.copy(query = spec.query.take(200), orientation = spec.orientation.coerceIn(0, 3),
-            resolution = spec.resolution.coerceIn(0, 2), sort = spec.sort.coerceIn(0, 2))
+            resolution = spec.resolution.coerceIn(0, 2), sort = spec.sort.coerceIn(0, 2),
+            provider = WallpaperProviders.normalize(spec.provider))
         saved["search_spec"] = json.encodeToString(normalized)
         saved["search_started"] = true
         searchScroll = null
@@ -171,6 +173,26 @@ class WallpaperViewModel(application: Application, private val saved: SavedState
 
     fun retrySearch() {
         if (_search.value.page == 0) search(_search.value.spec, debounce = false) else nextPage()
+    }
+
+    /** Provider-aware random discovery; replaces the grid instead of appending a page. */
+    fun surpriseMe() {
+        searchJob?.cancel()
+        val generation = searchGeneration.next()
+        searchScroll = null
+        _search.value = _search.value.copy(loading = true, started = true, error = null)
+        searchJob = viewModelScope.launch {
+            try {
+                val result = repository.surprise()
+                if (searchGeneration.accepts(generation)) _search.value = _search.value.copy(
+                    items = result.items, page = 1, lastPage = 1, loading = false
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (searchGeneration.accepts(generation)) _search.value = _search.value.copy(loading = false, error = error.failure())
+            }
+        }
     }
 
     fun clearHistory() {

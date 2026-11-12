@@ -716,9 +716,44 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.RENDERER_STORE_ELISION,
+                    titleId = R.string.renderer_store_elision,
+                    descriptionId = R.string.renderer_store_elision_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_BCN_TO_ASTC,
+                    titleId = R.string.renderer_bcn_to_astc,
+                    descriptionId = R.string.renderer_bcn_to_astc_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_AFBC_LAYOUTS,
+                    titleId = R.string.renderer_afbc_layouts,
+                    descriptionId = R.string.renderer_afbc_layouts_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_OPTIMAL_ATTACHMENTS,
                     titleId = R.string.renderer_optimal_attachments,
                     descriptionId = R.string.renderer_optimal_attachments_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_FEEDBACK_LOOP_LAYOUT,
+                    titleId = R.string.renderer_feedback_loop_layout,
+                    descriptionId = R.string.renderer_feedback_loop_layout_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_NARROW_PASS_BARRIERS,
+                    titleId = R.string.renderer_narrow_pass_barriers,
+                    descriptionId = R.string.renderer_narrow_pass_barriers_description
                 )
             )
             put(

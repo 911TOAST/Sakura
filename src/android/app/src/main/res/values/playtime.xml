@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playtime_title">Your story</string>
+    <string name="playtime_description">Playtime, streaks, and your most played games.</string>
+    <string name="playtime_hero_subtitle">%1$d games · %2$d sessions</string>
+    <string name="playtime_hours">%1$s h</string>
+    <string name="playtime_minutes">%1$s min</string>
+    <string name="playtime_streak">Day streak</string>
+    <string name="playtime_week">This week</string>
+    <string name="playtime_most_played">Most played</string>
+    <string name="playtime_empty">Your story starts with the first game you play. Launch something, then come back.</string>
+    <string name="playtime_share">Share</string>
+    <string name="playtime_share_text">I\'ve logged %1$s hours across %2$d games on suyu-mtk, with a %3$d-day streak. Come build your own story.</string>
+    <string name="playtime_cover">Game cover</string>
+</resources>
