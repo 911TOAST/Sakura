@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +25,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -96,12 +99,16 @@ private fun StoryScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var data by remember { mutableStateOf(PlaytimeData()) }
     var library by remember { mutableStateOf<List<Game>>(emptyList()) }
+    // Distinguish "no playtime yet" from "still reading the store"; otherwise the empty state
+    // flashes for a frame on every open before the real numbers arrive.
+    var loaded by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        val loaded = withContext(Dispatchers.IO) {
+        val loadedData = withContext(Dispatchers.IO) {
             PlaytimeStore.read() to GameHelper.cachedGameList.toList()
         }
-        data = loaded.first
-        library = loaded.second
+        data = loadedData.first
+        library = loadedData.second
+        loaded = true
     }
 
     val today = remember { LocalDate.now() }
@@ -128,7 +135,7 @@ private fun StoryScreen(onBack: () -> Unit) {
                 actions = {
                     TextButton(
                         onClick = { shareStory(context, total, data.games.size, streak) },
-                        enabled = total > 0
+                        enabled = loaded && total > 0
                     ) { Text(stringResource(R.string.playtime_share)) }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -143,7 +150,14 @@ private fun StoryScreen(onBack: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (total == 0L) {
+            if (!loaded) {
+                Box(
+                    Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (total == 0L) {
                 Card(
                     shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(
@@ -168,8 +182,28 @@ private fun StoryScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                top.forEach { (path, playtime) ->
-                    MostPlayedRow(library.firstOrNull { it.path == path }, path, playtime, maxSeconds)
+                // One container with dividers instead of a card per game: the ranking reads as a
+                // single list and stops competing with the hero card above it.
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    )
+                ) {
+                    Column {
+                        top.forEachIndexed { index, entry ->
+                            val (path, playtime) = entry
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 88.dp, end = 16.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant
+                                )
+                            }
+                            MostPlayedRow(
+                                library.firstOrNull { it.path == path }, path, playtime, maxSeconds
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -234,71 +268,72 @@ private fun MostPlayedRow(game: Game?, path: String, playtime: GamePlaytime, max
             cover = runCatching { GameIconUtils.getGameIcon(lifecycleOwner, game) }.getOrNull()
         }
     }
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val bitmap = cover
-            if (bitmap != null) {
-                Image(
-                    bitmap.asImageBitmap(),
-                    contentDescription = stringResource(R.string.playtime_cover),
-                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painterResource(R.drawable.default_icon),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    game?.title ?: path.substringAfterLast('/'),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                LinearProgressIndicator(
-                    progress = {
-                        if (maxSeconds > 0) playtime.seconds.toFloat() / maxSeconds else 0f
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+        val bitmap = cover
+        if (bitmap != null) {
+            Image(
+                bitmap.asImageBitmap(),
+                contentDescription = stringResource(R.string.playtime_cover),
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            // A tonal tile with a vector glyph: tinting the raster default_icon turned the
+            // whole photograph into a solid silhouette.
+            Box(
+                Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_m3_sports_esports),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                formatDuration(playtime.seconds),
+                game?.title ?: path.substringAfterLast('/'),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            LinearProgressIndicator(
+                progress = {
+                    if (maxSeconds > 0) playtime.seconds.toFloat() / maxSeconds else 0f
+                },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
         }
+        Text(
+            formatDuration(playtime.seconds),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }
 
 @Composable
-private fun formatDuration(seconds: Long): String =
-    if (seconds >= 3600) {
+private fun formatDuration(seconds: Long): String = when {
+    seconds >= 3600 ->
         stringResource(R.string.playtime_hours, String.format(Locale.getDefault(), "%.1f", seconds / 3600.0))
-    } else {
-        stringResource(R.string.playtime_minutes, (seconds / 60).toString())
-    }
+    seconds >= 60 -> stringResource(R.string.playtime_minutes, (seconds / 60).toString())
+    seconds > 0 -> stringResource(R.string.playtime_under_minute)
+    else -> stringResource(R.string.playtime_minutes, "0")
+}
 
 private fun shareStory(context: Context, totalSeconds: Long, gameCount: Int, streak: Int) {
     val hours = String.format(Locale.getDefault(), "%.1f", totalSeconds / 3600.0)

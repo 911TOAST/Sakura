@@ -24,13 +24,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
             android:layout_width="match_parent"
             android:layout_height="144dp">
 
-        <ImageView
+        <com.google.android.material.imageview.ShapeableImageView
             android:id="@+id/background_thumb"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:contentDescription="@null"
             android:importantForAccessibility="no"
-            android:scaleType="centerCrop" />
+            android:scaleType="centerCrop"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.Suyu.MediumTop" />
 
         <ProgressBar
             android:id="@+id/background_progress"

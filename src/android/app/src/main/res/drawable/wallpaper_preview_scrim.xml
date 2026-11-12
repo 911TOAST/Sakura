@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Readability veil for the mock library: dark bands top and bottom so the white
+     labels stay legible no matter how bright the wallpaper is. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:gravity="top" android:height="112dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:endColor="#00000000"
+                android:startColor="#A6000000"
+                android:type="linear" />
+        </shape>
+    </item>
+    <item android:gravity="bottom" android:height="88dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="90"
+                android:endColor="#00000000"
+                android:startColor="#B3000000"
+                android:type="linear" />
+        </shape>
+    </item>
+</layer-list>

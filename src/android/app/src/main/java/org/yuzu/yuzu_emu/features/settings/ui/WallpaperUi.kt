@@ -11,11 +11,16 @@ import android.view.View
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.RecyclerView
+import coil.request.ImageRequest
 import kotlin.math.max
 import org.yuzu.yuzu_emu.R
+import org.yuzu.yuzu_emu.databinding.WallpaperPreviewBinding
+import org.yuzu.yuzu_emu.utils.GameHelper
+import org.yuzu.yuzu_emu.utils.GameIconUtils
 
 fun WallpaperFailure.message(context: Context): String = context.getString(
     when (this) {
@@ -29,6 +34,40 @@ fun WallpaperFailure.message(context: Context): String = context.getString(
 fun wallpaperColumns(context: Context): Int {
     val width = context.resources.configuration.screenWidthDp
     return if (width < 340) 1 else max(2, width / 180)
+}
+
+/**
+ * Fills the miniature library with real cover art from the cached game list. Empty slots keep
+ * the tonal tile and gamepad glyph, so an empty library still reads as a deliberate design
+ * instead of a loading skeleton.
+ */
+fun WallpaperPreviewBinding.bindGameCovers(fragment: Fragment) {
+    val slots = listOf(
+        previewCover1 to previewCoverFallback1,
+        previewCover2 to previewCoverFallback2,
+        previewCover3 to previewCoverFallback3
+    )
+    val games = GameHelper.cachedGameList.take(slots.size)
+    val context = fragment.requireContext()
+    slots.forEachIndexed { index, slot ->
+        val cover = slot.first
+        val fallback = slot.second
+        cover.setImageDrawable(null)
+        fallback.isVisible = true
+        val game = games.getOrNull(index) ?: return@forEachIndexed
+        val request = ImageRequest.Builder(context)
+            .data(game)
+            .target(cover)
+            .listener(
+                onSuccess = { _, _ -> fallback.isVisible = false },
+                onError = { _, _ ->
+                    cover.setImageDrawable(null)
+                    fallback.isVisible = true
+                }
+            )
+            .build()
+        GameIconUtils.imageLoader.enqueue(request)
+    }
 }
 
 /** Keeps every wallpaper screen clear of the status and navigation bars. */

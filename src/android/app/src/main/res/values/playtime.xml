@@ -5,8 +5,9 @@
     <string name="playtime_hero_subtitle">%1$d games · %2$d sessions</string>
     <string name="playtime_hours">%1$s h</string>
     <string name="playtime_minutes">%1$s min</string>
+    <string name="playtime_under_minute">&lt;1 min</string>
     <string name="playtime_streak">Day streak</string>
-    <string name="playtime_week">This week</string>
+    <string name="playtime_week">Last 7 days</string>
     <string name="playtime_most_played">Most played</string>
     <string name="playtime_empty">Your story starts with the first game you play. Launch something, then come back.</string>
     <string name="playtime_share">Share</string>

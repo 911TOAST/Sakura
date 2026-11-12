@@ -263,11 +263,9 @@ class GamesFragment : Fragment() {
      * colour fought the theme instead of complementing it.
      */
     private fun themeFromCoverArt() {
-        // A wallpaper seed may already be published; only a cover-owned seed skips resampling.
-        if (ArtworkColors.coverOwnsSeed()) {
-            return
-        }
-        val game = gamesViewModel.games.value.firstOrNull() ?: return
+        // Always resample: the first game can change (library refresh, deletion) and an empty
+        // library must release the cover seed so the wallpaper's own seed can publish again.
+        val game = gamesViewModel.games.value.firstOrNull()
         viewLifecycleOwner.lifecycleScope.launch {
             ArtworkColors.applyFromArtwork(viewLifecycleOwner, game)
         }

@@ -286,6 +286,17 @@ class AutoTuneEngine {
             _state.update { it.copy(phase = AutoTunePhase.FAILED, failure = abort.reason) }
         } catch (cancelled: CancellationException) {
             restoreSnapshot()
+            // Cancel is a supported exit: report the restored state so the sheet can leave RUNNING
+            // instead of freezing on a progress bar that will never advance.
+            _state.update {
+                it.copy(
+                    phase = AutoTunePhase.RESTORED,
+                    settling = false,
+                    windowProgress = 0f,
+                    report = null,
+                    failure = null
+                )
+            }
             throw cancelled
         } catch (error: Exception) {
             Log.error("[AutoTune] session failed: ${error.message}")

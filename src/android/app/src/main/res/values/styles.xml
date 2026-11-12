@@ -262,6 +262,16 @@
         <item name="shapeAppearance">@style/ShapeAppearance.Suyu.Full</item>
     </style>
 
+    <!-- Lowest-emphasis action: same metrics as the pill buttons without the container. -->
+    <style name="SuyuButton.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="android:minHeight">@dimen/m3_touch_target_size</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:fontFamily">@font/google_sans_medium</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Suyu.Full</item>
+    </style>
+
     <style name="Widget.Suyu.IconButton" parent="Widget.Material3.CardView.Filled">
         <item name="android:layout_width">@dimen/m3_touch_target_size</item>
         <item name="android:layout_height">@dimen/m3_touch_target_size</item>

@@ -1,26 +1,181 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+    Miniature library used to judge a wallpaper. Cover art is filled from the cached
+    game list at bind time; the tonal tiles and gamepad glyph are the fallback, so the
+    preview never looks like an unfinished placeholder.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent"
-    android:background="@color/suyu_surface" android:clipChildren="true">
-    <ImageView android:id="@+id/library_background"
-        android:layout_width="match_parent" android:layout_height="match_parent"
-        android:importantForAccessibility="no" android:contentDescription="@null" />
-    <View android:id="@+id/library_background_scrim"
-        android:layout_width="match_parent" android:layout_height="match_parent" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
-        android:orientation="vertical" android:padding="16dp" android:importantForAccessibility="noHideDescendants">
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="@string/wallpaper_preview_games" android:textAppearance="?attr/textAppearanceTitleLarge"
-            android:textColor="?attr/colorOnSurface" />
-        <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
-            android:layout_weight="1" android:orientation="horizontal" android:gravity="center">
-            <View android:layout_width="0dp" android:layout_height="80dp" android:layout_weight="1"
-                android:layout_margin="4dp" android:alpha="0.65" android:background="?attr/colorSurfaceContainerHigh" />
-            <View android:layout_width="0dp" android:layout_height="80dp" android:layout_weight="1"
-                android:layout_margin="4dp" android:alpha="0.65" android:background="?attr/colorSurfaceContainerHigh" />
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/suyu_surface"
+    android:clipChildren="true">
+
+    <ImageView
+        android:id="@+id/library_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no" />
+
+    <View
+        android:id="@+id/library_background_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/wallpaper_preview_scrim"
+        android:importantForAccessibility="no" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="noHideDescendants"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/google_sans_medium"
+            android:letterSpacing="0.01"
+            android:text="@string/wallpaper_preview_games"
+            android:textAppearance="?attr/textAppearanceTitleLarge"
+            android:textColor="#FFFFFFFF" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
+                android:layout_height="88dp"
+                android:layout_marginHorizontal="5dp"
+                android:layout_weight="1"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/preview_cover_1"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:scaleType="centerCrop"
+                        app:shapeAppearanceOverlay="@style/ShapeAppearance.Suyu.Medium" />
+
+                    <ImageView
+                        android:id="@+id/preview_cover_fallback_1"
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_m3_sports_esports"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+                </FrameLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
+                android:layout_height="88dp"
+                android:layout_marginHorizontal="5dp"
+                android:layout_weight="1"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/preview_cover_2"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:scaleType="centerCrop"
+                        app:shapeAppearanceOverlay="@style/ShapeAppearance.Suyu.Medium" />
+
+                    <ImageView
+                        android:id="@+id/preview_cover_fallback_2"
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_m3_sports_esports"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+                </FrameLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
+                android:layout_height="88dp"
+                android:layout_marginHorizontal="5dp"
+                android:layout_weight="1"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/preview_cover_3"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:scaleType="centerCrop"
+                        app:shapeAppearanceOverlay="@style/ShapeAppearance.Suyu.Medium" />
+
+                    <ImageView
+                        android:id="@+id/preview_cover_fallback_3"
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_m3_sports_esports"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+                </FrameLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="@string/wallpaper_preview" android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:textColor="?attr/colorOnSurface" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:alpha="0.85"
+            android:letterSpacing="0.04"
+            android:text="@string/wallpaper_preview"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="#FFFFFFFF" />
     </LinearLayout>
 </FrameLayout>

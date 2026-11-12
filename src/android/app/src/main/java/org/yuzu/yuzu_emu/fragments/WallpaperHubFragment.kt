@@ -33,6 +33,7 @@ import org.yuzu.yuzu_emu.features.settings.ui.OnlineBackgroundAdapter
 import org.yuzu.yuzu_emu.features.settings.ui.WallpaperHubState
 import org.yuzu.yuzu_emu.features.settings.ui.WallpaperViewModel
 import org.yuzu.yuzu_emu.features.settings.ui.applyWallpaperBarInsets
+import org.yuzu.yuzu_emu.features.settings.ui.bindGameCovers
 import org.yuzu.yuzu_emu.features.settings.ui.message
 import org.yuzu.yuzu_emu.features.settings.ui.respectReducedMotion
 import org.yuzu.yuzu_emu.features.settings.ui.wallpaperColumns
@@ -86,6 +87,7 @@ class WallpaperHubFragment : Fragment() {
             binding.wallpaperPreviewCard.libraryBackground,
             binding.wallpaperPreviewCard.libraryBackgroundScrim
         )
+        binding.wallpaperPreviewCard.bindGameCovers(this)
         popularAdapter = OnlineBackgroundAdapter(viewLifecycleOwner) { openEditor(it) }
         binding.wallpaperPopularGrid.layoutManager = GridLayoutManager(requireContext(), wallpaperColumns(requireContext()))
         binding.wallpaperPopularGrid.adapter = popularAdapter

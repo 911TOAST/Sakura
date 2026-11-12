@@ -23,6 +23,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.nfc.NfcAdapter
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -296,11 +297,16 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // A ROM swap ends the old game's segment and starts the new game's story.
-        flushPlaytimeSegment()
-        playtimeGameKey = resolvePlaytimeKey(intent)
-        playtimeGameKey?.let { key -> runCatching { PlaytimeStore.record(key, 0, newSession = true) } }
-        playtimeSegmentStart = SystemClock.elapsedRealtime()
+        // Only a real swap to a different game ends the old segment. NFC taps, overlay toggles and
+        // custom-config reloads reuse the same game and must not split or drop its playtime.
+        if (isSwapIntent(intent)) {
+            resolvePlaytimeKey(intent)?.takeIf { it != playtimeGameKey }?.let { key ->
+                flushPlaytimeSegment()
+                playtimeGameKey = key
+                runCatching { PlaytimeStore.record(key, 0, newSession = true) }
+                playtimeSegmentStart = SystemClock.elapsedRealtime()
+            }
+        }
         handleSwapIntent(intent)
         nfcReader.onNewIntent(intent)
         InputHandler.updateControllerData()
@@ -321,6 +327,9 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
 
     private fun isSwapIntent(intent: Intent): Boolean {
         return when {
+            // An Amiibo/tag tap carries a URI in data but is not a game; treating it as a swap
+            // used to relaunch emulation and reset the playtime session.
+            isNfcIntent(intent) -> false
             intent.getBooleanExtra(EXTRA_OVERLAY_GAMELESS_EDIT_MODE, false) -> false
             intent.action == CustomSettingsHandler.CUSTOM_CONFIG_ACTION -> true
             intent.data != null -> true
@@ -331,6 +340,11 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
             }
         }
     }
+
+    private fun isNfcIntent(intent: Intent): Boolean =
+        intent.action == NfcAdapter.ACTION_TAG_DISCOVERED ||
+            intent.action == NfcAdapter.ACTION_TECH_DISCOVERED ||
+            intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED
 
     private fun handleSwapIntent(intent: Intent) {
         if (!isSwapIntent(intent)) {

@@ -11,6 +11,14 @@
     <style name="ShapeAppearance.Suyu.Medium" parent="ShapeAppearance.Material3.Corner.Medium">
         <item name="cornerSize">16dp</item>
     </style>
+    <!-- Artwork that sits flush against the top of a 16dp card: only the outer corners round. -->
+    <style name="ShapeAppearance.Suyu.MediumTop" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopLeft">16dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
+    </style>
     <style name="ShapeAppearance.Suyu.Large" parent="ShapeAppearance.Material3.Corner.Large">
         <item name="cornerSize">22dp</item>
     </style>

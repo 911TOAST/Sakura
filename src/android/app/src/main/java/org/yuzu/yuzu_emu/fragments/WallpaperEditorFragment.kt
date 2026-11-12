@@ -26,6 +26,7 @@ import org.yuzu.yuzu_emu.features.settings.ui.WallpaperDraft
 import org.yuzu.yuzu_emu.features.settings.ui.WallpaperEditorState
 import org.yuzu.yuzu_emu.features.settings.ui.WallpaperViewModel
 import org.yuzu.yuzu_emu.features.settings.ui.applyWallpaperBarInsets
+import org.yuzu.yuzu_emu.features.settings.ui.bindGameCovers
 import org.yuzu.yuzu_emu.features.settings.ui.message
 import org.yuzu.yuzu_emu.features.settings.ui.openWallpaperSource
 import org.yuzu.yuzu_emu.utils.background.WallpaperRenderer
@@ -66,6 +67,7 @@ class WallpaperEditorFragment : Fragment() {
             binding.wallpaperPreviewCard.libraryBackground,
             binding.wallpaperPreviewCard.libraryBackgroundScrim
         )
+        binding.wallpaperPreviewCard.bindGameCovers(this)
 
         val unsupportedBlur = Build.VERSION.SDK_INT < Build.VERSION_CODES.S
         binding.wallpaperBlur.isEnabled = !unsupportedBlur

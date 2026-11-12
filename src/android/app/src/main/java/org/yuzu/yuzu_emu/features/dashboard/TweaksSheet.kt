@@ -79,6 +79,15 @@ private val graphicsToggles = listOf(
     OverlayToggle(BooleanSetting.RENDERER_ASYNC_DIRECT_PRESENT, R.string.tweaks_async_present),
 )
 
+/** Settings written while a per-game config is loaded belong to that game, not the global profile. */
+private fun saveTweaks() {
+    if (NativeConfig.isPerGameConfigLoaded()) {
+        NativeConfig.savePerGameConfig()
+    } else {
+        NativeConfig.saveGlobalConfig()
+    }
+}
+
 /**
  * Hosts the Compose sheet in the activity's own content view so the emulator's surface keeps
  * rendering underneath it.
@@ -101,7 +110,9 @@ fun showTweaksSheet(activity: ComponentActivity) {
 @Composable
 private fun TweaksSheet(activity: ComponentActivity, onDismiss: () -> Unit) {
     val state = remember {
-        val needsGlobal = NativeConfig.isPerGameConfigLoaded()
+        // Reads must mirror the write scope: with a per-game config loaded the sheet shows that
+        // game's values, otherwise the global ones. (getBoolean(true) forces the global value.)
+        val globalOnly = !NativeConfig.isPerGameConfigLoaded()
         val mode = when {
             NativeLibrary.isTurboMode() -> SpeedMode.TURBO
             NativeLibrary.isSlowMode() -> SpeedMode.SLOW
@@ -109,10 +120,10 @@ private fun TweaksSheet(activity: ComponentActivity, onDismiss: () -> Unit) {
         }
         SheetState(
             mode = mode,
-            overlays = overlayToggles.associate { it.setting.key to it.setting.getBoolean(needsGlobal) },
-            graphics = graphicsToggles.associate { it.setting.key to it.setting.getBoolean(needsGlobal) },
+            overlays = overlayToggles.associate { it.setting.key to it.setting.getBoolean(globalOnly) },
+            graphics = graphicsToggles.associate { it.setting.key to it.setting.getBoolean(globalOnly) },
             gpuOverclock = runCatching {
-                IntSetting.FAST_GPU_TIME.getInt(needsGlobal) >= GPU_OVERCLOCK_ON
+                IntSetting.FAST_GPU_TIME.getInt(globalOnly) >= GPU_OVERCLOCK_ON
             }.getOrDefault(false),
             layers = VulkanLayerHelper.getLayers()
                 .associate { it.name to VulkanLayerHelper.isLayerEnabled(it.name) },
@@ -196,7 +207,7 @@ private fun TweaksSheet(activity: ComponentActivity, onDismiss: () -> Unit) {
                     checked = sheet.overlays.getValue(toggle.setting.key),
                     onChange = { value ->
                         toggle.setting.setBoolean(value)
-                        NativeConfig.saveGlobalConfig()
+                        saveTweaks()
                         sheet = sheet.copy(overlays = sheet.overlays + (toggle.setting.key to value))
                     }
                 )
@@ -219,7 +230,7 @@ private fun TweaksSheet(activity: ComponentActivity, onDismiss: () -> Unit) {
                     checked = sheet.graphics.getValue(toggle.setting.key),
                     onChange = { value ->
                         toggle.setting.setBoolean(value)
-                        NativeConfig.saveGlobalConfig()
+                        saveTweaks()
                         sheet = sheet.copy(graphics = sheet.graphics + (toggle.setting.key to value))
                     }
                 )
@@ -233,7 +244,7 @@ private fun TweaksSheet(activity: ComponentActivity, onDismiss: () -> Unit) {
                     IntSetting.FAST_GPU_TIME.setInt(
                         if (value) GPU_OVERCLOCK_ON else GPU_OVERCLOCK_OFF
                     )
-                    NativeConfig.saveGlobalConfig()
+                    saveTweaks()
                     sheet = sheet.copy(gpuOverclock = value)
                 }
             )
