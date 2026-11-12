@@ -34,6 +34,7 @@
 #include "video_core/texture_cache/samples_helper.h"
 #include "video_core/texture_cache/util.h"
 #include "video_core/textures/astc.h"
+#include "video_core/textures/astc_encode.h"
 #include "video_core/textures/bcn.h"
 #include "video_core/textures/decoders.h"
 
@@ -982,6 +983,42 @@ void ConvertImage(std::span<const u8> input, const ImageInfo& info, std::span<u8
                 (aligned_plane_dim * copy.image_extent.depth * copy.image_subresource.num_layers) /
                 bpp_div;
             output_offset += static_cast<u32>(copy.buffer_size);
+        } else if (VideoCore::Surface::IsBcnToAstcActive(info.format)) {
+            // BCn colour -> native ASTC 4x4. Decode to an RGBA8 scratch buffer, then encode ASTC.
+            // The staging buffer is sized for the RGBA8 fallback (CalculateConvertedSizeBytes), so
+            // the smaller ASTC result fits; copy.buffer_size carries the ASTC size to the upload.
+            // The scratch holds depth*layers contiguous width x height slices, which is exactly the
+            // per-slice layout CompressASTC4x4 encodes, so array layers keep their own block grid.
+            const u32 plane_dim = copy.image_extent.width * copy.image_extent.height;
+            const u32 num_slices = copy.image_extent.depth * copy.image_subresource.num_layers;
+            const u32 level_size =
+                plane_dim * num_slices * BytesPerBlock(PixelFormat::A8B8G8R8_UNORM);
+            const u32 aligned_plane_dim = Common::AlignUp(copy.image_extent.width, 4) *
+                                          Common::AlignUp(copy.image_extent.height, 4);
+            const u32 astc_size = aligned_plane_dim * num_slices;
+            const bool srgb = IsPixelFormatSRGB(info.format);
+            decode_scratch.resize_destructive(level_size);
+
+            DecompressBCn(input_offset, decode_scratch, copy, info.format);
+            const auto astc_out = output.subspan(output_offset, astc_size);
+            // The decoded RGBA8 plus dims/sRGB fully determine the ASTC result, so a disk-cache hit
+            // skips the expensive astcenc encode (the BCn decode above is cheap SIMD). This runs on
+            // the decode worker, so the file I/O never stalls the GPU thread.
+            if (!Tegra::Texture::ASTC::LookupAstcCache(decode_scratch, copy.image_extent.width,
+                                                       copy.image_extent.height, num_slices, srgb,
+                                                       astc_out) &&
+                Tegra::Texture::ASTC::CompressASTC4x4(decode_scratch, copy.image_extent.width,
+                                                      copy.image_extent.height, num_slices,
+                                                      astc_out, srgb)) {
+                // Only cache a fully successful encode: a failed one is zero-filled and must be
+                // retried next time instead of being served from disk forever.
+                Tegra::Texture::ASTC::StoreAstcCache(decode_scratch, copy.image_extent.width,
+                                                     copy.image_extent.height, num_slices, srgb,
+                                                     astc_out);
+            }
+
+            copy.buffer_size = static_cast<size_t>(astc_size);
+            output_offset += astc_size;
         } else {
             DecompressBCn(input_offset, output.subspan(output_offset), copy, info.format);
             output_offset += copy.image_extent.width * copy.image_extent.height *

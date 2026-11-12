@@ -1063,6 +1063,22 @@ bool Device::GetSuitability(bool requires_swapchain) {
         extensions.robustness_2 = false;
     }
 
+    // VK_EXT_vertex_attribute_divisor was aliased by VK_KHR_vertex_attribute_divisor, and a Vulkan
+    // 1.3 driver may advertise only the KHR spelling. Both describe the same functionality: the
+    // features struct and VkPipelineVertexInputDivisorStateCreateInfo keep the same sType values, so
+    // the renderer can use it either way. Whichever name the driver actually reported is the name
+    // that gets enabled, because enabling an unadvertised name is a validation error even when the
+    // functionality behind it is identical. Without this the extension stayed disabled while
+    // MakePipeline still chained VkPipelineVertexInputDivisorStateCreateInfoEXT for every instanced
+    // vertex binding.
+    if (!supported_extensions.contains(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME) &&
+        supported_extensions.contains(VK_KHR_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME)) {
+        loaded_extensions.insert(VK_KHR_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
+        extensions.vertex_attribute_divisor = true;
+        LOG_INFO(Render_Vulkan, "Vertex attribute divisor provided by {}, enabling it",
+                 VK_KHR_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
+    }
+
 #undef FEATURE_EXTENSION
 #undef EXTENSION
 
@@ -1079,6 +1095,16 @@ bool Device::GetSuitability(bool requires_swapchain) {
     }
 
     FOR_EACH_VK_RECOMMENDED_EXTENSION(LOG_EXTENSION);
+
+    // Checked outside the macro list: either spelling of the vertex attribute divisor name satisfies
+    // the requirement, see the alias handling above.
+    if (!loaded_extensions.contains(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME) &&
+        !loaded_extensions.contains(VK_KHR_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME)) {
+        LOG_ERROR(Render_Vulkan, "Missing required extension {}",
+                  VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
+        suitable = false;
+    }
+
     FOR_EACH_VK_MANDATORY_EXTENSION(CHECK_EXTENSION);
 
     if (requires_swapchain) {
@@ -1139,6 +1165,16 @@ bool Device::GetSuitability(bool requires_swapchain) {
 
     // Base Vulkan 1.0 features are always valid regardless of instance version.
     features.features = features2.features;
+
+    // Audit trail: this capability decides whether feedback draws keep framebuffer compression.
+    if (IsExtAttachmentFeedbackLoopLayoutSupported()) {
+        LOG_INFO(Render_Vulkan,
+                 "VK_EXT_attachment_feedback_loop_layout enabled: feedback draws keep optimal "
+                 "attachment layouts");
+    } else {
+        LOG_INFO(Render_Vulkan,
+                 "VK_EXT_attachment_feedback_loop_layout unavailable: feedback draws use GENERAL");
+    }
 
 // Some features are mandatory. Check those.
 #define CHECK_FEATURE(feature, name)                                                               \

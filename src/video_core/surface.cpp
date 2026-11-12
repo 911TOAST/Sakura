@@ -9,6 +9,8 @@
 #include "common/settings.h"
 #include "video_core/surface.h"
 
+#include <atomic>
+
 namespace VideoCore::Surface {
 
 SurfaceTarget SurfaceTargetFromTextureType(Tegra::Texture::TextureType texture_type) {
@@ -477,6 +479,36 @@ u64 TranscodedAstcSize(u64 base_size, PixelFormat format) {
     default:
         return uncompressed_size;
     }
+}
+
+namespace {
+std::atomic<bool> g_bcn_to_astc_device_supported{false};
+
+constexpr bool IsLdrColorBCn(PixelFormat format) {
+    switch (format) {
+    case PixelFormat::BC1_RGBA_UNORM:
+    case PixelFormat::BC1_RGBA_SRGB:
+    case PixelFormat::BC2_UNORM:
+    case PixelFormat::BC2_SRGB:
+    case PixelFormat::BC3_UNORM:
+    case PixelFormat::BC3_SRGB:
+    case PixelFormat::BC7_UNORM:
+    case PixelFormat::BC7_SRGB:
+        return true;
+    default:
+        return false;
+    }
+}
+} // Anonymous namespace
+
+void SetBcnToAstcDeviceSupported(bool supported) {
+    g_bcn_to_astc_device_supported.store(supported, std::memory_order_relaxed);
+}
+
+bool IsBcnToAstcActive(PixelFormat format) {
+    return Settings::values.renderer_bcn_to_astc.GetValue() &&
+           g_bcn_to_astc_device_supported.load(std::memory_order_relaxed) &&
+           IsLdrColorBCn(format);
 }
 
 } // namespace VideoCore::Surface

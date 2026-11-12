@@ -80,7 +80,10 @@ public:
 
     /// Requests to begin a renderpass. general_layout selects the variant whose attachment
     /// references use GENERAL, required by draws that sample the target they write to.
-    void RequestRenderpass(const Framebuffer* framebuffer, bool general_layout = false);
+    /// feedback_layout selects the feedback-loop-optimal variant instead; it takes precedence
+    /// and falls back to GENERAL when the framebuffer has no such variant.
+    void RequestRenderpass(const Framebuffer* framebuffer, bool general_layout = false,
+                           bool feedback_layout = false);
 
     /// Requests to begin the variant of the framebuffer's render pass whose attachments are
     /// defined at pass begin instead of loaded. Returns false when no such pass was begun, in which
@@ -300,6 +303,12 @@ private:
         /// True while the open pass is the define-at-begin variant. Redraws into the same
         /// framebuffer must keep it, or the tile would be stored and loaded again for nothing.
         bool renderpass_is_clear = false;
+        /// The framebuffer object backing the open pass, plus the layout flags it was begun with.
+        /// Kept so the pass's store-op variant can be rebuilt when the pass ends and its next use
+        /// is known (see EndRenderPass).
+        const Framebuffer* framebuffer_ptr = nullptr;
+        bool general_layout = false;
+        bool feedback_layout = false;
     };
 
     void WorkerThread(std::stop_token stop_token);
@@ -314,7 +323,7 @@ private:
 
     void EndPendingOperations();
 
-    void EndRenderPass();
+    void EndRenderPass(const Framebuffer* next_framebuffer = nullptr, bool next_is_clear = false);
 
     void AcquireNewChunk();
 
@@ -333,6 +342,14 @@ private:
     std::function<void()> on_submit;
 
     State state;
+
+    /// The open pass's render pass handle, filled in when the pass ends. The begin command captures
+    /// this slot and reads it at execution time, which happens after EndRenderPass has chosen the
+    /// final store-op variant. This lets the store op depend on the pass's actual next use instead
+    /// of being baked at begin. Atomic because a pass can span command chunks: the worker may
+    /// execute the begin (reading the initial storing variant) while the render thread finalizes
+    /// the slot, and reading the storing variant early is always safe.
+    std::shared_ptr<std::atomic<VkRenderPass>> current_pass_slot;
 
     u64 render_pass_serial = 0;
 

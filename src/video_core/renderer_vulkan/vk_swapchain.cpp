@@ -322,9 +322,14 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
     // Triple buffering overlaps rendering and presentation without building a multi-frame backlog.
     u32 requested_image_count{capabilities.minImageCount + 1U};
     if (device.IsPanVk()) {
-        // Mesa's Android WSI binds the buffers the window actually provides; the loader's
-        // minImageCount + 1 backlog gets the AHB import refused outright.
-        requested_image_count = (std::max)(2U, (std::min)(capabilities.minImageCount, 3U));
+        // Mesa's Android WSI binds the buffers the window actually provides, so a deeper chain can
+        // get the AHB import refused. Stay at three when the compositor allows it, but never ask
+        // for fewer images than the surface's own minimum: minImageCount is a hard lower bound, and
+        // asking below it made vkCreateSwapchainKHR fail with VK_ERROR_INVALID_EXTERNAL_HANDLE.
+        // Android compositors commonly report 7 here (the stock Mali device reported min=7 too),
+        // which is why an unconditional cap at 3 broke the swapchain instead of helping it.
+        requested_image_count = (std::min)(requested_image_count, 3U);
+        requested_image_count = (std::max)(requested_image_count, capabilities.minImageCount);
     }
     // Ensure Triple buffering if possible.
     if (capabilities.maxImageCount > 0) {

@@ -117,6 +117,7 @@ struct GPU::Impl {
         std::unique_lock lck{sync_request_mutex};
         const u64 fence = ++last_sync_fence;
         sync_requests.emplace_back(action);
+        pending_sync_requests.fetch_add(1, std::memory_order_release);
         return fence;
     }
 
@@ -132,10 +133,18 @@ struct GPU::Impl {
 
     /// Tick pending requests within the GPU.
     void TickWork() {
+        // This is called from the draw path, thousands of times per frame. Taking the mutex just to
+        // observe an empty list costs an exclusive-load/conditional-store pair per draw and, worse,
+        // can bounce the cache line against the CPU thread posting a request. The pending count is
+        // therefore checked lock-free first and the mutex is only touched when there is work.
+        if (pending_sync_requests.load(std::memory_order_acquire) == 0) {
+            return;
+        }
         std::unique_lock lck{sync_request_mutex};
         while (!sync_requests.empty()) {
             auto request = std::move(sync_requests.front());
             sync_requests.pop_front();
+            pending_sync_requests.fetch_sub(1, std::memory_order_release);
             sync_request_mutex.unlock();
             request();
             current_sync_fence.fetch_add(1, std::memory_order_release);
@@ -306,6 +315,8 @@ struct GPU::Impl {
     std::condition_variable sync_cv;
 
     std::list<std::function<void()>> sync_requests;
+    /// Number of entries in sync_requests, readable without sync_request_mutex.
+    std::atomic<u32> pending_sync_requests{};
     std::atomic<u64> current_sync_fence{};
     u64 last_sync_fence{};
     std::mutex sync_request_mutex;

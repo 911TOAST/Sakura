@@ -28,6 +28,38 @@
 #include "video_core/vulkan_common/vulkan_wrapper.h"
 
 namespace Vulkan {
+namespace {
+/// Attachments of \p current whose writeback the next pass discards. \p next is a define-at-begin
+/// (clear) pass, so every attachment it carries is fully cleared. An attachment of the current
+/// pass is dead only when the next pass attaches the same image in the same role (colour vs
+/// depth/stencil) and clears it; matching by role keeps a depth write from being elided just
+/// because the image reappears as a colour target. Bit k follows the render pass description
+/// order: colour attachments first, then depth at index NumColorBuffers().
+u16 StoreElideMask(const Framebuffer& current, const Framebuffer& next) {
+    u16 mask = 0;
+    const auto& cur_images = current.Images();
+    const auto& next_images = next.Images();
+    const u32 cur_colors = current.NumColorBuffers();
+    const u32 next_colors = next.NumColorBuffers();
+    for (u32 k = 0; k < cur_colors; ++k) {
+        if (cur_images[k] == VK_NULL_HANDLE) {
+            continue;
+        }
+        for (u32 j = 0; j < next_colors; ++j) {
+            if (cur_images[k] == next_images[j]) {
+                mask |= static_cast<u16>(1u << k);
+                break;
+            }
+        }
+    }
+    if (current.HasAspectDepthBit() && next.HasAspectDepthBit() &&
+        cur_images[cur_colors] != VK_NULL_HANDLE &&
+        cur_images[cur_colors] == next_images[next_colors]) {
+        mask |= static_cast<u16>(1u << cur_colors);
+    }
+    return mask;
+}
+} // Anonymous namespace
 
 void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer cmdbuf,
                                          vk::CommandBuffer upload_cmdbuf) {
@@ -109,8 +141,10 @@ void Scheduler::DispatchWork() {
     }
 }
 
-void Scheduler::RequestRenderpass(const Framebuffer* framebuffer, bool general_layout) {
-    const VkRenderPass renderpass = framebuffer->RenderPass(general_layout);
+void Scheduler::RequestRenderpass(const Framebuffer* framebuffer, bool general_layout,
+                                  bool feedback_layout) {
+    const VkRenderPass renderpass = feedback_layout ? framebuffer->FeedbackRenderPass()
+                                                    : framebuffer->RenderPass(general_layout);
     const VkFramebuffer framebuffer_handle = framebuffer->Handle();
     const VkExtent2D render_area = framebuffer->RenderArea();
     if (renderpass == state.renderpass && framebuffer_handle == state.framebuffer &&
@@ -121,8 +155,11 @@ void Scheduler::RequestRenderpass(const Framebuffer* framebuffer, bool general_l
     // The pass that is already open for this framebuffer defines its attachments at begin. Ending it
     // to reopen the loading variant would store the tile and read it straight back. Only keep it
     // when it is the layout variant this draw needs.
+    const VkRenderPass open_clear_variant = feedback_layout
+                                                ? framebuffer->FeedbackClearRenderPass()
+                                                : framebuffer->ClearRenderPass(general_layout);
     if (state.renderpass_is_clear && framebuffer_handle == state.framebuffer &&
-        state.renderpass == framebuffer->ClearRenderPass(general_layout) &&
+        state.renderpass == open_clear_variant &&
         render_area.width == state.render_area.width &&
         render_area.height == state.render_area.height) {
         return;
@@ -132,6 +169,10 @@ void Scheduler::RequestRenderpass(const Framebuffer* framebuffer, bool general_l
     state.framebuffer = framebuffer_handle;
     state.render_area = render_area;
     state.renderpass_is_clear = false;
+    state.framebuffer_ptr = framebuffer;
+    state.general_layout = general_layout;
+    state.feedback_layout = feedback_layout;
+    current_pass_slot = std::make_shared<std::atomic<VkRenderPass>>(renderpass);
     ++render_pass_serial;
 
     // Log render pass begin
@@ -143,11 +184,11 @@ void Scheduler::RequestRenderpass(const Framebuffer* framebuffer, bool general_l
         GPU::Logging::GPULogger::GetInstance().LogRenderPassBegin(render_pass_info);
     }
 
-    Record([renderpass, framebuffer_handle, render_area](vk::CommandBuffer cmdbuf) {
+    Record([slot = current_pass_slot, framebuffer_handle, render_area](vk::CommandBuffer cmdbuf) {
         const VkRenderPassBeginInfo renderpass_bi{
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .pNext = nullptr,
-            .renderPass = renderpass,
+            .renderPass = slot->load(std::memory_order_acquire),
             .framebuffer = framebuffer_handle,
             .renderArea =
                 {
@@ -174,11 +215,15 @@ bool Scheduler::RequestRenderpassClear(const Framebuffer* framebuffer,
         // what the guest is asking for now, so the caller has to clear explicitly.
         return false;
     }
-    EndRenderPass();
+    EndRenderPass(framebuffer, true);
     state.renderpass = renderpass;
     state.framebuffer = framebuffer_handle;
     state.render_area = render_area;
     state.renderpass_is_clear = true;
+    state.framebuffer_ptr = framebuffer;
+    state.general_layout = false;
+    state.feedback_layout = false;
+    current_pass_slot = std::make_shared<std::atomic<VkRenderPass>>(renderpass);
     ++render_pass_serial;
 
     std::array<VkClearValue, 9> values{};
@@ -187,11 +232,12 @@ bool Scheduler::RequestRenderpassClear(const Framebuffer* framebuffer,
         values[index] = clear_values[index];
     }
 
-    Record([renderpass, framebuffer_handle, render_area, values, count](vk::CommandBuffer cmdbuf) {
+    Record([slot = current_pass_slot, framebuffer_handle, render_area, values,
+            count](vk::CommandBuffer cmdbuf) {
         const VkRenderPassBeginInfo renderpass_bi{
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .pNext = nullptr,
-            .renderPass = renderpass,
+            .renderPass = slot->load(std::memory_order_acquire),
             .framebuffer = framebuffer_handle,
             .renderArea =
                 {
@@ -455,12 +501,27 @@ void Scheduler::EndPendingOperations() {
     EndRenderPass();
 }
 
-void Scheduler::EndRenderPass()
-    {
+void Scheduler::EndRenderPass(const Framebuffer* next_framebuffer, bool next_is_clear) {
         if (!state.renderpass) {
             return;
         }
         ++render_pass_serial;
+
+        // The pass's next use is now known. When the next pass clears a target this pass wrote,
+        // that target's writeback is dead: the clear discards it without reading. Choose the
+        // DONT_CARE-store variant for exactly those attachments. Anything else (read, present,
+        // load, or an unknown next use) keeps the storing variant the slot already holds.
+        if (current_pass_slot && next_is_clear && next_framebuffer && state.framebuffer_ptr &&
+            Settings::values.renderer_store_elision.GetValue()) {
+            const u16 mask = StoreElideMask(*state.framebuffer_ptr, *next_framebuffer);
+            if (mask != 0) {
+                current_pass_slot->store(
+                    state.framebuffer_ptr->RenderPassStoreElide(mask, state.general_layout,
+                                                                state.feedback_layout,
+                                                                state.renderpass_is_clear),
+                    std::memory_order_release);
+            }
+        }
 
         query_cache->CounterClose(VideoCommon::QueryType::StreamingByteCount);
 
@@ -496,6 +557,8 @@ void Scheduler::EndRenderPass()
 
         state.renderpass = VkRenderPass{};
         state.renderpass_is_clear = false;
+        state.framebuffer_ptr = nullptr;
+        current_pass_slot.reset();
     }
 
 

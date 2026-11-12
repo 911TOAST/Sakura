@@ -223,4 +223,13 @@ size_t PixelComponentSizeBitsInteger(PixelFormat format);
 std::pair<u32, u32> GetASTCBlockSize(PixelFormat format);
 u64 TranscodedAstcSize(u64 base_size, PixelFormat format);
 
+/// Records whether the host device can sample ASTC natively. Set by the Vulkan backend once the
+/// device is known; read by the BCn->ASTC recompression decision so the format choice and the
+/// upload transcode always agree.
+void SetBcnToAstcDeviceSupported(bool supported);
+/// True when a guest BCn colour format should be recompressed to native ASTC 4x4 at upload: the
+/// experimental toggle is on, the device samples ASTC, and the format is an LDR colour BCn format
+/// (BC1/BC2/BC3/BC7). Single/dual-channel and HDR BCn formats keep their existing transcode.
+bool IsBcnToAstcActive(PixelFormat format);
+
 } // namespace VideoCore::Surface

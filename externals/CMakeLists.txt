@@ -260,6 +260,50 @@ target_include_directories(tz PUBLIC ./tz)
 add_library(bc_decoder bc_decoder/bc_decoder.cpp)
 target_include_directories(bc_decoder PUBLIC ./bc_decoder)
 
+# astcenc (Arm ASTC encoder). Built as a plain static library from the core sources, mirroring the
+# upstream cmake_core.cmake source list, so guest BCn colour textures can be recompressed to native
+# ASTC on Mali. The CLI and unit tests are deliberately excluded.
+# Vendored from https://github.com/ARM-software/astc-encoder at 8e498958 (2026-11-11); only
+# Source/ and the licence/notice files are kept, so no network fetch is needed at build time.
+set(ASTCENC_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/astc-encoder/Source)
+add_library(astcenc STATIC
+    ${ASTCENC_SOURCE_DIR}/astcenc_averages_and_directions.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_block_sizes.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_color_quantize.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_color_unquantize.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_compress_symbolic.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_compute_variance.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_decompress_symbolic.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_diagnostic_trace.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_entry.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_find_best_partitioning.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_ideal_endpoints_and_weights.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_image.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_integer_sequence.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_mathlib.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_mathlib_softfloat.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_partition_tables.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_percentile_tables.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_pick_best_endpoint_format.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_quantization.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_symbolic_physical.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_weight_align.cpp
+    ${ASTCENC_SOURCE_DIR}/astcenc_weight_quant_xfer_tables.cpp)
+target_include_directories(astcenc PUBLIC ${ASTCENC_SOURCE_DIR})
+set_target_properties(astcenc PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+if (ARCHITECTURE_arm64)
+    target_compile_definitions(astcenc PRIVATE
+        ASTCENC_NEON=1 ASTCENC_SVE=0 ASTCENC_SSE=0 ASTCENC_AVX=0 ASTCENC_POPCNT=0 ASTCENC_F16C=0)
+else()
+    target_compile_definitions(astcenc PRIVATE
+        ASTCENC_NEON=0 ASTCENC_SVE=0 ASTCENC_SSE=0 ASTCENC_AVX=0 ASTCENC_POPCNT=0 ASTCENC_F16C=0)
+endif()
+if (NOT MSVC)
+    # astcenc relies on strict-aliasing relaxation and deterministic FP (no contraction) for
+    # correct, invariant block encoding; silence its warning noise as a vendored external.
+    target_compile_options(astcenc PRIVATE -fno-strict-aliasing -ffp-contract=off -fno-math-errno -w)
+endif()
+
 if (NOT TARGET RenderDoc::API)
     add_library(renderdoc INTERFACE)
     target_include_directories(renderdoc SYSTEM INTERFACE ./renderdoc)

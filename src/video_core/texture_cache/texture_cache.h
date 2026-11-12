@@ -1165,6 +1165,7 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
 
     if (gpu_unswizzle_enabled &&
         IsPixelFormatBCn(image.info.format) &&
+        !VideoCore::Surface::IsBcnToAstcActive(image.info.format) &&
         image.info.type == ImageType::e3D &&
         image.info.resources.levels == 1 &&
         image.info.resources.layers == 1 &&
@@ -2613,6 +2614,28 @@ void TextureCache<P>::PrepareImageView(ImageViewId image_view_id, bool is_modifi
         return;
     }
     PrepareImage(image_view.image_id, is_modification, invalidate);
+    // AFBC-native layout tracking (Vulkan only): move the image into the layout its upcoming use
+    // needs so Mali keeps lossless AFBC active. is_modification marks a render-target bind; the
+    // read path marks sampling. Current render targets are skipped on the read path because a
+    // feedback draw samples the target it writes, and the render-target bind owns that layout.
+    if constexpr (requires(Image& img) {
+                      runtime.PrepareRenderTargetLayout(img);
+                      runtime.PrepareSampledImageLayout(img);
+                  }) {
+        Image& image = slot_images[image_view.image_id];
+        if (is_modification) {
+            runtime.PrepareRenderTargetLayout(image);
+        } else {
+            const ImageId image_id = image_view.image_id;
+            bool is_render_target = image_id == rt_depth_image_id;
+            for (size_t i = 0; i < rt_image_id.size() && !is_render_target; ++i) {
+                is_render_target = rt_image_id[i] == image_id;
+            }
+            if (!is_render_target) {
+                runtime.PrepareSampledImageLayout(image);
+            }
+        }
+    }
 }
 
 template <class P>

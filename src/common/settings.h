@@ -434,6 +434,30 @@ struct Values {
     SwitchableSetting<bool> renderer_clear_loadop{linkage, true, "renderer_clear_loadop",
                                                   Category::RendererDebug,
                                                   Specialization::Default, true, true};
+    // Skip the DRAM writeback of a render target whose contents the very next pass discards by
+    // clearing it again. On a tiler the store writes the whole tile to memory only for the next
+    // pass's clear to throw it away. The store op is chosen when the pass ends and the next pass is
+    // already known, so a target is only marked DONT_CARE when the next pass provably re-clears it;
+    // anything that is read, presented or loaded again keeps its store. Turn it off if a scene
+    // shows stale or missing contents on a render target.
+    SwitchableSetting<bool> renderer_store_elision{linkage, true, "renderer_store_elision",
+                                                   Category::RendererDebug,
+                                                   Specialization::Default, true, true};
+    // Recompress guest BCn colour textures (BC1/BC2/BC3/BC7) to native ASTC 4x4 at upload instead
+    // of inflating them to uncompressed RGBA8. Mali samples ASTC natively, so this keeps texture
+    // memory and fetch bandwidth close to the guest format (4x smaller than RGBA8) like a native
+    // game. Only takes effect on devices that sample ASTC; encoding happens once per texture at
+    // load time. Experimental: turn it off if textures look wrong or load times regress.
+    SwitchableSetting<bool> renderer_bcn_to_astc{linkage, false, "renderer_bcn_to_astc",
+                                                 Category::RendererDebug,
+                                                 Specialization::Default, true, true};
+    // Track per-image Vulkan layouts instead of resting every image in GENERAL, so Mali can apply
+    // lossless AFBC to framebuffer and texture traffic. GENERAL disables AFBC and transaction
+    // elimination; native games keep AFBC-friendly layouts. Experimental: a missed layout
+    // transition can corrupt a frame, so turn it off if anything renders wrong. Mali only.
+    SwitchableSetting<bool> renderer_afbc_layouts{linkage, false, "renderer_afbc_layouts",
+                                                  Category::RendererDebug,
+                                                  Specialization::Default, true, true};
     // Draw with COLOR_ATTACHMENT_OPTIMAL / DEPTH_STENCIL_ATTACHMENT_OPTIMAL attachment references
     // while leaving the attachments' initial/final layout at GENERAL. The textures still rest in
     // GENERAL, so the texture cache needs no changes. Draws that sample the render target they
@@ -442,11 +466,30 @@ struct Values {
     SwitchableSetting<bool> renderer_optimal_attachments{linkage, true, "renderer_optimal_attachments",
                                                          Category::RendererDebug,
                                                          Specialization::Default, true, true};
+    // Feedback draws (sampling the render target they write) keep an optimal attachment layout
+    // through VK_EXT_attachment_feedback_loop_layout instead of dropping to GENERAL, so Mali
+    // framebuffer compression and transaction elimination stay active for bloom/post-process
+    // passes, and the feedback barrier no longer breaks the render pass. Requires the extension;
+    // without it the GENERAL variant is used exactly as before.
+    SwitchableSetting<bool> renderer_feedback_loop_layout{linkage, true, "renderer_feedback_loop_layout",
+                                                          Category::RendererDebug,
+                                                          Specialization::Default, true, true};
+    // Experimental: narrow the render pass external dependencies' pipeline stage masks from
+    // ALL_COMMANDS to the stages that actually produce/consume attachments, so the next pass's
+    // vertex/geometry work is not forced to wait for all fragment work (Arm Mali pipeline-bubble
+    // guidance). Access masks are unchanged, so cache coherency is preserved. Correctness-sensitive:
+    // a missed consumer can show stale pixels, so it defaults off and is meant for on-device A/B.
+    SwitchableSetting<bool> renderer_narrow_pass_barriers{linkage, false, "renderer_narrow_pass_barriers",
+                                                          Category::RendererDebug,
+                                                          Specialization::Default, true, true};
     // Second half of the steady-state draw: when the same pipeline is configured again and no
     // register write, guest-memory invalidation or render pass start happened in between, the
-    // pipeline and descriptor sets the previous Configure emitted are still the ones bound in the
-    // command stream, so the per-draw re-resolution of every binding can be skipped entirely.
-    // The pipeline key derivation is unaffected; renderer_maxwell_bypass covers that half.
+    // pipeline, the descriptor sets and the dynamic state the previous Configure emitted are still
+    // the ones bound in the command stream, so the per-draw re-resolution of every binding, the
+    // re-emission of every vkCmdSet*, and the re-arming of the transform feedback counter are
+    // skipped entirely. The pipeline key derivation is unaffected; renderer_maxwell_bypass covers
+    // that half. Also drops the two cache mutexes from the steady-state draw, because nothing is
+    // resolved and therefore nothing needs guarding against the CPU thread.
     SwitchableSetting<bool> renderer_draw_state_cache{linkage, false, "renderer_draw_state_cache",
                                                       Category::RendererDebug,
                                                       Specialization::Default, true, true};
@@ -1031,6 +1074,8 @@ struct Values {
     Setting<int> library_background_x{linkage, 50, "library_background_x", Category::Ui};
     Setting<int> library_background_y{linkage, 50, "library_background_y", Category::Ui};
     Setting<bool> wallpaper_recent_games{linkage, false, "wallpaper_recent_games", Category::Ui};
+    SwitchableSetting<bool> library_aurora{linkage, true, "library_aurora", Category::Ui};
+    SwitchableSetting<bool> library_parallax{linkage, true, "library_parallax", Category::Ui};
 
     // Discord Rich Presence (Android frontend). Three transports are supported because the
     // platform does not offer one:

@@ -522,8 +522,15 @@ bool GraphicsPipeline::ConfigureImpl(bool is_indexed) {
         buffer_cache.any_buffer_uploaded = false;
     }
     texture_cache.UpdateRenderTargets(false);
-    uses_general_render_pass = texture_cache.CheckFeedbackLoop(
+    const bool feedback_loop = texture_cache.CheckFeedbackLoop(
         std::span<const VideoCommon::ImageViewInOut>{views.data(), views.size()});
+    // With the feedback-loop layout extension the draw keeps a compressible attachment layout
+    // instead of GENERAL; without it the GENERAL variant remains the only legal choice.
+    const bool feedback_layout = feedback_loop &&
+                                 device.IsExtAttachmentFeedbackLoopLayoutSupported() &&
+                                 Settings::values.renderer_feedback_loop_layout.GetValue();
+    uses_general_render_pass = feedback_loop && !feedback_layout;
+    uses_feedback_render_pass = feedback_layout;
     ConfigureDraw(rescaling, render_area);
 
     return true;
@@ -531,7 +538,8 @@ bool GraphicsPipeline::ConfigureImpl(bool is_indexed) {
 
 void GraphicsPipeline::ConfigureDraw(const RescalingPushConstant& rescaling,
                                      const RenderAreaPushConstant& render_area) {
-    scheduler.RequestRenderpass(texture_cache.GetFramebuffer(), uses_general_render_pass);
+    scheduler.RequestRenderpass(texture_cache.GetFramebuffer(), uses_general_render_pass,
+                                uses_feedback_render_pass);
     if (!is_built.load(std::memory_order::relaxed)) {
         // Wait for the pipeline to be built
         scheduler.Record([this](vk::CommandBuffer) {

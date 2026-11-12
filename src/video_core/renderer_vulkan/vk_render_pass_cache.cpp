@@ -8,6 +8,7 @@
 
 #include <boost/container/static_vector.hpp>
 
+#include "common/settings.h"
 #include "video_core/renderer_vulkan/maxwell_to_vk.h"
 #include "video_core/renderer_vulkan/vk_render_pass_cache.h"
 #include "video_core/surface.h"
@@ -46,7 +47,8 @@ using VideoCore::Surface::SurfaceType;
         VkAttachmentDescription AttachmentDescription(const Device& device, PixelFormat format,
                                                       VkSampleCountFlagBits samples,
                                                       bool clear_color, bool clear_depth,
-                                                      bool clear_stencil) {
+                                                      bool clear_stencil, bool elide_store,
+                                                      bool afbc) {
             using MaxwellToVK::SurfaceFormat;
 
             const SurfaceType surface_type = GetSurfaceType(format);
@@ -55,20 +57,28 @@ using VideoCore::Surface::SurfaceType;
             const bool is_depth = surface_type == SurfaceType::Depth ||
                                   surface_type == SurfaceType::DepthStencil;
             const bool clear{is_depth ? clear_depth : clear_color};
+            // AFBC keeps the attachment in its optimal layout at rest (begin and end) so Mali never
+            // decompresses the tile back to GENERAL between passes; otherwise it rests in GENERAL.
+            const VkImageLayout rest_layout =
+                afbc ? (is_depth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                                 : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                     : VK_IMAGE_LAYOUT_GENERAL;
 
             return {
                 .flags = {},
                 .format = SurfaceFormat(device, FormatType::Optimal, true, format).format,
                 .samples = samples,
                 .loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                .storeOp = elide_store ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                       : VK_ATTACHMENT_STORE_OP_STORE,
                 .stencilLoadOp = !has_stencil ? VK_ATTACHMENT_LOAD_OP_DONT_CARE
                                               : (clear_stencil ? VK_ATTACHMENT_LOAD_OP_CLEAR
                                                                : VK_ATTACHMENT_LOAD_OP_LOAD),
-                .stencilStoreOp = has_stencil ? VK_ATTACHMENT_STORE_OP_STORE
+                .stencilStoreOp = has_stencil ? (elide_store ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                             : VK_ATTACHMENT_STORE_OP_STORE)
                                                   : VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .finalLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .initialLayout = rest_layout,
+                .finalLayout = rest_layout,
             };
         }
     } // Anonymous namespace
@@ -86,10 +96,15 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
     // The attachments rest in GENERAL; only the layout used during the subpass changes. Vulkan
     // considers render passes that differ only in attachment-reference layout compatible, so the
     // pipelines and framebuffers built for the GENERAL variant accept this one too.
-    const VkImageLayout color_layout = key.optimal_layout
-                                           ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-                                           : VK_IMAGE_LAYOUT_GENERAL;
-    const VkImageLayout depth_layout = key.optimal_layout
+    const bool optimal_refs = key.optimal_layout || key.afbc_layout;
+    const VkImageLayout color_layout = key.feedback_loop
+                                           ? VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT
+                                           : (optimal_refs
+                                                  ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                                                  : VK_IMAGE_LAYOUT_GENERAL);
+    // Depth stays GENERAL in the feedback variant: the sampled surface of a feedback draw may be
+    // the depth attachment, and depth-optimal layouts do not allow shader reads.
+    const VkImageLayout depth_layout = (optimal_refs && !key.feedback_loop)
                                            ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
                                            : VK_IMAGE_LAYOUT_GENERAL;
     u32 num_attachments{};
@@ -102,9 +117,11 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
             .layout = color_layout,
         };
         if (is_valid) {
+            const bool elide_store = (key.store_elide_mask >> num_colors) & 1;
             descriptions.push_back(AttachmentDescription(*device, format, key.samples,
                                                          key.color_clear, key.depth_clear,
-                                                         key.stencil_clear));
+                                                         key.stencil_clear, elide_store,
+                                                         key.afbc_layout));
             num_attachments = static_cast<u32>(index + 1);
             ++num_colors;
         }
@@ -118,7 +135,9 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
         };
         descriptions.push_back(AttachmentDescription(*device, key.depth_format, key.samples,
                                                      key.color_clear, key.depth_clear,
-                                                     key.stencil_clear));
+                                                     key.stencil_clear,
+                                                     (key.store_elide_mask >> num_colors) & 1,
+                                                     key.afbc_layout));
     }
     const VkSubpassDescription subpass{
         .flags = 0,
@@ -139,6 +158,27 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
     // synchronize the automatic attachment layout transitions the optimal variant performs when
     // the images enter and leave GENERAL.
     boost::container::static_vector<VkSubpassDependency, 3> dependencies;
+    // Experimental stage-mask narrowing (renderer_narrow_pass_barriers, default off). ALL_COMMANDS
+    // makes the next pass's vertex/geometry work wait for every fragment stage; Arm's Mali guidance
+    // calls that a pipeline bubble. Narrow to the stages that actually produce (entry src) and
+    // consume (exit dst) attachments. Access masks stay unchanged so cache coherency is preserved.
+    // The setting is constant for the session, so every variant shares the same dependency list and
+    // render pass compatibility holds; toggle it before launch, not mid-game.
+    const bool narrow_barriers = Settings::values.renderer_narrow_pass_barriers.GetValue();
+    const VkPipelineStageFlags entry_src_stage =
+        narrow_barriers ? (VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
+                        : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    const VkPipelineStageFlags exit_dst_stage =
+        narrow_barriers ? (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                           VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                           VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT)
+                        : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     dependencies.push_back(VkSubpassDependency{
         .srcSubpass = 0,  // Current subpass
         .dstSubpass = 0,  // Same subpass (self-dependency)
@@ -154,7 +194,7 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
     dependencies.push_back(VkSubpassDependency{
         .srcSubpass = VK_SUBPASS_EXTERNAL,
         .dstSubpass = 0,
-        .srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        .srcStageMask = entry_src_stage,
         .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
                         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
@@ -175,7 +215,7 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
         .srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        .dstStageMask = exit_dst_stage,
         .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
         .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,

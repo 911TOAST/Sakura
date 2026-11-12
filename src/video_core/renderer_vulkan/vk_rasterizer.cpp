@@ -248,14 +248,15 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func) {
     if (!pipeline) {
         return;
     }
-    std::scoped_lock lock{buffer_cache.mutex, texture_cache.mutex};
     // update engine as channel may be different.
     pipeline->SetEngine(maxwell3d, gpu_memory);
 
     // Steady-state draw: the pipeline, its bindings, the guest memory they point into and the
-    // render pass are all unchanged since the last Configure, so the pipeline and descriptor sets
-    // that Configure emitted are still the ones in the command stream. Re-deriving them would read
-    // every guest descriptor again and rewrite identical descriptor sets for a draw that repeats.
+    // render pass are all unchanged since the last Configure, so the pipeline, the descriptor sets
+    // and every vkCmdSet* that Configure emitted are still the ones in the command stream.
+    // Re-deriving them would read every guest descriptor again, re-resolve every image view and
+    // rewrite identical descriptor sets for a draw that repeats, and the dynamic state would be
+    // re-emitted with values the command stream already carries.
     bool reuse_draw_state = false;
     if (Settings::values.renderer_draw_state_cache.GetValue()) {
         reuse_draw_state = cached_pipeline == pipeline && cached_engine == maxwell3d &&
@@ -265,6 +266,10 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func) {
                            cached_renderpass_serial == scheduler.RenderPassSerial();
     }
     if (!reuse_draw_state) {
+        // The cache mutexes guard the CPU thread writing into guest memory the two caches track.
+        // A steady-state draw resolves nothing, so it has nothing to guard: taking both of them
+        // (they are recursive_mutex, not mutex) was two extra lock/unlock pairs on every draw.
+        std::scoped_lock lock{buffer_cache.mutex, texture_cache.mutex};
         if (!pipeline->Configure(is_indexed)) {
             return;
         }
@@ -274,12 +279,19 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func) {
         cached_register_epoch = maxwell3d->register_epoch;
         cached_invalidation_epoch = invalidation_epoch;
         cached_renderpass_serial = scheduler.RenderPassSerial();
+
+        // Dynamic state belongs to the same steady-state group. An unchanged register epoch means
+        // the guest wrote no register that any of these updates read, and an unchanged render pass
+        // serial means the command buffer was not recycled and no pass was opened or closed, so the
+        // values the previous draw set are still current.
+        UpdateDynamicStates(pipeline);
+
+        // Transform feedback counter arming is also a function of guest registers only: on the
+        // steady-state path it would call FlushBeginTFB again for a stream that is already open.
+        HandleTransformFeedback();
     }
 
-    UpdateDynamicStates(pipeline);
-
     query_cache.NotifySegment(true);
-    HandleTransformFeedback();
     query_cache.CounterEnable(VideoCommon::QueryType::ZPassPixelCount64, maxwell3d->regs.zpass_pixel_count_enable);
     draw_func();
 }
@@ -321,6 +333,10 @@ void RasterizerVulkan::DrawIndirect() {
     const auto& params = maxwell3d->draw_manager.indirect_state;
     buffer_cache.SetDrawIndirect(&params);
     PrepareDraw(params.is_indexed, [this, &params] {
+        // The steady-state path no longer holds the cache locks around the draw, and resolving the
+        // indirect buffer reads the buffer cache's slot table. buffer_cache.mutex is recursive, so
+        // taking it again on the configure path is free of deadlock.
+        std::scoped_lock lock{buffer_cache.mutex};
         const auto indirect_buffer = buffer_cache.GetDrawIndirectBuffer();
         const auto& buffer = indirect_buffer.first;
         const auto& offset = indirect_buffer.second;

@@ -254,6 +254,8 @@ add_library(video_core STATIC
     texture_cache/util.h
     textures/astc.h
     textures/astc.cpp
+    textures/astc_encode.h
+    textures/astc_encode.cpp
     textures/bcn.cpp
     textures/bcn.h
     textures/decoders.cpp
@@ -328,7 +330,7 @@ if (ENABLE_OPENGL)
 endif()
 
 target_link_libraries(video_core PUBLIC common core)
-target_link_libraries(video_core PUBLIC shader_recompiler stb bc_decoder gpu_logging)
+target_link_libraries(video_core PUBLIC shader_recompiler stb bc_decoder astcenc gpu_logging)
 if (ENABLE_OPENGL)
     target_link_libraries(video_core PUBLIC glad)
 endif()

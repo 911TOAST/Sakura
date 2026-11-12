@@ -1,6 +1,57 @@
 # Sakura optimized build — performance reports
 
-Date: 2026-10-24 (CPU pass), updated 2026-11-09 (dead-weight removal + per-frame query cache)
+Date: 2026-10-24 (CPU pass), updated 2026-11-12 (Mali layout experiments + BCn→ASTC)
+
+## 2026-11-12 update — Mali layout experiments, BCn→ASTC and sync-request fast path
+
+Files: `src/common/settings.h`,
+`src/video_core/renderer_vulkan/{vk_texture_cache.{h,cpp},maxwell_to_vk.cpp,
+vk_render_pass_cache.{h,cpp},vk_scheduler.{h,cpp},vk_graphics_pipeline.{h,cpp},vk_rasterizer.cpp,
+vk_swapchain.cpp,vulkan_common/vulkan_device.{h,cpp}}`,
+`src/video_core/{gpu.cpp,surface.{h,cpp},texture_cache/{texture_cache.h,util.cpp}}`,
+`src/video_core/textures/astc_encode.{h,cpp}`, `externals/CMakeLists.txt`.
+
+### Render-target traffic
+
+- **Store elision** (`renderer_store_elision`, default on): when the very next pass clears a
+  target this pass just wrote, its store is emitted as `DONT_CARE`, removing a full attachment
+  write on a tile-based GPU. Targets that are sampled, presented or loaded again keep their store.
+- **AFBC-native layouts** (`renderer_afbc_layouts`, default off): images track their Vulkan layout
+  instead of resting in `GENERAL`, using `SHADER_READ_ONLY_OPTIMAL` /
+  `DEPTH_STENCIL_ATTACHMENT_OPTIMAL` at rest so Mali can apply lossless AFBC. Transfer helpers move
+  to `GENERAL` and restore afterwards.
+- **Feedback-loop optimal layout** (`renderer_feedback_loop_layout`, default on when
+  `VK_EXT_attachment_feedback_loop_layout` is available): self-sampling draws keep a compressible
+  attachment layout instead of dropping to `GENERAL`.
+- **Narrow pass barriers** (`renderer_narrow_pass_barriers`, default off): render-pass external
+  dependencies narrow their stage masks from `ALL_COMMANDS` to the producing/consuming stages.
+  Access masks are unchanged.
+- **Clear as load** and **optimal attachments** from the previous pass remain default on.
+
+### Texture bandwidth
+
+- **BCn→ASTC 4x4 recompression** (`renderer_bcn_to_astc`, default off): on devices without native
+  BCn, BC1/BC2/BC3/BC7 colour textures are decoded to RGBA8 and re-encoded to ASTC 4x4 (8 bpp)
+  instead of being uploaded as RGBA8 (32 bpp). Encoding runs on the async decode worker.
+- A content-keyed on-disk cache under `CacheDir/astc_bcn` skips repeated encodes. It is bounded to
+  512 MiB: past that, the oldest entries are trimmed down to 384 MiB every 64 writes. A failed
+  encode is never cached, and failed slices are zero-filled rather than uploading uninitialised
+  staging memory.
+
+### CPU-side
+
+- `GPU::TickWork()` now checks a lock-free pending-request counter before taking
+  `sync_request_mutex`, so the common empty case on the draw path no longer touches the mutex or
+  bounces its cache line against the CPU thread.
+- The in-game drawer gains an Auto-tune entry that benchmarks the running game and applies
+  existing renderer settings; it does not change the renderer itself.
+
+### Verification
+
+Built locally as a signed `optimized` release APK on 2026-11-12. **No device, FPS or frametime
+measurement was taken**, so this section records what work was removed or made optional, not a
+benchmark result. The new toggles are correctness-sensitive; validate on Mali hardware before
+treating any of them as a win.
 
 ## 2026-11-09 update — dead resource removal and per-frame driver query cache
 

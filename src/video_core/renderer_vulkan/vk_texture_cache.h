@@ -12,6 +12,7 @@
 
 #include "shader_recompiler/shader_info.h"
 #include "video_core/renderer_vulkan/vk_compute_pass.h"
+#include "video_core/renderer_vulkan/vk_render_pass_cache.h"
 #include "video_core/renderer_vulkan/vk_staging_buffer_pool.h"
 #include "video_core/texture_cache/image_view_base.h"
 #include "video_core/vulkan_common/vulkan_memory_allocator.h"
@@ -38,6 +39,11 @@ class Framebuffer;
 class RenderPassCache;
 class StagingBufferPool;
 class Scheduler;
+
+/// True when AFBC-native layout tracking is active: the experimental toggle is on and the device
+/// is a Mali GPU (whose driver applies lossless AFBC only to images kept out of GENERAL). When
+/// false every image rests in GENERAL exactly as before, so the legacy path is unchanged.
+[[nodiscard]] bool UseAfbcLayouts(const Device& device);
 
 class TextureCacheRuntime {
 public:
@@ -97,6 +103,11 @@ public:
     void InsertUploadMemoryBarrier() {}
 
     void TransitionImageLayout(Image& image);
+
+    /// AFBC layout hooks invoked by the texture cache before an image is rendered to or sampled.
+    /// No-ops unless UseAfbcLayouts() is active; the legacy GENERAL path is then untouched.
+    void PrepareRenderTargetLayout(Image& image);
+    void PrepareSampledImageLayout(Image& image);
 
     bool HasBrokenTextureViewFormats() const noexcept {
         // No known Vulkan driver has broken image views
@@ -212,6 +223,24 @@ public:
         return general_layout ? general_clear_renderpass : clear_renderpass;
     }
 
+    /// Feedback-loop variant: colour attachments stay in ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT
+    /// during the subpass. Aliased to the GENERAL passes when the extension is unavailable.
+    [[nodiscard]] VkRenderPass FeedbackRenderPass() const noexcept {
+        return feedback_renderpass;
+    }
+
+    [[nodiscard]] VkRenderPass FeedbackClearRenderPass() const noexcept {
+        return feedback_clear_renderpass;
+    }
+
+    /// Variant of the pass selected by (general_layout, feedback_layout, clear) whose attachment
+    /// stores are elided per \p mask (bit k = attachment k in description order: colours then
+    /// depth). Used when the next pass re-clears those attachments so their writeback is dead.
+    /// loadOp/storeOp do not affect render pass compatibility, so this shares the framebuffer and
+    /// pipelines of the storing variant.
+    [[nodiscard]] VkRenderPass RenderPassStoreElide(u16 mask, bool general_layout,
+                                                    bool feedback_layout, bool clear) const;
+
 private:
     vk::Framebuffer framebuffer;
     VkRenderPass renderpass{};
@@ -220,6 +249,9 @@ private:
     /// the render target they write to must use these.
     VkRenderPass general_renderpass{};
     VkRenderPass general_clear_renderpass{};
+    /// Feedback-loop variants of the optimal passes; aliased to GENERAL without the extension.
+    VkRenderPass feedback_renderpass{};
+    VkRenderPass feedback_clear_renderpass{};
     VkExtent2D render_area{};
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     u32 num_color_buffers = 0;
@@ -230,6 +262,11 @@ private:
     bool has_depth{};
     bool has_stencil{};
     bool is_rescaled{};
+    /// Base render pass key (optimal layout as configured, no clears) kept so a store-elision
+    /// variant of any layout/clear combination can be rebuilt on demand.
+    RenderPassKey base_key{};
+    RenderPassCache* pass_cache{};
+    bool feedback_supported{};
 };
 
 class Image : public VideoCommon::ImageBase {
@@ -264,6 +301,33 @@ public:
                         std::span<const VideoCommon::BufferImageCopy> copies);
 
     void AllocateComputeUnswizzleImage();
+
+    /// AFBC-native layout tracking. Records a barrier from the tracked layout to \p new_layout and
+    /// updates the tracker; a no-op when already in that layout or when AFBC tracking is disabled
+    /// (the legacy GENERAL paths then remain solely responsible for transitions). \p old_layout may
+    /// be UNDEFINED to discard contents.
+    void TransitionLayout(VkImageLayout new_layout, VkAccessFlags src_access, VkAccessFlags dst_access,
+                          VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage);
+
+    /// The AFBC-friendly layout this image rests in when not being rendered: SHADER_READ_ONLY_OPTIMAL
+    /// for colour, DEPTH_STENCIL_ATTACHMENT_OPTIMAL for depth/stencil. GENERAL when tracking is off.
+    [[nodiscard]] VkImageLayout AfbcRestLayout() const noexcept;
+
+    [[nodiscard]] VkImageLayout CurrentLayout() const noexcept {
+        return current_layout;
+    }
+
+    /// Adopts a layout established by an external barrier (e.g. a render pass's automatic
+    /// transitions or a transfer helper) without recording a new barrier.
+    void SetCurrentLayout(VkImageLayout layout) noexcept {
+        current_layout = layout;
+    }
+
+    /// Transfer guards: the legacy upload/blit/download helpers assume GENERAL, so under AFBC the
+    /// image is moved to GENERAL for the transfer and restored to its AFBC rest layout afterwards.
+    /// No-ops when AFBC tracking is off. Pair with SCOPE_EXIT for early-return safety.
+    void BeginTransfer();
+    void EndTransfer();
 
     [[nodiscard]] VkImage Handle() const noexcept {
         return *(this->*current_image);
@@ -323,6 +387,19 @@ private:
     std::vector<vk::ImageView> storage_image_views;
     VkImageAspectFlags aspect_mask = 0;
     bool initialized = false;
+    /// Tracked Vulkan layout of the current image handle. UNDEFINED until first transition. Only
+    /// consulted when UseAfbcLayouts() is true; the legacy path keeps everything in GENERAL.
+    VkImageLayout current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    /// Per-handle layouts so a rescale swap (original <-> scaled) restores the right layout instead
+    /// of applying one handle's layout to the other. current_layout mirrors the active handle.
+    VkImageLayout original_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout scaled_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    /// Records a layout barrier for a specific handle and updates its tracker. Shared by
+    /// TransitionLayout (active handle) and the rescale guards (both handles).
+    void TransitionHandleLayout(VkImage image, VkImageLayout& layout, VkImageLayout new_layout,
+                                VkAccessFlags src_access, VkAccessFlags dst_access,
+                                VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage);
 
     std::optional<Framebuffer> scale_framebuffer;
     std::optional<Framebuffer> normal_framebuffer;
@@ -334,7 +411,7 @@ class ImageView : public VideoCommon::ImageViewBase {
 public:
     explicit ImageView(TextureCacheRuntime&, const VideoCommon::ImageViewInfo&, ImageId, Image&);
     explicit ImageView(TextureCacheRuntime&, const VideoCommon::ImageViewInfo&, ImageId, Image&,
-                       const SlotVector<Image>&);
+                       SlotVector<Image>&);
     explicit ImageView(TextureCacheRuntime&, const VideoCommon::ImageInfo&,
                        const VideoCommon::ImageViewInfo&, GPUVAddr);
     explicit ImageView(TextureCacheRuntime&, const VideoCommon::NullImageViewParams&);
@@ -366,6 +443,9 @@ public:
         return image_handle;
     }
 
+    /// The backing Image (for AFBC transfer guards). Null when this view has no slot image.
+    [[nodiscard]] Image* GetImage() const noexcept;
+
     [[nodiscard]] VkImageView RenderTarget() const noexcept {
         return render_target;
     }
@@ -396,7 +476,7 @@ private:
                                          std::optional<Shader::TextureType> texture_type = std::nullopt);
 
     const Device* device = nullptr;
-    const SlotVector<Image>* slot_images = nullptr;
+    SlotVector<Image>* slot_images = nullptr;
 
     std::array<vk::ImageView, Shader::NUM_TEXTURE_TYPES> image_views;
     std::optional<StorageViews> storage_views;

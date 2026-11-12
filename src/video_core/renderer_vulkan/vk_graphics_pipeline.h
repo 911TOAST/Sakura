@@ -166,6 +166,9 @@ private:
     /// Set by ConfigureImpl when this draw samples an active render target and therefore has to
     /// use the framebuffer's GENERAL render pass variant.
     bool uses_general_render_pass{};
+    /// Set by ConfigureImpl when the draw is a feedback loop but the device supports
+    /// VK_EXT_attachment_feedback_loop_layout, so the compressible feedback variant is used.
+    bool uses_feedback_render_pass{};
 
     vk::DescriptorSetLayout descriptor_set_layout;
     DescriptorAllocator descriptor_allocator;

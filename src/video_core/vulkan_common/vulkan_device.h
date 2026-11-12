@@ -53,6 +53,8 @@ VK_DEFINE_HANDLE(VmaAllocator)
 
 // Define all features which may be used by the implementation and require an extension here.
 #define FOR_EACH_VK_FEATURE_EXT(FEATURE)                                                           \
+    FEATURE(EXT, AttachmentFeedbackLoopLayout, ATTACHMENT_FEEDBACK_LOOP_LAYOUT,                    \
+            attachment_feedback_loop_layout)                                                       \
     FEATURE(EXT, BorderColorSwizzle, BORDER_COLOR_SWIZZLE, border_color_swizzle)                   \
     FEATURE(EXT, ColorWriteEnable, COLOR_WRITE_ENABLE, color_write_enable)                         \
     FEATURE(EXT, CustomBorderColor, CUSTOM_BORDER_COLOR, custom_border_color)                      \
@@ -117,8 +119,10 @@ VK_DEFINE_HANDLE(VmaAllocator)
     EXTENSION(QCOM, FILTER_CUBIC_WEIGHTS, filter_cubic_weights)
 
 // Define extensions which must be supported.
+// VK_EXT_vertex_attribute_divisor is deliberately absent here: it is checked separately in
+// GetSuitability because Vulkan 1.3 drivers may advertise only its VK_KHR_vertex_attribute_divisor
+// spelling, and either satisfies the requirement.
 #define FOR_EACH_VK_MANDATORY_EXTENSION(EXTENSION_NAME)                                            \
-    EXTENSION_NAME(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME)                                 \
     EXTENSION_NAME(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME)                                        \
     EXTENSION_NAME(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME)                             \
     EXTENSION_NAME(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)
@@ -802,6 +806,14 @@ FN_MAX_LIMIT_LIST
 
     bool IsExtConditionalRendering() const {
         return extensions.conditional_rendering;
+    }
+
+    /// True when VK_EXT_attachment_feedback_loop_layout is available and enabled: draws that
+    /// sample the render target they write can keep an optimal attachment layout (and Mali
+    /// framebuffer compression) instead of falling back to GENERAL.
+    bool IsExtAttachmentFeedbackLoopLayoutSupported() const {
+        return extensions.attachment_feedback_loop_layout &&
+               features.attachment_feedback_loop_layout.attachmentFeedbackLoopLayout != VK_FALSE;
     }
 
     bool HasTimelineSemaphore() const;

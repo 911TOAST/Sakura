@@ -297,7 +297,12 @@ FormatInfo SurfaceFormat(const Device& device, FormatType format_type, bool with
     }
     if (!device.IsOptimalBcnSupported() && VideoCore::Surface::IsPixelFormatBCn(pixel_format)) {
         // Transcode on hardware that doesn't support BCn natively
-        if (pixel_format == PixelFormat::BC4_SNORM) {
+        VideoCore::Surface::SetBcnToAstcDeviceSupported(device.IsOptimalAstcSupported());
+        if (VideoCore::Surface::IsBcnToAstcActive(pixel_format)) {
+            // Recompress to native ASTC 4x4 (8 bpp) instead of inflating to RGBA8 (32 bpp). Mali
+            // samples ASTC natively, so texture fetch bandwidth stays close to the guest format.
+            tuple.format = is_srgb ? VK_FORMAT_ASTC_4x4_SRGB_BLOCK : VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
+        } else if (pixel_format == PixelFormat::BC4_SNORM) {
             tuple.format = VK_FORMAT_R8_SNORM;
         } else if (pixel_format == PixelFormat::BC4_UNORM) {
             tuple.format = VK_FORMAT_R8_UNORM;

@@ -18,6 +18,8 @@
 #include "common/settings.h"
 
 #include "video_core/renderer_vulkan/vk_texture_cache.h"
+
+#include "common/scope_exit.h"
 #include "video_core/gpu_logging/gpu_logging.h"
 
 #include "video_core/engines/fermi_2d.h"
@@ -191,6 +193,12 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
     if (format_override.has_value() || info.num_samples > 1 ||
         WillUseAcceleratedAstcDecode(device, info)) {
         usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+    }
+    // Feedback-loop draws sample the target they write; the extension's usage bit lets those
+    // images enter ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT inside a pass instead of GENERAL.
+    if (device.IsExtAttachmentFeedbackLoopLayoutSupported() &&
+        (usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0) {
+        usage |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
     }
     return VkImageCreateInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -1111,6 +1119,13 @@ VkBuffer TextureCacheRuntime::GetTemporaryBuffer(size_t needed_size) {
 }
 
 void TextureCacheRuntime::BarrierFeedbackLoop() {
+    if (device.IsExtAttachmentFeedbackLoopLayoutSupported() &&
+        Settings::values.renderer_feedback_loop_layout.GetValue()) {
+        // The feedback-optimal layout plus the render pass self-dependency already order the
+        // attachment writes against the same-draw shader reads. Breaking the pass here would
+        // force the full tile writeback the extension exists to avoid.
+        return;
+    }
     scheduler.RequestOutsideRenderPassOperationContext();
 }
 
@@ -1249,6 +1264,23 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
                                     const Region2D& dst_region, const Region2D& src_region,
                                     Tegra::Engines::Fermi2D::Filter filter,
                                     Tegra::Engines::Fermi2D::Operation operation) {
+    // AFBC: the blit helpers assume GENERAL, so guard the source and destination images.
+    Image* const blit_src_image = src.GetImage();
+    Image* const blit_dst_image = dst.GetImage();
+    if (blit_src_image) {
+        blit_src_image->BeginTransfer();
+    }
+    if (blit_dst_image) {
+        blit_dst_image->BeginTransfer();
+    }
+    SCOPE_EXIT {
+        if (blit_src_image) {
+            blit_src_image->EndTransfer();
+        }
+        if (blit_dst_image) {
+            blit_dst_image->EndTransfer();
+        }
+    };
     const VkImageAspectFlags aspect_mask = ImageAspectMask(src.format);
     const bool is_dst_msaa = dst.Samples() != VK_SAMPLE_COUNT_1_BIT;
     const bool is_src_msaa = src.Samples() != VK_SAMPLE_COUNT_1_BIT;
@@ -1729,6 +1761,12 @@ Image::Image(TextureCacheRuntime& runtime_, const ImageInfo& info_, GPUVAddr gpu
     if (IsPixelFormatBCn(info.format) && !runtime->device.IsOptimalBcnSupported()) {
         flags |= VideoCommon::ImageFlagBits::Converted;
         flags |= VideoCommon::ImageFlagBits::CostlyLoad;
+        if (VideoCore::Surface::IsBcnToAstcActive(info.format)) {
+            // ASTC recompression is CPU-heavy. Route it through the async decode worker so the
+            // encode never runs on the GPU emulation thread: a synchronous astcenc call here
+            // stalled the draw path for the whole encode and was the BCn->ASTC upload stutter.
+            flags |= VideoCommon::ImageFlagBits::AsynchronousDecode;
+        }
     }
     if (runtime->device.HasDebuggingToolAttached()) {
         original_image.SetObjectNameEXT(VideoCommon::Name(*this).c_str());
@@ -1797,6 +1835,8 @@ void Image::AllocateComputeUnswizzleBuffer(u32 max_slices) {
 
 void Image::UploadMemory(VkBuffer buffer, VkDeviceSize offset,
                          std::span<const VideoCommon::BufferImageCopy> copies) {
+    BeginTransfer();
+    SCOPE_EXIT { EndTransfer(); };
     // TODO: Move this to another API
     const bool is_rescaled = True(flags & ImageFlagBits::Rescaled);
     if (is_rescaled) {
@@ -1908,6 +1948,8 @@ void Image::DownloadMemory(VkBuffer buffer, size_t offset,
 
 void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> offsets_span,
                             std::span<const VideoCommon::BufferImageCopy> copies) {
+    BeginTransfer();
+    SCOPE_EXIT { EndTransfer(); };
     const bool is_rescaled = True(flags & ImageFlagBits::Rescaled);
     if (is_rescaled) {
         ScaleDown();
@@ -2380,7 +2422,7 @@ ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageViewI
     }
 }
 
-ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageViewInfo& info, ImageId image_id_, Image& image, const SlotVector<Image>& slot_imgs)
+ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageViewInfo& info, ImageId image_id_, Image& image, SlotVector<Image>& slot_imgs)
     : ImageView{runtime, info, image_id_, image}
 {
     slot_images = &slot_imgs;
@@ -2669,6 +2711,14 @@ void Framebuffer::CreateFramebuffer(TextureCacheRuntime& runtime,
     }
     renderpass_key.samples = samples;
     renderpass_key.optimal_layout = Settings::values.renderer_optimal_attachments.GetValue();
+    if (UseAfbcLayouts(runtime.device)) {
+        // AFBC needs optimal attachment references and keeps the attachments in those layouts at
+        // rest so Mali never round-trips the tile through GENERAL between passes.
+        renderpass_key.afbc_layout = true;
+        renderpass_key.optimal_layout = true;
+    }
+    base_key = renderpass_key;
+    pass_cache = &runtime.render_pass_cache;
 
     RenderPassKey clear_key = renderpass_key;
     clear_key.color_clear = true;
@@ -2679,17 +2729,40 @@ void Framebuffer::CreateFramebuffer(TextureCacheRuntime& runtime,
     // A second variant that defines its attachments at pass begin. Building it here keeps both
     // handles cached with the framebuffer; the render pass cache deduplicates the object itself.
     clear_renderpass = runtime.render_pass_cache.Get(clear_key);
+    // Feedback-loop variant of the optimal passes: colour attachments keep a compressible layout
+    // while being sampled by the very draw that writes them. Built before the GENERAL aliases
+    // below because those mutate the keys' optimal_layout flag.
+    const bool feedback_layout = renderpass_key.optimal_layout &&
+                                 runtime.device.IsExtAttachmentFeedbackLoopLayoutSupported() &&
+                                 Settings::values.renderer_feedback_loop_layout.GetValue();
+    feedback_supported = feedback_layout;
+    if (feedback_layout) {
+        RenderPassKey feedback_key = renderpass_key;
+        feedback_key.feedback_loop = true;
+        RenderPassKey feedback_clear_key = clear_key;
+        feedback_clear_key.feedback_loop = true;
+        feedback_renderpass = runtime.render_pass_cache.Get(feedback_key);
+        feedback_clear_renderpass = runtime.render_pass_cache.Get(feedback_clear_key);
+    }
     // Draws that sample the render target they are writing to cannot use the optimal attachment
     // layouts, so keep a GENERAL variant of both passes around for them. When the setting is off
     // the primary passes are already GENERAL and these aliases avoid creating anything new.
     if (renderpass_key.optimal_layout) {
         renderpass_key.optimal_layout = false;
         clear_key.optimal_layout = false;
+        // The GENERAL fallback (feedback draws without the feedback-loop extension) must stay in
+        // GENERAL, not AFBC, so it can sample the target it writes.
+        renderpass_key.afbc_layout = false;
+        clear_key.afbc_layout = false;
         general_renderpass = runtime.render_pass_cache.Get(renderpass_key);
         general_clear_renderpass = runtime.render_pass_cache.Get(clear_key);
     } else {
         general_renderpass = renderpass;
         general_clear_renderpass = clear_renderpass;
+    }
+    if (!feedback_layout) {
+        feedback_renderpass = general_renderpass;
+        feedback_clear_renderpass = general_clear_renderpass;
     }
     render_area.width = (std::min)(render_area.width, width);
     render_area.height = (std::min)(render_area.height, height);
@@ -2706,6 +2779,24 @@ void Framebuffer::CreateFramebuffer(TextureCacheRuntime& runtime,
         .height = render_area.height,
         .layers = static_cast<u32>((std::max)(num_layers, 1)),
     });
+}
+
+VkRenderPass Framebuffer::RenderPassStoreElide(u16 mask, bool general_layout, bool feedback_layout,
+                                               bool clear) const {
+    RenderPassKey key = base_key;
+    key.color_clear = clear;
+    key.depth_clear = clear && has_depth;
+    key.stencil_clear = clear && has_stencil;
+    // Mirror the variant selection in CreateFramebuffer: a feedback pass keeps the optimal layout,
+    // the GENERAL variant drops it, and a feedback request without extension support falls back to
+    // GENERAL. Keeping the attachment-reference layouts identical preserves render pass
+    // compatibility with the pipelines and framebuffer built for the storing variant.
+    const bool use_feedback = feedback_layout && feedback_supported;
+    const bool effective_general = general_layout || (feedback_layout && !feedback_supported);
+    key.optimal_layout = use_feedback ? true : (effective_general ? false : base_key.optimal_layout);
+    key.feedback_loop = use_feedback;
+    key.store_elide_mask = mask;
+    return pass_cache->Get(key);
 }
 
 void TextureCacheRuntime::AccelerateImageUpload(
@@ -2738,13 +2829,17 @@ void TextureCacheRuntime::AccelerateImageUpload(
 
 void TextureCacheRuntime::TransitionImageLayout(Image& image) {
     if (!image.ExchangeInitialization()) {
+        // With AFBC tracking the image is initialized straight into its AFBC-friendly rest layout
+        // instead of GENERAL; the legacy path keeps GENERAL so behaviour is unchanged.
+        const VkImageLayout init_layout = UseAfbcLayouts(device) ? image.AfbcRestLayout()
+                                                                 : VK_IMAGE_LAYOUT_GENERAL;
         VkImageMemoryBarrier barrier{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .pNext = nullptr,
             .srcAccessMask = VK_ACCESS_NONE,
             .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .newLayout = init_layout,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = image.Handle(),
@@ -2761,7 +2856,121 @@ void TextureCacheRuntime::TransitionImageLayout(Image& image) {
             cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
                                    vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, 0, barrier);
         });
+        image.SetCurrentLayout(init_layout);
     }
+}
+
+bool UseAfbcLayouts(const Device& device) {
+    // AFBC-rest layouts only pay off when a render target can be sampled without leaving its
+    // attachment layout, which needs VK_EXT_attachment_feedback_loop_layout. Without it (the
+    // stock Mali r44p1 blob), every render<->sample edge forces a layout transition outside the
+    // render pass, and each transition breaks the open pass into a full tile store+load. On the
+    // interleaved per-draw emulator that is a bandwidth regression, not a win, so the tracking
+    // stays inert and every image rests in GENERAL exactly as the proven path does.
+    return Settings::values.renderer_afbc_layouts.GetValue() && device.IsMali() &&
+           device.IsExtAttachmentFeedbackLoopLayoutSupported();
+}
+
+VkImageLayout Image::AfbcRestLayout() const noexcept {
+    if (!UseAfbcLayouts(runtime->device)) {
+        return VK_IMAGE_LAYOUT_GENERAL;
+    }
+    if ((aspect_mask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) != 0) {
+        return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    }
+    return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+}
+
+void Image::TransitionLayout(VkImageLayout new_layout, VkAccessFlags src_access,
+                             VkAccessFlags dst_access, VkPipelineStageFlags src_stage,
+                             VkPipelineStageFlags dst_stage) {
+    if (!UseAfbcLayouts(runtime->device)) {
+        // Legacy path: the GENERAL-based helpers remain solely responsible for transitions.
+        return;
+    }
+    if (current_layout == new_layout) {
+        return;
+    }
+    const VkImageMemoryBarrier barrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .pNext = nullptr,
+        .srcAccessMask = src_access,
+        .dstAccessMask = dst_access,
+        .oldLayout = current_layout,
+        .newLayout = new_layout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = Handle(),
+        .subresourceRange{
+            .aspectMask = aspect_mask,
+            .baseMipLevel = 0,
+            .levelCount = VK_REMAINING_MIP_LEVELS,
+            .baseArrayLayer = 0,
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        },
+    };
+    scheduler->RequestOutsideRenderPassOperationContext();
+    scheduler->Record([barrier, src_stage, dst_stage](vk::CommandBuffer cmdbuf) {
+        cmdbuf.PipelineBarrier(src_stage, dst_stage, 0, barrier);
+    });
+    current_layout = new_layout;
+}
+
+void TextureCacheRuntime::PrepareRenderTargetLayout(Image& image) {
+    if (!UseAfbcLayouts(device)) {
+        return;
+    }
+    const bool is_depth =
+        (image.AspectMask() & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) != 0;
+    const VkImageLayout layout = is_depth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                                          : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    const VkAccessFlags dst_access =
+        is_depth ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+                 : VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    image.TransitionLayout(layout, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                           dst_access, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                               VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                               VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
+}
+
+void TextureCacheRuntime::PrepareSampledImageLayout(Image& image) {
+    if (!UseAfbcLayouts(device)) {
+        return;
+    }
+    image.TransitionLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                           VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                           VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                               VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+}
+
+void Image::BeginTransfer() {
+    if (!UseAfbcLayouts(runtime->device)) {
+        return;
+    }
+    TransitionLayout(VK_IMAGE_LAYOUT_GENERAL,
+                     VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                     VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+}
+
+void Image::EndTransfer() {
+    if (!UseAfbcLayouts(runtime->device)) {
+        return;
+    }
+    TransitionLayout(AfbcRestLayout(),
+                     VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+                     VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+}
+
+Image* ImageView::GetImage() const noexcept {
+    if (!slot_images || !image_id) {
+        return nullptr;
+    }
+    return &(*slot_images)[image_id];
 }
 
 } // namespace Vulkan
