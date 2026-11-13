@@ -17,13 +17,6 @@ Id Decorate(EmitContext& ctx, IR::Inst* inst, Id op) {
     return op;
 }
 
-Id Relax(EmitContext& ctx, Id op) {
-    if (ctx.profile.relax_fp32_precision && ctx.stage == Stage::Fragment) {
-        ctx.Decorate(op, spv::Decoration::RelaxedPrecision);
-    }
-    return op;
-}
-
 Id Clamp(EmitContext& ctx, Id type, Id value, Id zero, Id one) {
     if (ctx.profile.has_broken_spirv_clamp) {
         return ctx.OpFMin(type, ctx.OpFMax(type, value, zero), one);
@@ -60,7 +53,7 @@ Id EmitFPAbs16(EmitContext& ctx, Id value) {
 }
 
 Id EmitFPAbs32(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpFAbs(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpFAbs(ctx.F32[1], value));
 }
 
 Id EmitFPAbs64(EmitContext& ctx, Id value) {
@@ -72,7 +65,7 @@ Id EmitFPAdd16(EmitContext& ctx, IR::Inst* inst, Id a, Id b) {
 }
 
 Id EmitFPAdd32(EmitContext& ctx, IR::Inst* inst, Id a, Id b) {
-    return Relax(ctx, Decorate(ctx, inst, ctx.OpFAdd(ctx.F32[1], a, b)));
+    return ctx.Relax(Decorate(ctx, inst, ctx.OpFAdd(ctx.F32[1], a, b)));
 }
 
 Id EmitFPAdd64(EmitContext& ctx, IR::Inst* inst, Id a, Id b) {
@@ -84,7 +77,7 @@ Id EmitFPFma16(EmitContext& ctx, IR::Inst* inst, Id a, Id b, Id c) {
 }
 
 Id EmitFPFma32(EmitContext& ctx, IR::Inst* inst, Id a, Id b, Id c) {
-    return Relax(ctx, Decorate(ctx, inst, ctx.OpFma(ctx.F32[1], a, b, c)));
+    return ctx.Relax(Decorate(ctx, inst, ctx.OpFma(ctx.F32[1], a, b, c)));
 }
 
 Id EmitFPFma64(EmitContext& ctx, IR::Inst* inst, Id a, Id b, Id c) {
@@ -92,7 +85,7 @@ Id EmitFPFma64(EmitContext& ctx, IR::Inst* inst, Id a, Id b, Id c) {
 }
 
 Id EmitFPMax32(EmitContext& ctx, Id a, Id b) {
-    return Relax(ctx, ctx.OpFMax(ctx.F32[1], a, b));
+    return ctx.Relax(ctx.OpFMax(ctx.F32[1], a, b));
 }
 
 Id EmitFPMax64(EmitContext& ctx, Id a, Id b) {
@@ -100,7 +93,7 @@ Id EmitFPMax64(EmitContext& ctx, Id a, Id b) {
 }
 
 Id EmitFPMin32(EmitContext& ctx, Id a, Id b) {
-    return Relax(ctx, ctx.OpFMin(ctx.F32[1], a, b));
+    return ctx.Relax(ctx.OpFMin(ctx.F32[1], a, b));
 }
 
 Id EmitFPMin64(EmitContext& ctx, Id a, Id b) {
@@ -112,7 +105,7 @@ Id EmitFPMul16(EmitContext& ctx, IR::Inst* inst, Id a, Id b) {
 }
 
 Id EmitFPMul32(EmitContext& ctx, IR::Inst* inst, Id a, Id b) {
-    return Relax(ctx, Decorate(ctx, inst, ctx.OpFMul(ctx.F32[1], a, b)));
+    return ctx.Relax(Decorate(ctx, inst, ctx.OpFMul(ctx.F32[1], a, b)));
 }
 
 Id EmitFPMul64(EmitContext& ctx, IR::Inst* inst, Id a, Id b) {
@@ -124,7 +117,7 @@ Id EmitFPNeg16(EmitContext& ctx, Id value) {
 }
 
 Id EmitFPNeg32(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpFNegate(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpFNegate(ctx.F32[1], value));
 }
 
 Id EmitFPNeg64(EmitContext& ctx, Id value) {
@@ -132,23 +125,23 @@ Id EmitFPNeg64(EmitContext& ctx, Id value) {
 }
 
 Id EmitFPSin(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpSin(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpSin(ctx.F32[1], value));
 }
 
 Id EmitFPCos(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpCos(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpCos(ctx.F32[1], value));
 }
 
 Id EmitFPExp2(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpExp2(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpExp2(ctx.F32[1], value));
 }
 
 Id EmitFPLog2(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpLog2(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpLog2(ctx.F32[1], value));
 }
 
 Id EmitFPRecip32(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpFDiv(ctx.F32[1], ctx.Const(1.0f), value));
+    return ctx.Relax(ctx.OpFDiv(ctx.F32[1], ctx.Const(1.0f), value));
 }
 
 Id EmitFPRecip64(EmitContext& ctx, Id value) {
@@ -156,7 +149,7 @@ Id EmitFPRecip64(EmitContext& ctx, Id value) {
 }
 
 Id EmitFPRecipSqrt32(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpInverseSqrt(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpInverseSqrt(ctx.F32[1], value));
 }
 
 Id EmitFPRecipSqrt64(EmitContext& ctx, Id value) {
@@ -164,7 +157,7 @@ Id EmitFPRecipSqrt64(EmitContext& ctx, Id value) {
 }
 
 Id EmitFPSqrt(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpSqrt(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpSqrt(ctx.F32[1], value));
 }
 
 Id EmitFPSaturate16(EmitContext& ctx, Id value) {
@@ -176,7 +169,7 @@ Id EmitFPSaturate16(EmitContext& ctx, Id value) {
 Id EmitFPSaturate32(EmitContext& ctx, Id value) {
     const Id zero{ctx.Const(f32{0.0f})};
     const Id one{ctx.Const(f32{1.0f})};
-    return Relax(ctx, Clamp(ctx, ctx.F32[1], value, zero, one));
+    return ctx.Relax(Clamp(ctx, ctx.F32[1], value, zero, one));
 }
 
 Id EmitFPSaturate64(EmitContext& ctx, Id value) {
@@ -190,7 +183,7 @@ Id EmitFPClamp16(EmitContext& ctx, Id value, Id min_value, Id max_value) {
 }
 
 Id EmitFPClamp32(EmitContext& ctx, Id value, Id min_value, Id max_value) {
-    return Relax(ctx, Clamp(ctx, ctx.F32[1], value, min_value, max_value));
+    return ctx.Relax(Clamp(ctx, ctx.F32[1], value, min_value, max_value));
 }
 
 Id EmitFPClamp64(EmitContext& ctx, Id value, Id min_value, Id max_value) {
@@ -202,7 +195,7 @@ Id EmitFPRoundEven16(EmitContext& ctx, Id value) {
 }
 
 Id EmitFPRoundEven32(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpRoundEven(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpRoundEven(ctx.F32[1], value));
 }
 
 Id EmitFPRoundEven64(EmitContext& ctx, Id value) {
@@ -214,7 +207,7 @@ Id EmitFPFloor16(EmitContext& ctx, Id value) {
 }
 
 Id EmitFPFloor32(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpFloor(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpFloor(ctx.F32[1], value));
 }
 
 Id EmitFPFloor64(EmitContext& ctx, Id value) {
@@ -226,7 +219,7 @@ Id EmitFPCeil16(EmitContext& ctx, Id value) {
 }
 
 Id EmitFPCeil32(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpCeil(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpCeil(ctx.F32[1], value));
 }
 
 Id EmitFPCeil64(EmitContext& ctx, Id value) {
@@ -238,7 +231,7 @@ Id EmitFPTrunc16(EmitContext& ctx, Id value) {
 }
 
 Id EmitFPTrunc32(EmitContext& ctx, Id value) {
-    return Relax(ctx, ctx.OpTrunc(ctx.F32[1], value));
+    return ctx.Relax(ctx.OpTrunc(ctx.F32[1], value));
 }
 
 Id EmitFPTrunc64(EmitContext& ctx, Id value) {

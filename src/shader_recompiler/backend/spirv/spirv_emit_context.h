@@ -168,6 +168,17 @@ public:
                          IR::Program& program, Bindings& binding);
     ~EmitContext();
 
+    [[nodiscard]] bool CanRelaxF32() const {
+        return profile.relax_fp32_precision && stage == Stage::Fragment;
+    }
+
+    Id Relax(Id op) {
+        if (CanRelaxF32()) {
+            Decorate(op, spv::Decoration::RelaxedPrecision);
+        }
+        return op;
+    }
+
     [[nodiscard]] Id Def(const IR::Value& value);
 
     [[nodiscard]] Id BitOffset8(const IR::Value& offset);

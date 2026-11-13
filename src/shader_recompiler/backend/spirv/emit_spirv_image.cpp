@@ -506,7 +506,7 @@ Id EmitImageSampleImplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Value&
                     &EmitContext::OpImageSampleExplicitLod, ctx, inst, result_type,
                     Texture(ctx, info, index), coords, operands.Mask(), operands.Span());
     }
-    return is_integer ? ctx.OpBitcast(ctx.F32[4], color) : color;
+    return is_integer ? ctx.OpBitcast(ctx.F32[4], color) : ctx.Relax(color);
 }
 
 Id EmitImageSampleExplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Value& index, Id coords,
@@ -524,7 +524,7 @@ Id EmitImageSampleExplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Value&
         result = ctx.OpVectorTimesScalar(ctx.F32[4], result, ctx.Const(0.98f));
     }
 #endif
-    return is_integer ? ctx.OpBitcast(ctx.F32[4], result) : result;
+    return is_integer ? ctx.OpBitcast(ctx.F32[4], result) : ctx.Relax(result);
 }
 
 Id EmitImageSampleDrefImplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Value& index,

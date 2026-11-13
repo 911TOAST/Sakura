@@ -2,7 +2,67 @@
 
 Date: 2026-10-24 (CPU pass), updated 2026-11-12 (Mali layout experiments + BCn→ASTC)
 
-## 2026-11-13 update — relaxed fragment precision and thread pinning
+## 2026-11-13 pass 2 — RelaxedPrecision chain hardening, core-3 pinning policy, audit correction
+
+Branch: `perf/relaxed-precision-and-core-pinning`. Files:
+`src/shader_recompiler/backend/spirv/spirv_emit_context.h`, `emit_spirv.cpp`,
+`emit_spirv_floating_point.cpp`, `emit_spirv_context_get_set.cpp`, `emit_spirv_image.cpp`,
+`src/core/cpu_manager.cpp`, `src/android/app/src/main/res/values/strings.xml`,
+`docs/MOBILE_PERF_AUDIT.md`.
+
+### RelaxedPrecision: chain sources and depth guard
+
+Pass 1 decorated fragment FP32 arithmetic only. That is the shape that makes Mali and Adreno
+emit `cvt.f16.f32` / `cvt.f32.f16` around each decorated instruction, because the operands are
+still FP32 — which is slower than leaving the shader alone. The decoration now also lands on the
+values that feed those arithmetic instructions:
+
+- `EmitGetCbufF32` (`emit_spirv_context_get_set.cpp`) decorates both return paths, the
+  descriptor-aliasing load and the `OpBitcast` from the u32x4 path.
+- `EmitImageSampleImplicitLod` and `EmitImageSampleExplicitLod` (`emit_spirv_image.cpp`)
+  decorate the sampled result when the texture is not integer-typed.
+
+`OpPhi` results and U32-bitcast composite ops stay undecorated on purpose: decorating them would
+either be rejected or force exactly the conversions this change exists to avoid.
+`EmitSPIRV` (`emit_spirv.cpp`) now clears `relax_fp32_precision` for any shader with
+`program.info.stores_frag_depth`, so depth reconstruction and depth bias — where reduced
+precision shows up as z-fighting — keep full FP32. The stage check moved into
+`EmitContext::CanRelaxF32()` / `EmitContext::Relax()` in `spirv_emit_context.h`, so the helper is
+shared by the three emitter files instead of being duplicated.
+
+HDR values above 65504.0 still clip to inf under FP16. That is a property of the arithmetic, not
+of the decoration, and it is one more reason the switch stays off by default.
+
+### Core pinning: guest core 3 released
+
+Pass 1 pinned all four guest cores plus the record thread, i.e. five heavy threads into a
+four-core fast mask while SurfaceFlinger, audio and kernel workers compete for the same cores.
+`CpuManager::RunThread` now pins guest cores 0-2 and the GPU thread and leaves guest core 3 (the
+HOS system/idle thread) unpinned so it can float to a smaller core. The mask itself is unchanged.
+Setting description in `strings.xml` updated to match.
+
+### Audit correction: NCE is present in this tree
+
+Earlier text in `docs/MOBILE_PERF_AUDIT.md` claimed native execution does not exist here and that
+`MRS TPIDRRO_EL0` is not applicable. That was wrong. `src/core/arm/nce/` is present, `cpu_backend`
+defaults to `CpuBackend::Nce` under `HAS_NCE`, and `Settings::IsNceEnabled()` gates it. The TLS
+patch the checklist asks for is already implemented: `Patcher::Patch`
+(`src/core/arm/nce/patcher.cpp:117-130`) matches `MRS Xn, TPIDR_EL0` / `TPIDRRO_EL0` and
+`WriteMrsHandler` rewrites them to `MRS Xn, TPIDR_EL0; LDR Xn, [Xn, #offset]; B <next>`. The doc
+now records that, plus the Dynarmic path (`ir.GetTPIDRRO()`, x64 emitter reading the config
+pointer), instead of the incorrect "not applicable".
+
+### Verification
+
+All five changed translation units compile in the arm64 Release build tree
+(`emit_spirv.cpp.o`, `emit_spirv_context_get_set.cpp.o`, `emit_spirv_image.cpp.o`,
+`emit_spirv_floating_point.cpp.o`, `cpu_manager.cpp.o`; ninja reports no further work). **No
+device was attached, so there is no FPS, frametime, thermal or malioc/IR3 data for this pass.**
+The offline check that would confirm or refute the FP16 hypothesis is documented in
+`docs/MOBILE_PERF_AUDIT.md` section 3. MME ARM64 JIT, bindless descriptors and ADPF/thermal
+pacing are scoped there with integration points and reasons they are not in this change.
+
+
 
 Files: `src/common/settings.h`, `src/common/thread.{h,cpp}`, `src/core/cpu_manager.cpp`,
 `src/shader_recompiler/profile.h`, `src/shader_recompiler/backend/spirv/emit_spirv_floating_point.cpp`,
@@ -37,8 +97,8 @@ Both changed translation units compile in the arm64 Release build tree
 `video_core/renderer_vulkan/vk_pipeline_cache.cpp`, `common/thread.cpp`, `core/cpu_manager.cpp`).
 **No device, FPS or frametime measurement was taken for this update**, so it records mechanism, not
 a benchmark result. `docs/MOBILE_PERF_AUDIT.md` lists which items of the circulating Android
-emulator optimisation checklist are already implemented, which do not apply to a Dynarmic-based
-emulator, and which are still open.
+emulator optimisation checklist are already implemented, which are still open, and which do not
+apply to the Dynarmic and NCE backends in this tree.
 
 
 ## 2026-11-12 update — Mali layout experiments, BCn→ASTC and sync-request fast path

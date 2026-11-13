@@ -284,11 +284,11 @@ Id EmitGetCbufU32(EmitContext& ctx, const IR::Value& binding, const IR::Value& o
 
 Id EmitGetCbufF32(EmitContext& ctx, const IR::Value& binding, const IR::Value& offset) {
     if (ctx.profile.support_descriptor_aliasing) {
-        return GetCbuf(ctx, ctx.F32[1], &UniformDefinitions::F32, sizeof(f32), binding, offset,
-                       ctx.load_const_func_f32);
+        return ctx.Relax(GetCbuf(ctx, ctx.F32[1], &UniformDefinitions::F32, sizeof(f32), binding,
+                                 offset, ctx.load_const_func_f32));
     } else {
         const Id vector{GetCbufU32x4(ctx, binding, offset)};
-        return ctx.OpBitcast(ctx.F32[1], GetCbufElement(ctx, vector, offset, 0u));
+        return ctx.Relax(ctx.OpBitcast(ctx.F32[1], GetCbufElement(ctx, vector, offset, 0u)));
     }
 }
 

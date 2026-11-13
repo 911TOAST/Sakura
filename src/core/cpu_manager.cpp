@@ -176,9 +176,7 @@ void CpuManager::RunThread(std::stop_token token, std::size_t core) {
     std::string name = is_multicore ? ("CPUCore_" + std::to_string(core)) : std::string{"CPUThread"};
     Common::SetCurrentThreadName(name.c_str());
     Common::SetCurrentThreadPriority(Common::ThreadPriority::Critical);
-    // Guest code runs on this thread. On a big.LITTLE part a migration to a little core shows up
-    // directly as emulated time, so keep every guest core on the fast cluster as well.
-    if (Settings::values.renderer_core_pinning.GetValue()) {
+    if (core < 3 && Settings::values.renderer_core_pinning.GetValue()) {
         Common::PinCurrentThreadToFastCores();
     }
     auto& data = core_data[core];

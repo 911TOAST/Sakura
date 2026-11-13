@@ -503,7 +503,11 @@ void PatchPhiNodes(IR::Program& program, EmitContext& ctx) {
 } // Anonymous namespace
 
 std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info, IR::Program& program, Bindings& bindings) {
-    EmitContext ctx{profile, runtime_info, program, bindings};
+    Profile effective{profile};
+    if (program.info.stores_frag_depth) {
+        effective.relax_fp32_precision = false;
+    }
+    EmitContext ctx{effective, runtime_info, program, bindings};
     const Id main{DefineMain(ctx, program)};
     DefineEntryPoint(program, ctx, main);
     if (profile.support_float_controls) {
