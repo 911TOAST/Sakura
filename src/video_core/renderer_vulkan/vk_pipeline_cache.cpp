@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <system_error>
 #include <thread>
 #include <vector>
 #include <numeric>
@@ -69,7 +70,7 @@ using VideoCommon::FileEnvironment;
 using VideoCommon::GenericEnvironment;
 using VideoCommon::GraphicsEnvironment;
 
-constexpr u32 CACHE_VERSION = 20;
+constexpr u32 CACHE_VERSION = 21;
 constexpr std::array<char, 8> VULKAN_CACHE_MAGIC_NUMBER{'y', 'u', 'z', 'u', 'v', 'k', 'c', 'h'};
 
 constexpr u32 SPIRV_CACHE_MAGIC = 0x43565053; // "SPVC"
@@ -82,6 +83,7 @@ constexpr size_t MAX_CACHED_PAYLOAD_SIZE = 64 * 1024 * 1024;
 // game booted on this device/driver, so it is allowed to grow much larger than a per-title
 // cache, but it must not grow without bound: it is read in full on every boot.
 constexpr size_t MAX_GLOBAL_PIPELINE_CACHE_SIZE = 128 * 1024 * 1024;
+constexpr u32 CHECKPOINT_PIPELINE_THRESHOLD = 16;
 
 struct CachedStage {
     u32 stage_index{};
@@ -455,6 +457,10 @@ size_t GetTotalPipelineWorkers() {
 #endif
 }
 
+size_t GetBootPipelineWorkers() {
+    return std::max<size_t>(static_cast<size_t>(std::thread::hardware_concurrency()), 2ULL);
+}
+
 } // Anonymous namespace
 
 size_t ComputePipelineCacheKey::Hash() const noexcept {
@@ -487,9 +493,10 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
       texture_cache{texture_cache_}, shader_notify{shader_notify_},
       use_asynchronous_shaders{Settings::values.use_asynchronous_shaders.GetValue()},
       use_vulkan_pipeline_cache{Settings::values.use_vulkan_driver_pipeline_cache.GetValue()},
-      workers(device.HasBrokenParallelShaderCompiling() ? 1ULL : GetTotalPipelineWorkers(),
+      workers(device.HasBrokenParallelShaderCompiling() ? 1ULL : GetBootPipelineWorkers(),
               "VkPipelineBuilder"),
       serialization_thread(1, "VkPipelineSerialization") {
+    play_workers = device.HasBrokenParallelShaderCompiling() ? 1ULL : GetTotalPipelineWorkers();
     const auto& float_control{device.FloatControlProperties()};
     const VkDriverId driver_id{device.GetDriverID()};
     const VkShaderStageFlags subgroup_stages{device.GetSubgroupSupportedStages()};
@@ -578,6 +585,7 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .max_user_clip_distances = device.GetMaxUserClipDistances()
     };
     profile.relax_fp32_precision = Settings::values.renderer_relaxed_precision.GetValue();
+    profile.collect_debug_info = Settings::values.renderer_debug.GetValue();
 
     const std::string_view model_name{device.GetModelName()};
     // The salt must change whenever the serialized reflection layout changes, otherwise a cache
@@ -675,6 +683,15 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         device.SupportsProvokingVertexLastMode();
     dynamic_features.has_provoking_vertex_tf_preserve =
         device.SupportsTransformFeedbackProvokingVertexPreservation();
+
+    LOG_INFO(Render_Vulkan, "[GPL] library={} fast_link={} cache_control={} enabled={}",
+             device.SupportsGraphicsPipelineLibrary(),
+             device.SupportsGraphicsPipelineLibraryFastLinking(),
+             device.IsExtPipelineCreationCacheControlSupported(),
+             Settings::values.use_graphics_pipeline_library.GetValue());
+    LOG_INFO(Render_Vulkan, "[ShaderWorkers] boot={} play={}",
+             device.HasBrokenParallelShaderCompiling() ? 1ULL : GetBootPipelineWorkers(),
+             play_workers);
 }
 
 PipelineCache::~PipelineCache() {
@@ -811,6 +828,8 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
         return;
     }
     const auto warmup_start{std::chrono::steady_clock::now()};
+    workers.SetActiveThreads(device.HasBrokenParallelShaderCompiling() ? 1ULL
+                                                                       : GetBootPipelineWorkers());
     const auto shader_dir{Common::FS::GetSuyuPath(Common::FS::SuyuPath::ShaderDir)};
     const auto base_dir{shader_dir / fmt::format("{:016x}", title_id)};
     if (!Common::FS::CreateDir(shader_dir) || !Common::FS::CreateDir(base_dir)) {
@@ -998,6 +1017,7 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
     lock.unlock();
 
     workers.WaitForRequests(stop_loading);
+    workers.SetActiveThreads(play_workers);
 
     // Every pipeline above was created inside the worker threads, which calls
     // vkCreateGraphicsPipelines/vkCreateComputePipelines. That is the GPU warmup: by the time the
@@ -1135,7 +1155,15 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
         const auto runtime_info{MakeRuntimeInfo(programs, key, program, previous_stage, device)};
         ConvertLegacyToGeneric(program, runtime_info);
         std::vector<u32>& code{stage_codes[stage_index]};
+        const auto spv_t0{std::chrono::steady_clock::now()};
         code = EmitSPIRV(profile, runtime_info, program, binding);
+        const auto spv_t1{std::chrono::steady_clock::now()};
+        spv_bytes.fetch_add(code.size() * sizeof(u32), std::memory_order_relaxed);
+        spv_emit_us.fetch_add(
+            static_cast<u64>(std::chrono::duration_cast<std::chrono::microseconds>(spv_t1 - spv_t0)
+                                 .count()),
+            std::memory_order_relaxed);
+        spv_modules.fetch_add(1, std::memory_order_relaxed);
         device.SaveShader(code);
         modules[stage_index] = BuildShader(device, code);
 
@@ -1244,6 +1272,8 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
     std::vector<u8> cache_payload;
     auto pipeline{CreateGraphicsPipeline(main_pools, graphics_key, environments.Span(), nullptr,
                                          true, &cache_payload)};
+    cache_dirty.fetch_add(1, std::memory_order_relaxed);
+    RequestCheckpoint();
     if (!pipeline || pipeline_cache_filename.empty()) {
         return pipeline;
     }
@@ -1272,6 +1302,8 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
     main_pools.ReleaseContents();
     std::vector<u8> cache_payload;
     auto pipeline{CreateComputePipeline(main_pools, key, env, nullptr, true, &cache_payload)};
+    cache_dirty.fetch_add(1, std::memory_order_relaxed);
+    RequestCheckpoint();
     if (!pipeline || pipeline_cache_filename.empty()) {
         return pipeline;
     }
@@ -1319,7 +1351,15 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
                     max_shared_memory / 1024);
         program.shared_memory_size = max_shared_memory;
     }
+    const auto spv_t0{std::chrono::steady_clock::now()};
     std::vector<u32> code{EmitSPIRV(profile, program)};
+    const auto spv_t1{std::chrono::steady_clock::now()};
+    spv_bytes.fetch_add(code.size() * sizeof(u32), std::memory_order_relaxed);
+    spv_emit_us.fetch_add(
+        static_cast<u64>(
+            std::chrono::duration_cast<std::chrono::microseconds>(spv_t1 - spv_t0).count()),
+        std::memory_order_relaxed);
+    spv_modules.fetch_add(1, std::memory_order_relaxed);
     device.SaveShader(code);
     vk::ShaderModule spv_module{BuildShader(device, code)};
 
@@ -1396,27 +1436,84 @@ void PipelineCache::SerializeVulkanPipelineCache(const std::filesystem::path& fi
         return;
     }
 
-    std::ofstream file(filename, std::ios::binary);
-    file.exceptions(std::ifstream::failbit);
-    if (!file.is_open()) {
-        LOG_ERROR(Common_Filesystem, "Failed to open Vulkan driver pipeline cache file {}",
-                  Common::FS::PathToUTF8String(filename));
-        return;
+    const std::filesystem::path tmp{filename.string() + ".tmp"};
+    {
+        std::ofstream file(tmp, std::ios::binary);
+        file.exceptions(std::ifstream::failbit);
+        if (!file.is_open()) {
+            LOG_ERROR(Common_Filesystem, "Failed to open Vulkan driver pipeline cache file {}",
+                      Common::FS::PathToUTF8String(tmp));
+            return;
+        }
+        file.write(VULKAN_CACHE_MAGIC_NUMBER.data(), VULKAN_CACHE_MAGIC_NUMBER.size())
+            .write(reinterpret_cast<const char*>(&cache_version), sizeof(cache_version))
+            .write(cache_data.data(), cache_size);
     }
 
-    file.write(VULKAN_CACHE_MAGIC_NUMBER.data(), VULKAN_CACHE_MAGIC_NUMBER.size())
-        .write(reinterpret_cast<const char*>(&cache_version), sizeof(cache_version));
-    file.write(cache_data.data(), cache_size);
+    std::error_code ec;
+    std::filesystem::rename(tmp, filename, ec);
+    if (ec) {
+        std::filesystem::remove(filename, ec);
+        ec.clear();
+        std::filesystem::rename(tmp, filename, ec);
+        if (ec) {
+            LOG_ERROR(Common_Filesystem, "Failed to commit Vulkan driver pipeline cache {}: {}",
+                      Common::FS::PathToUTF8String(filename), ec.message());
+            std::filesystem::remove(tmp, ec);
+            return;
+        }
+    }
 
     LOG_INFO(Render_Vulkan, "Vulkan driver pipelines cached at: {} ({} bytes)",
              Common::FS::PathToUTF8String(filename), cache_size);
 
 } catch (const std::ios_base::failure& e) {
     LOG_ERROR(Common_Filesystem, "{}", e.what());
-    if (!Common::FS::RemoveFile(filename)) {
-        LOG_ERROR(Common_Filesystem, "Failed to delete Vulkan driver pipeline cache file {}",
-                  Common::FS::PathToUTF8String(filename));
+    std::error_code ec;
+    std::filesystem::remove(filename.string() + ".tmp", ec);
+}
+
+void PipelineCache::RequestCheckpoint() {
+    if (!use_vulkan_pipeline_cache ||
+        !Settings::values.vulkan_pipeline_cache_checkpoint.GetValue()) {
+        return;
     }
+    if (cache_dirty.load(std::memory_order_relaxed) < CHECKPOINT_PIPELINE_THRESHOLD) {
+        return;
+    }
+    if (checkpoint_pending.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+    serialization_thread.QueueWork([this] {
+        CheckpointVulkanPipelineCache();
+        checkpoint_pending.store(false, std::memory_order_release);
+    });
+}
+
+void PipelineCache::CheckpointVulkanPipelineCache() {
+    if (vulkan_pipeline_cache_filename.empty() || !vulkan_pipeline_cache) {
+        cache_dirty.store(0, std::memory_order_relaxed);
+        return;
+    }
+    size_t cache_size = 0;
+    vulkan_pipeline_cache.Read(&cache_size, nullptr);
+    if (cache_size == 0 || cache_size == checkpoint_size) {
+        cache_dirty.store(0, std::memory_order_relaxed);
+        return;
+    }
+    SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
+                                 CACHE_VERSION);
+    if (!global_vulkan_pipeline_cache_filename.empty()) {
+        SerializeVulkanPipelineCache(global_vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
+                                     CACHE_VERSION, MAX_GLOBAL_PIPELINE_CACHE_SIZE);
+    }
+    checkpoint_size = cache_size;
+    cache_dirty.store(0, std::memory_order_relaxed);
+    LOG_INFO(Render_Vulkan,
+             "[PipelineCache] checkpoint {} bytes | spv modules={} bytes={} emit_us={}",
+             cache_size, spv_modules.load(std::memory_order_relaxed),
+             spv_bytes.load(std::memory_order_relaxed),
+             spv_emit_us.load(std::memory_order_relaxed));
 }
 
 vk::PipelineCache PipelineCache::LoadVulkanPipelineCache(const std::filesystem::path& filename,

@@ -102,6 +102,8 @@ struct Profile {
     /// Allow the SPIR-V backend to decorate fragment FP32 arithmetic as RelaxedPrecision
     bool relax_fp32_precision{};
 
+    bool collect_debug_info{};
+
     bool SupportsSubgroupStage(Stage stage) const {
         return (supported_subgroup_stages & (1u << static_cast<u32>(stage))) != 0;
     }

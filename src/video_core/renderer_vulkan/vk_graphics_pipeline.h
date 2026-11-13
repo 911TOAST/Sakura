@@ -11,6 +11,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <shared_mutex>
 #include <type_traits>
 
 #include "common/thread_worker.h"
@@ -79,7 +80,8 @@ public:
         GuestDescriptorQueue& guest_descriptor_queue, Common::ThreadWorker* worker_thread,
         PipelineStatistics* pipeline_statistics, RenderPassCache& render_pass_cache,
         const GraphicsPipelineCacheKey& key, std::array<vk::ShaderModule, NUM_STAGES> stages,
-        const std::array<const Shader::Info*, NUM_STAGES>& infos);
+        const std::array<const Shader::Info*, NUM_STAGES>& infos,
+        std::shared_mutex* cache_lock = nullptr);
 
     bool HasDynamicVertexInput() const noexcept { return key.state.dynamic_vertex_input; }
     bool SupportsAlphaToCoverage() const noexcept {
@@ -137,6 +139,8 @@ private:
 
     void MakePipeline(VkRenderPass render_pass);
 
+    void LinkOptimized();
+
     void Validate();
 
     const GraphicsPipelineCacheKey key;
@@ -148,6 +152,7 @@ private:
     vk::PipelineCache& pipeline_cache;
     Scheduler& scheduler;
     GuestDescriptorQueue& guest_descriptor_queue;
+    std::shared_mutex* cache_lock{};
 
     bool (*configure_func)(GraphicsPipeline*, bool){};
 
@@ -175,6 +180,11 @@ private:
     vk::PipelineLayout pipeline_layout;
     vk::DescriptorUpdateTemplate descriptor_update_template;
     vk::Pipeline pipeline;
+    vk::Pipeline opt_pipeline;
+    std::array<vk::Pipeline, 4> gpl_libs;
+    VkRenderPass gpl_render_pass{};
+    std::atomic<bool> use_opt{false};
+    bool gpl_active{false};
 
     std::condition_variable build_condvar;
     std::mutex build_mutex;

@@ -23,9 +23,11 @@ static std::bitset<8> clip_distance_written;
 
 using Sirit::Id;
 
+class EmitContext;
+
 class VectorTypes {
 public:
-    void Define(Sirit::Module& sirit_ctx, Id base_type, std::string_view name);
+    void Define(EmitContext& ctx, Id base_type, std::string_view name);
 
     [[nodiscard]] Id operator[](size_t size) const noexcept {
         return defs[size - 1];
@@ -170,6 +172,20 @@ public:
 
     [[nodiscard]] bool CanRelaxF32() const {
         return profile.relax_fp32_precision && stage == Stage::Fragment;
+    }
+
+    Id Name(Id target, std::string_view name) {
+        if (profile.collect_debug_info) {
+            return Sirit::Module::Name(target, name);
+        }
+        return target;
+    }
+
+    Id MemberName(Id type, u32 member, std::string_view name) {
+        if (profile.collect_debug_info) {
+            return Sirit::Module::MemberName(type, member, name);
+        }
+        return type;
     }
 
     Id Relax(Id op) {

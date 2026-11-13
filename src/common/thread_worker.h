@@ -6,15 +6,16 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <type_traits>
 #include <vector>
-#include <queue>
 
 #include "common/polyfill_thread.h"
 #include "common/thread.h"
@@ -38,7 +39,8 @@ class StatefulThreadWorker {
 
 public:
     explicit StatefulThreadWorker(size_t num_workers, std::string name, StateMaker func = {})
-        : workers_queued{num_workers}, thread_name{std::move(name)} {
+        : workers_queued{num_workers}, active_limit{std::max<size_t>(num_workers, 1)},
+          thread_name{std::move(name)} {
         const auto lambda = [this, func](std::stop_token stop_token) {
             Common::SetCurrentThreadName(thread_name.c_str());
             {
@@ -47,23 +49,37 @@ public:
                     Task task;
                     {
                         std::unique_lock lock{queue_mutex};
-                        if (requests.empty()) {
+                        if (requests.empty() && pending.empty()) {
                             wait_condition.notify_all();
                         }
-                        condition.wait(lock, stop_token,
-                                       [this] { return !requests.empty(); });
+                        condition.wait(lock, stop_token, [this] {
+                            return (!requests.empty() || !pending.empty()) &&
+                                   running.load(std::memory_order::acquire) <
+                                       active_limit.load(std::memory_order::acquire);
+                        });
                         if (stop_token.stop_requested()) {
                             break;
                         }
-                        task = std::move(requests.front());
-                        requests.pop();
+                        running.fetch_add(1, std::memory_order::acq_rel);
+                        if (!requests.empty()) {
+                            task = std::move(requests.front());
+                            requests.pop_front();
+                        } else {
+                            task = std::move(pending.front());
+                            pending.pop_front();
+                        }
                     }
                     if constexpr (with_state) {
                         task(&state);
                     } else {
                         task();
                     }
-                    ++work_done;
+                    {
+                        std::scoped_lock lock{queue_mutex};
+                        ++work_done;
+                        running.fetch_sub(1, std::memory_order::acq_rel);
+                        condition.notify_one();
+                    }
                 }
             }
             ++workers_stopped;
@@ -82,12 +98,25 @@ public:
     StatefulThreadWorker(StatefulThreadWorker&&) = delete;
 
     void QueueWork(Task work) {
+        Queue(std::move(work), false);
+    }
+
+    void QueueWorkFront(Task work) {
         {
             std::unique_lock lock{queue_mutex};
-            requests.emplace(std::move(work));
+            requests.emplace_front(std::move(work));
             ++work_scheduled;
         }
         condition.notify_one();
+    }
+
+    void QueueWorkLow(Task work) {
+        Queue(std::move(work), true);
+    }
+
+    void SetActiveThreads(size_t count) {
+        active_limit.store(std::max<size_t>(count, 1), std::memory_order::release);
+        condition.notify_all();
     }
 
     void WaitForRequests(std::stop_token stop_token = {}) {
@@ -103,7 +132,21 @@ public:
     }
 
 private:
-    std::queue<Task> requests;
+    void Queue(Task work, bool low) {
+        {
+            std::unique_lock lock{queue_mutex};
+            if (low) {
+                pending.emplace_back(std::move(work));
+            } else {
+                requests.emplace_back(std::move(work));
+            }
+            ++work_scheduled;
+        }
+        condition.notify_one();
+    }
+
+    std::deque<Task> requests;
+    std::deque<Task> pending;
     std::mutex queue_mutex;
     std::condition_variable_any condition;
     std::condition_variable wait_condition;
@@ -111,6 +154,8 @@ private:
     std::atomic<size_t> work_done{};
     std::atomic<size_t> workers_stopped{};
     std::atomic<size_t> workers_queued{};
+    std::atomic<size_t> active_limit;
+    std::atomic<size_t> running{};
     std::string thread_name;
     std::vector<std::jthread> threads;
 };

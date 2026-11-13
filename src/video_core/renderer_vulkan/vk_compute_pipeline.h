@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <shared_mutex>
 #include <mutex>
 
 #include "common/common_types.h"
@@ -37,7 +38,8 @@ public:
                              Common::ThreadWorker* thread_worker,
                              PipelineStatistics* pipeline_statistics,
                              VideoCore::ShaderNotify* shader_notify, const Shader::Info& info,
-                             vk::ShaderModule spv_module, u64 shader_hash);
+                             vk::ShaderModule spv_module, u64 shader_hash,
+                             std::shared_mutex* cache_lock = nullptr);
 
     ComputePipeline& operator=(ComputePipeline&&) noexcept = delete;
     ComputePipeline(ComputePipeline&&) noexcept = delete;
@@ -52,6 +54,7 @@ private:
     const Device& device;
     vk::PipelineCache& pipeline_cache;
     GuestDescriptorQueue& guest_descriptor_queue;
+    std::shared_mutex* cache_lock{};
     Shader::Info info;
     u64 shader_hash{};
     u32 num_descriptor_entries{};

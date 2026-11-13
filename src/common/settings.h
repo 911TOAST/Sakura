@@ -664,6 +664,14 @@ struct Values {
         linkage, true, "use_vulkan_driver_pipeline_cache", Category::RendererAdvanced,
         Specialization::Default};
 
+    SwitchableSetting<bool> use_graphics_pipeline_library{linkage, false,
+                                                          "use_graphics_pipeline_library",
+                                                          Category::RendererAdvanced};
+
+    SwitchableSetting<bool> vulkan_pipeline_cache_checkpoint{
+        linkage, true, "vulkan_pipeline_cache_checkpoint", Category::RendererAdvanced,
+        Specialization::Default};
+
     SwitchableSetting<bool> enable_compute_pipelines{linkage, false, "enable_compute_pipelines",
                                                      Category::RendererAdvanced};
 

@@ -263,6 +263,9 @@ std::string_view StageName(Stage stage) {
 
 template <typename... Args>
 void Name(EmitContext& ctx, Id object, std::string_view format_str, Args&&... args) {
+    if (!ctx.profile.collect_debug_info) {
+        return;
+    }
     ctx.Name(object, fmt::format(fmt::runtime(format_str), StageName(ctx.stage),
                                  std::forward<Args>(args)...)
                          .c_str());
@@ -448,8 +451,8 @@ Id DescType(EmitContext& ctx, Id sampled_type, Id pointer_type, u32 count) {
 }
 } // Anonymous namespace
 
-void VectorTypes::Define(Sirit::Module& sirit_ctx, Id base_type, std::string_view name) {
-    defs[0] = sirit_ctx.Name(base_type, name);
+void VectorTypes::Define(EmitContext& ctx, Id base_type, std::string_view name) {
+    defs[0] = ctx.Name(base_type, name);
 
     std::array<char, 6> def_name;
     for (int i = 1; i < 4; ++i) {
@@ -457,7 +460,7 @@ void VectorTypes::Define(Sirit::Module& sirit_ctx, Id base_type, std::string_vie
             def_name.data(),
             fmt::format_to_n(def_name.data(), def_name.size(), "{}x{}", name, i + 1).size);
         defs[static_cast<size_t>(i)] =
-            sirit_ctx.Name(sirit_ctx.TypeVector(base_type, i + 1), def_name_view);
+            ctx.Name(ctx.TypeVector(base_type, i + 1), def_name_view);
     }
 }
 

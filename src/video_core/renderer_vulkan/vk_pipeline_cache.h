@@ -7,10 +7,12 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <filesystem>
 #include <limits>
 #include <memory>
+#include <shared_mutex>
 #include <span>
 #include <type_traits>
 #include <ankerl/unordered_dense.h>
@@ -159,6 +161,10 @@ private:
                                       const vk::PipelineCache& pipeline_cache, u32 cache_version,
                                       size_t max_size = std::numeric_limits<size_t>::max());
 
+    void CheckpointVulkanPipelineCache();
+
+    void RequestCheckpoint();
+
     vk::PipelineCache LoadVulkanPipelineCache(const std::filesystem::path& filename,
                                               u32 expected_cache_version);
 
@@ -203,6 +209,15 @@ private:
     std::filesystem::path vulkan_pipeline_cache_filename;
     std::filesystem::path global_vulkan_pipeline_cache_filename;
     vk::PipelineCache vulkan_pipeline_cache;
+
+    std::shared_mutex cache_lock;
+    std::atomic<u32> cache_dirty{};
+    std::atomic<bool> checkpoint_pending{};
+    std::atomic<u64> spv_bytes{};
+    std::atomic<u64> spv_emit_us{};
+    std::atomic<u32> spv_modules{};
+    size_t play_workers{};
+    size_t checkpoint_size{};
 
     Common::ThreadWorker workers;
     Common::ThreadWorker serialization_thread;

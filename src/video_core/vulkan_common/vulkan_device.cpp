@@ -1246,6 +1246,11 @@ bool Device::GetSuitability(bool requires_swapchain) {
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_PROPERTIES_KHR;
         SetNext(next, properties.maintenance5);
     }
+    if (extensions.graphics_pipeline_library) {
+        properties.gpl.sType =
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT;
+        SetNext(next, properties.gpl);
+    }
 
     // Perform the property fetch.
     physical.GetProperties2(properties2);
@@ -1325,6 +1330,18 @@ bool Device::GetSuitability(bool requires_swapchain) {
 }
 
 void Device::RemoveUnsuitableExtensions() {
+    extensions.graphics_pipeline_library =
+        features.graphics_pipeline_library.graphicsPipelineLibrary;
+    RemoveExtensionFeatureIfUnsuitable(extensions.graphics_pipeline_library,
+                                       features.graphics_pipeline_library,
+                                       VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME);
+
+    extensions.pipeline_creation_cache_control =
+        features.pipeline_creation_cache_control.pipelineCreationCacheControl;
+    RemoveExtensionFeatureIfUnsuitable(extensions.pipeline_creation_cache_control,
+                                       features.pipeline_creation_cache_control,
+                                       VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME);
+
     // VK_EXT_color_write_enable
     extensions.color_write_enable = features.color_write_enable.colorWriteEnable;
     RemoveExtensionFeatureIfUnsuitable(extensions.color_write_enable, features.color_write_enable,

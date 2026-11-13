@@ -240,6 +240,42 @@ ConfigureFuncPtr ConfigureFunc(const std::array<vk::ShaderModule, NUM_STAGES>& m
     return FindSpec<SimpleVertexSpec, SimpleVertexFragmentSpec, SimpleStorageSpec, SimpleImageSpec,
                     DefaultSpec>(modules, infos);
 }
+
+VkGraphicsPipelineLibraryFlagsEXT DynSubset(VkDynamicState s) {
+    switch (s) {
+    case VK_DYNAMIC_STATE_VERTEX_INPUT_EXT:
+    case VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT:
+    case VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT:
+    case VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE_EXT:
+        return VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT;
+    case VK_DYNAMIC_STATE_DEPTH_BOUNDS:
+    case VK_DYNAMIC_STATE_BLEND_CONSTANTS:
+    case VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK:
+    case VK_DYNAMIC_STATE_STENCIL_WRITE_MASK:
+    case VK_DYNAMIC_STATE_STENCIL_REFERENCE:
+    case VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT:
+    case VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT:
+    case VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT:
+    case VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT:
+    case VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT:
+    case VK_DYNAMIC_STATE_STENCIL_OP_EXT:
+    case VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT:
+    case VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT:
+    case VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT:
+    case VK_DYNAMIC_STATE_LOGIC_OP_EXT:
+    case VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT:
+    case VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
+    case VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT:
+    case VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT:
+        return VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
+    default:
+        return VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
+    }
+}
+
+std::atomic<u64> gpl_fast{0};
+std::atomic<u64> gpl_opt{0};
+std::atomic<u64> mono_builds{0};
 } // Anonymous namespace
 
 // TODO(crueter): This is the worst-formatted code I have EVER seen
@@ -250,10 +286,11 @@ GraphicsPipeline::GraphicsPipeline(
     GuestDescriptorQueue& guest_descriptor_queue_, Common::ThreadWorker* worker_thread,
     PipelineStatistics* pipeline_statistics, RenderPassCache& render_pass_cache,
     const GraphicsPipelineCacheKey& key_, std::array<vk::ShaderModule, NUM_STAGES> stages,
-    const std::array<const Shader::Info*, NUM_STAGES>& infos)
+    const std::array<const Shader::Info*, NUM_STAGES>& infos, std::shared_mutex* cache_lock_)
     : key{key_}, device{device_}, texture_cache{texture_cache_}, buffer_cache{buffer_cache_},
       pipeline_cache(pipeline_cache_), scheduler{scheduler_},
-      guest_descriptor_queue{guest_descriptor_queue_}, spv_modules{std::move(stages)} {
+      guest_descriptor_queue{guest_descriptor_queue_}, cache_lock{cache_lock_},
+      spv_modules{std::move(stages)} {
     if (shader_notify) {
         shader_notify->MarkShaderBuilding();
     }
@@ -273,7 +310,8 @@ GraphicsPipeline::GraphicsPipeline(
         num_descriptor_entries += NumDescriptorEntries(*info);
     }
     fragment_has_color0_output = stage_infos[NUM_STAGES - 1].stores_frag_color[0];
-    auto func{[this, shader_notify, &render_pass_cache, &descriptor_pool, pipeline_statistics] {
+    auto func{[this, shader_notify, &render_pass_cache, &descriptor_pool, pipeline_statistics,
+              worker_thread] {
         DescriptorLayoutBuilder builder{MakeBuilder(device, stage_infos)};
         uses_push_descriptor = builder.CanUsePushDescriptor();
         descriptor_set_layout = builder.CreateDescriptorSetLayout(uses_push_descriptor);
@@ -289,6 +327,10 @@ GraphicsPipeline::GraphicsPipeline(
 
         const VkRenderPass render_pass{render_pass_cache.Get(MakeRenderPassKey(key.state))};
         Validate();
+        std::shared_lock<std::shared_mutex> guard;
+        if (cache_lock) {
+            guard = std::shared_lock<std::shared_mutex>{*cache_lock};
+        }
         MakePipeline(render_pass);
         if (pipeline_statistics) {
             pipeline_statistics->Collect(device, *pipeline);
@@ -300,9 +342,12 @@ GraphicsPipeline::GraphicsPipeline(
         if (shader_notify) {
             shader_notify->MarkShaderComplete();
         }
+        if (gpl_active && worker_thread) {
+            worker_thread->QueueWorkLow([this] { LinkOptimized(); });
+        }
     }};
     if (worker_thread) {
-        worker_thread->QueueWork(std::move(func));
+        worker_thread->QueueWorkFront(std::move(func));
     } else {
         func();
     }
@@ -564,7 +609,10 @@ void GraphicsPipeline::ConfigureDraw(const RescalingPushConstant& rescaling,
                       uses_render_area = render_area.uses_render_area,
                       render_area_data = render_area.words](vk::CommandBuffer cmdbuf) {
         if (bind_pipeline) {
-            cmdbuf.BindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline);
+            const VkPipeline pl = (gpl_active && use_opt.load(std::memory_order_acquire))
+                                      ? *opt_pipeline
+                                      : *pipeline;
+            cmdbuf.BindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pl);
         }
         cmdbuf.PushConstants(*pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS,
                              RESCALING_LAYOUT_WORDS_OFFSET, sizeof(rescaling_data),
@@ -990,7 +1038,7 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
         flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
     }
 
-    pipeline = device.GetLogical().CreateGraphicsPipeline({
+    const VkGraphicsPipelineCreateInfo mono_ci{
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext = nullptr,
         .flags = flags,
@@ -1010,7 +1058,147 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
         .subpass = 0,
         .basePipelineHandle = nullptr,
         .basePipelineIndex = 0,
-    }, *pipeline_cache);
+    };
+
+    const bool use_gpl = Settings::values.use_graphics_pipeline_library.GetValue() &&
+                         device.SupportsGraphicsPipelineLibrary();
+    if (!use_gpl) {
+        pipeline = device.GetLogical().CreateGraphicsPipeline(mono_ci, *pipeline_cache);
+        mono_builds.fetch_add(1, std::memory_order_relaxed);
+    } else {
+        try {
+            static_vector<VkDynamicState, 34> vi_ds;
+            static_vector<VkDynamicState, 34> pr_ds;
+            static_vector<VkDynamicState, 34> fs_ds;
+            static_vector<VkDynamicState, 34> fo_ds;
+            for (const VkDynamicState s : dynamic_states) {
+                const VkGraphicsPipelineLibraryFlagsEXT sub{DynSubset(s)};
+                if (sub == VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) {
+                    vi_ds.push_back(s);
+                } else if (sub == VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) {
+                    fo_ds.push_back(s);
+                } else if (sub == VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) {
+                    pr_ds.push_back(s);
+                } else {
+                    fs_ds.push_back(s);
+                }
+            }
+            static_vector<VkPipelineShaderStageCreateInfo, 5> pre_stages;
+            static_vector<VkPipelineShaderStageCreateInfo, 5> frag_stages;
+            for (const auto& st : shader_stages) {
+                if (st.stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+                    frag_stages.push_back(st);
+                } else {
+                    pre_stages.push_back(st);
+                }
+            }
+            const static_vector<VkPipelineShaderStageCreateInfo, 5> no_stages;
+            const auto mk_lib = [&](VkGraphicsPipelineLibraryFlagsEXT sub,
+                                    const VkPipelineVertexInputStateCreateInfo* vi,
+                                    const VkPipelineInputAssemblyStateCreateInfo* ia,
+                                    const VkPipelineTessellationStateCreateInfo* ts,
+                                    const VkPipelineViewportStateCreateInfo* vp,
+                                    const VkPipelineRasterizationStateCreateInfo* rs,
+                                    const VkPipelineMultisampleStateCreateInfo* ms,
+                                    const VkPipelineDepthStencilStateCreateInfo* ds,
+                                    const VkPipelineColorBlendStateCreateInfo* cb,
+                                    const static_vector<VkDynamicState, 34>& dsv,
+                                    const static_vector<VkPipelineShaderStageCreateInfo, 5>& stg) {
+                const VkGraphicsPipelineLibraryCreateInfoEXT lib{
+                    .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT,
+                    .pNext = nullptr,
+                    .flags = sub,
+                };
+                const VkPipelineDynamicStateCreateInfo dci{
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .dynamicStateCount = static_cast<u32>(dsv.size()),
+                    .pDynamicStates = dsv.data(),
+                };
+                return device.GetLogical().CreateGraphicsPipeline({
+                    .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                    .pNext = &lib,
+                    .flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR |
+                             VK_PIPELINE_CREATE_RETAIN_LINK_TIME_OPTIMIZATION_INFO_BIT_EXT,
+                    .stageCount = static_cast<u32>(stg.size()),
+                    .pStages = stg.data(),
+                    .pVertexInputState = vi,
+                    .pInputAssemblyState = ia,
+                    .pTessellationState = ts,
+                    .pViewportState = vp,
+                    .pRasterizationState = rs,
+                    .pMultisampleState = ms,
+                    .pDepthStencilState = ds,
+                    .pColorBlendState = cb,
+                    .pDynamicState = &dci,
+                    .layout = *pipeline_layout,
+                    .renderPass = render_pass,
+                    .subpass = 0,
+                    .basePipelineHandle = nullptr,
+                    .basePipelineIndex = 0,
+                }, *pipeline_cache);
+            };
+            gpl_libs[0] = mk_lib(VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT,
+                                 &vertex_input_ci, &input_assembly_ci, nullptr, nullptr, nullptr,
+                                 nullptr, nullptr, nullptr, vi_ds, no_stages);
+            gpl_libs[1] = mk_lib(VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT,
+                                 nullptr, nullptr, &tessellation_ci, &viewport_ci, &rasterization_ci,
+                                 &multisample_ci, nullptr, nullptr, pr_ds, pre_stages);
+            gpl_libs[2] = mk_lib(VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT, nullptr,
+                                 nullptr, nullptr, nullptr, nullptr, &multisample_ci, nullptr,
+                                 nullptr, fs_ds, frag_stages);
+            gpl_libs[3] = mk_lib(VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT,
+                                 nullptr, nullptr, nullptr, nullptr, nullptr, &multisample_ci,
+                                 &depth_stencil_ci, &color_blend_ci, fo_ds, no_stages);
+            const std::array<VkPipeline, 4> lib_handles{*gpl_libs[0], *gpl_libs[1], *gpl_libs[2],
+                                                        *gpl_libs[3]};
+            const VkPipelineLibraryCreateInfoKHR link{
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR,
+                .pNext = nullptr,
+                .libraryCount = static_cast<u32>(lib_handles.size()),
+                .pLibraries = lib_handles.data(),
+            };
+            pipeline = device.GetLogical().CreateGraphicsPipeline({
+                .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                .pNext = &link,
+                .flags = 0,
+                .stageCount = 0,
+                .pStages = nullptr,
+                .pVertexInputState = nullptr,
+                .pInputAssemblyState = nullptr,
+                .pTessellationState = nullptr,
+                .pViewportState = nullptr,
+                .pRasterizationState = nullptr,
+                .pMultisampleState = nullptr,
+                .pDepthStencilState = nullptr,
+                .pColorBlendState = nullptr,
+                .pDynamicState = nullptr,
+                .layout = *pipeline_layout,
+                .renderPass = render_pass,
+                .subpass = 0,
+                .basePipelineHandle = nullptr,
+                .basePipelineIndex = 0,
+            }, *pipeline_cache);
+            gpl_render_pass = render_pass;
+            gpl_active = true;
+            gpl_fast.fetch_add(1, std::memory_order_relaxed);
+        } catch (const vk::Exception& e) {
+            LOG_WARNING(Render_Vulkan, "[GPL] fast-link failed, using monolithic: {}", e.what());
+            gpl_active = false;
+            pipeline = device.GetLogical().CreateGraphicsPipeline(mono_ci, *pipeline_cache);
+            mono_builds.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+
+    const u64 build_total{gpl_fast.load(std::memory_order_relaxed) +
+                          mono_builds.load(std::memory_order_relaxed)};
+    if (build_total != 0 && (build_total % 64) == 0) {
+        LOG_INFO(Render_Vulkan, "[PipelineBuild] fast={} opt={} mono={}",
+                 gpl_fast.load(std::memory_order_relaxed),
+                 gpl_opt.load(std::memory_order_relaxed),
+                 mono_builds.load(std::memory_order_relaxed));
+    }
 
     // Log graphics pipeline creation
     if (GPU::Logging::IsActive()) {
@@ -1020,6 +1208,47 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
             color_blend_ci.attachmentCount
         );
         GPU::Logging::GPULogger::GetInstance().LogPipelineStateChange(pipeline_info);
+    }
+}
+
+void GraphicsPipeline::LinkOptimized() {
+    if (!gpl_active) {
+        return;
+    }
+    const std::array<VkPipeline, 4> lib_handles{*gpl_libs[0], *gpl_libs[1], *gpl_libs[2],
+                                                *gpl_libs[3]};
+    const VkPipelineLibraryCreateInfoKHR link{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR,
+        .pNext = nullptr,
+        .libraryCount = static_cast<u32>(lib_handles.size()),
+        .pLibraries = lib_handles.data(),
+    };
+    try {
+        opt_pipeline = device.GetLogical().CreateGraphicsPipeline({
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &link,
+            .flags = VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT,
+            .stageCount = 0,
+            .pStages = nullptr,
+            .pVertexInputState = nullptr,
+            .pInputAssemblyState = nullptr,
+            .pTessellationState = nullptr,
+            .pViewportState = nullptr,
+            .pRasterizationState = nullptr,
+            .pMultisampleState = nullptr,
+            .pDepthStencilState = nullptr,
+            .pColorBlendState = nullptr,
+            .pDynamicState = nullptr,
+            .layout = *pipeline_layout,
+            .renderPass = gpl_render_pass,
+            .subpass = 0,
+            .basePipelineHandle = nullptr,
+            .basePipelineIndex = 0,
+        }, *pipeline_cache);
+        use_opt.store(true, std::memory_order_release);
+        gpl_opt.fetch_add(1, std::memory_order_relaxed);
+    } catch (const vk::Exception& e) {
+        LOG_WARNING(Render_Vulkan, "[GPL] optimized link failed, keeping fast-link: {}", e.what());
     }
 }
 

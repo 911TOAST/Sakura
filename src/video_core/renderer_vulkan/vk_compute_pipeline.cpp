@@ -37,9 +37,11 @@ ComputePipeline::ComputePipeline(const Device& device_, Scheduler& scheduler, vk
                                  Common::ThreadWorker* thread_worker,
                                  PipelineStatistics* pipeline_statistics,
                                  VideoCore::ShaderNotify* shader_notify, const Shader::Info& info_,
-                                 vk::ShaderModule spv_module_, u64 shader_hash_)
+                                 vk::ShaderModule spv_module_, u64 shader_hash_,
+                                 std::shared_mutex* cache_lock_)
     : device{device_},
-      pipeline_cache(pipeline_cache_), guest_descriptor_queue{guest_descriptor_queue_}, info{info_},
+      pipeline_cache(pipeline_cache_), guest_descriptor_queue{guest_descriptor_queue_},
+      cache_lock{cache_lock_}, info{info_},
       shader_hash{shader_hash_}, spv_module(std::move(spv_module_)) {
     if (shader_notify) {
         shader_notify->MarkShaderBuilding();
@@ -88,6 +90,10 @@ ComputePipeline::ComputePipeline(const Device& device_, Scheduler& scheduler, vk
             .basePipelineIndex = 0,
         };
         try {
+            std::shared_lock<std::shared_mutex> guard;
+            if (cache_lock) {
+                guard = std::shared_lock<std::shared_mutex>{*cache_lock};
+            }
             pipeline = device.GetLogical().CreateComputePipeline(compute_ci, *pipeline_cache);
         } catch (const vk::Exception& exception) {
             LOG_CRITICAL(Render_Vulkan, "Adreno rejected compute shader {:016X}: {}", shader_hash,
@@ -119,7 +125,7 @@ ComputePipeline::ComputePipeline(const Device& device_, Scheduler& scheduler, vk
         }
     }};
     if (thread_worker) {
-        thread_worker->QueueWork(std::move(func));
+        thread_worker->QueueWorkFront(std::move(func));
     } else {
         func();
     }
