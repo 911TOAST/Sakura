@@ -412,6 +412,12 @@ void BufferCacheRuntime::TickFrame(Common::SlotVector<Buffer>& slot_buffers) noe
     }
 }
 
+BufferCacheRuntime::~BufferCacheRuntime() {
+    LOG_INFO(Render_Vulkan, "Buffer copies: regions={}, batches={}",
+             copy_regions.load(std::memory_order_relaxed),
+             copy_batches.load(std::memory_order_relaxed));
+}
+
 u64 BufferCacheRuntime::CurrentTick() {
     return scheduler.GetMasterSemaphore().CurrentTick();
 }
@@ -461,32 +467,39 @@ void BufferCacheRuntime::CopyBuffer(VkBuffer dst_buffer, VkBuffer src_buffer,
         .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
     };
 
-    // Measuring a popular game, this number never exceeds the specified size once data is warmed up
-    boost::container::small_vector<VkBufferCopy, 8> vk_copies(copies.size());
-    std::ranges::transform(copies, vk_copies.begin(), MakeBufferCopy);
-    if (src_buffer == staging_pool.StreamBuf() && can_reorder_upload) {
-        scheduler.RecordUploadBuffer(
-            dst_buffer, [src_buffer, dst_buffer, vk_copies](
-                            vk::CommandBuffer, vk::CommandBuffer upload_cmdbuf) {
-                upload_cmdbuf.CopyBuffer(src_buffer, dst_buffer,
-                                         VideoCommon::FixSmallVectorADL(vk_copies));
-            });
-        return;
+    const bool upload = src_buffer == staging_pool.StreamBuf() && can_reorder_upload;
+    if (!upload) {
+        pending_copy_barrier |= !barrier;
+        scheduler.RequestOutsideRenderPassOperationContext();
     }
-
-    pending_copy_barrier |= !barrier;
-    scheduler.RequestOutsideRenderPassOperationContext();
-    scheduler.Record([src_buffer, dst_buffer, vk_copies, barrier](vk::CommandBuffer cmdbuf) {
-        if (barrier) {
-            cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER,
-                                   VK_PIPELINE_STAGE_TRANSFER_BIT, 0, READ_BARRIER);
+    copy_regions.fetch_add(copies.size(), std::memory_order_relaxed);
+    copy_batches.fetch_add((copies.size() + 7) / 8, std::memory_order_relaxed);
+    for (size_t i = 0; i < copies.size(); i += 8) {
+        std::array<VkBufferCopy, 8> q{};
+        const size_t n = std::min(q.size(), copies.size() - i);
+        std::ranges::transform(copies.subspan(i, n), q.begin(), MakeBufferCopy);
+        if (upload) {
+            scheduler.RecordUploadBuffer(
+                dst_buffer, [src_buffer, dst_buffer, q, n](
+                                vk::CommandBuffer, vk::CommandBuffer cmdbuf) {
+                    cmdbuf.CopyBuffer(src_buffer, dst_buffer, std::span{q}.first(n));
+                });
+        } else {
+            const bool first = barrier && i == 0;
+            const bool last = barrier && i + n == copies.size();
+            scheduler.Record([src_buffer, dst_buffer, q, n, first, last](vk::CommandBuffer cmdbuf) {
+                if (first) {
+                    cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER,
+                                           VK_PIPELINE_STAGE_TRANSFER_BIT, 0, READ_BARRIER);
+                }
+                cmdbuf.CopyBuffer(src_buffer, dst_buffer, std::span{q}.first(n));
+                if (last) {
+                    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                           VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
+                }
+            });
         }
-        cmdbuf.CopyBuffer(src_buffer, dst_buffer, VideoCommon::FixSmallVectorADL(vk_copies));
-        if (barrier) {
-            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                   VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
-        }
-    });
+    }
 }
 
 void BufferCacheRuntime::PreCopyBarrier() {

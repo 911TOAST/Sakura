@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <limits>
 
 #include "video_core/buffer_cache/buffer_cache_base.h"
@@ -96,6 +97,7 @@ public:
                                 GuestDescriptorQueue& guest_descriptor_queue,
                                 ComputePassDescriptorQueue& compute_pass_descriptor_queue,
                                 DescriptorPool& descriptor_pool);
+    ~BufferCacheRuntime();
 
     void TickFrame(Common::SlotVector<Buffer>& slot_buffers) noexcept;
 
@@ -203,6 +205,8 @@ private:
 
     std::unique_ptr<Uint8Pass> uint8_pass;
     QuadIndexedPass quad_index_pass;
+    std::atomic<u64> copy_regions{};
+    std::atomic<u64> copy_batches{};
 
     // Render-thread state for copies that deliberately omit their own post-copy barrier.
     bool pending_copy_barrier = false;
