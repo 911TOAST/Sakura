@@ -4,6 +4,8 @@
 // SPDX-FileCopyrightText: Copyright 2023 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <chrono>
+#include "common/adpf.h"
 #include "common/logging.h"
 #include "common/settings.h"
 #include "common/thread.h"
@@ -409,6 +411,11 @@ void PresentManager::PresentDirect(Frame* frame) {
     // entire presentation path.
     try {
         swapchain.Present(*frame->render_ready, frame->swapchain_image_index);
+        static auto prev_t = std::chrono::steady_clock::now();
+        auto cur_t = std::chrono::steady_clock::now();
+        int64_t dt = std::chrono::duration_cast<std::chrono::nanoseconds>(cur_t - prev_t).count();
+        prev_t = cur_t;
+        Common::AdpfFrameTick(dt, 16666666LL);
     } catch (const vk::Exception& except) {
         // A lost surface is rebuilt by the render thread on its next frame: surface and swapchain
         // objects belong to that thread, and this frame has nothing left to retry with.
@@ -439,6 +446,9 @@ void PresentManager::WaitPresent() {
 
 void PresentManager::PresentThread(std::stop_token token) {
     Common::SetCurrentThreadName("VulkanPresent");
+#if defined(__unix__) || defined(__ANDROID__)
+    Common::AdpfRegisterThread(static_cast<int32_t>(gettid()));
+#endif
 #ifdef __ANDROID__
     Common::SetCurrentThreadPriority(Common::ThreadPriority::High);
 #endif
@@ -472,14 +482,10 @@ void PresentManager::RecreateSwapchain(Frame* frame) {
 }
 
 void PresentManager::RecreateSwapchainDirect(u32 width, u32 height) {
-    // A queued present still references the current swapchain and its image views. Drain it
-    // before anything is destroyed; this is the rare path (resize, present mode change, lost
-    // surface), so the wait is not on any per-frame route.
     WaitPresent();
-    // The old image views and framebuffers reference swapchain images. Drain the GPU and destroy
-    // the wrappers before the images they point at are replaced.
     scheduler.Finish();
     device.GetLogical().WaitIdle();
+    Common::AdpfReset();
     frames.clear();
     swapchain.Create(*surface, width, height);
     SetImageCount();
@@ -702,8 +708,12 @@ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
         }
     }
 
-    // Present
     swapchain.Present(render_semaphore);
+    static auto prev_t2 = std::chrono::steady_clock::now();
+    auto cur_t2 = std::chrono::steady_clock::now();
+    int64_t dt2 = std::chrono::duration_cast<std::chrono::nanoseconds>(cur_t2 - prev_t2).count();
+    prev_t2 = cur_t2;
+    Common::AdpfFrameTick(dt2, 16666666LL);
 }
 
 } // namespace Vulkan
