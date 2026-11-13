@@ -2,6 +2,45 @@
 
 Date: 2026-10-24 (CPU pass), updated 2026-11-12 (Mali layout experiments + BCn→ASTC)
 
+## 2026-11-13 update — relaxed fragment precision and thread pinning
+
+Files: `src/common/settings.h`, `src/common/thread.{h,cpp}`, `src/core/cpu_manager.cpp`,
+`src/shader_recompiler/profile.h`, `src/shader_recompiler/backend/spirv/emit_spirv_floating_point.cpp`,
+`src/video_core/renderer_vulkan/vk_pipeline_cache.cpp`,
+`src/android/app/src/main/java/org/yuzu/yuzu_emu/features/settings/{model/BooleanSetting.kt,model/view/SettingsItem.kt,ui/SettingsFragmentPresenter.kt}`,
+`src/android/app/src/main/res/values/strings.xml`, `docs/MOBILE_PERF_AUDIT.md` (new).
+
+### Relaxed fragment precision (`renderer_relaxed_precision`, default off)
+
+Fragment FP32 arithmetic (add, multiply, fma, min/max, negate, reciprocal, sqrt, saturate/clamp,
+round/floor/ceil/trunc, sin/cos/exp2/log2) is now decorated `RelaxedPrecision` before the SPIR-V
+module is handed to the driver. The decoration does not change the result the shader computes; it
+tells the driver that the operation may be evaluated at reduced precision, which is how Mali and
+Adreno are allowed to run that chain at 16-bit and with fewer registers. Vertex math, depth,
+integer and comparison instructions are left alone, and the switch is off by default because
+whether a driver takes the hint — and whether a title looks right when it does — is unverified on
+hardware. The flag is part of the SPIR-V disk-cache salt, so toggling it regenerates shaders
+instead of replaying cached SPIR-V that was built with the other setting.
+
+### Thread pinning
+
+`PinCurrentThreadToFastCores` used to mask onto every core at peak capacity, which on a 1+3+4 or
+1+4+3 part is a single prime core, and only the GPU thread used it. The mask is now the four
+fastest cores, widened to the next capacity tier when the peak tier holds one core, and
+`CpuManager::RunThread` applies the same mask to every guest CPU thread. The existing
+`renderer_core_pinning` switch controls both.
+
+### Verification
+
+Both changed translation units compile in the arm64 Release build tree
+(`shader_recompiler/backend/spirv/emit_spirv_floating_point.cpp`,
+`video_core/renderer_vulkan/vk_pipeline_cache.cpp`, `common/thread.cpp`, `core/cpu_manager.cpp`).
+**No device, FPS or frametime measurement was taken for this update**, so it records mechanism, not
+a benchmark result. `docs/MOBILE_PERF_AUDIT.md` lists which items of the circulating Android
+emulator optimisation checklist are already implemented, which do not apply to a Dynarmic-based
+emulator, and which are still open.
+
+
 ## 2026-11-12 update — Mali layout experiments, BCn→ASTC and sync-request fast path
 
 Files: `src/common/settings.h`,

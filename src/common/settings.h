@@ -493,6 +493,18 @@ struct Values {
     SwitchableSetting<bool> renderer_draw_state_cache{linkage, false, "renderer_draw_state_cache",
                                                       Category::RendererDebug,
                                                       Specialization::Default, true, true};
+    // Marks every FP32 arithmetic result in a fragment shader RelaxedPrecision, which tells the
+    // driver it may evaluate that chain at reduced precision. Mali and Adreno run 16-bit float math
+    // at twice the rate of FP32 and with lower register pressure, so a driver that honours the
+    // decoration can cut fragment ALU time and power without changing what the shader computes.
+    // Only fragment arithmetic is decorated (vertex math, comparisons and integer ops are not), and
+    // the decoration is a permission rather than a demand, so a driver that keeps FP32 simply
+    // ignores it. Experimental: a driver that picks 16-bit for colour math can also pick it for
+    // something precision-sensitive, so it is off by default and meant for on-device A/B. Applies to
+    // shaders compiled after the setting changes; the driver pipeline cache keeps old ones.
+    SwitchableSetting<bool> renderer_relaxed_precision{linkage, false, "renderer_relaxed_precision",
+                                                       Category::RendererDebug,
+                                                       Specialization::Default, true, true};
     // Presents the frame that is already on screen instead of re-compositing it when the layer
     // layout is unchanged and the guest recorded no draw since the last presented frame. The
     // composition pass is then not recorded at all, so a static menu, pause screen or dialogue box

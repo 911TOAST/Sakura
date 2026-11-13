@@ -577,14 +577,18 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .min_ssbo_alignment = device.GetStorageBufferAlignment(),
         .max_user_clip_distances = device.GetMaxUserClipDistances()
     };
+    profile.relax_fp32_precision = Settings::values.renderer_relaxed_precision.GetValue();
 
     const std::string_view model_name{device.GetModelName()};
     // The salt must change whenever the serialized reflection layout changes, otherwise a cache
     // written by a different build is accepted and its fields are reinterpreted as the new layout.
+    // The relaxed precision switch changes the emitted SPIR-V itself, so it belongs in the salt
+    // too: without it, shaders cached before the switch was flipped keep coming back from disk.
     shader_cache_salt = Common::CityHash64(model_name.data(), model_name.size()) ^
                         (static_cast<u64>(device.GetDriverVersion()) << 32) ^
                         static_cast<u64>(device.ApiVersion()) ^
                         (static_cast<u64>(sizeof(Shader::Info)) << 16) ^
+                        (static_cast<u64>(profile.relax_fp32_precision) << 56) ^
                         static_cast<u64>(Shader::Serialize::InfoSerializationVersion);
 
     host_info = Shader::HostTranslateInfo{

@@ -182,21 +182,28 @@ bool PinCurrentThreadToFastCores(u32 max_cores) {
         return false;
     }
 
+    std::sort(cores.begin(), cores.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.first != rhs.first ? lhs.first > rhs.first : lhs.second < rhs.second;
+    });
+
+    // A single prime core is a real topology (1+3+4, 1+4+3). Masking a thread to that one core
+    // serialises it against every other pinned thread, so the fastest cluster is widened to the
+    // next capacity tier until the mask holds more than one core.
+    const std::size_t limit = max_cores == 0 ? 4 : max_cores;
+    std::size_t fast = 1;
+    while (fast < cores.size() && fast < limit && cores[fast].first == cores[0].first) {
+        ++fast;
+    }
+    if (fast == 1 && cores.size() > 1) {
+        while (fast < cores.size() && fast < limit && cores[fast].first == cores[1].first) {
+            ++fast;
+        }
+    }
+
     cpu_set_t mask;
     CPU_ZERO(&mask);
-    u32 pinned = 0;
-    for (const auto& [capacity, cpu] : cores) {
-        if (capacity != best_capacity) {
-            continue;
-        }
-        if (max_cores != 0 && pinned >= max_cores) {
-            break;
-        }
-        CPU_SET(static_cast<int>(cpu), &mask);
-        ++pinned;
-    }
-    if (pinned == 0) {
-        return false;
+    for (std::size_t i = 0; i < fast; ++i) {
+        CPU_SET(static_cast<int>(cores[i].second), &mask);
     }
     if (sched_setaffinity(0, sizeof(mask), &mask) != 0) {
         LOG_WARNING(Common, "Thread affinity refused by the kernel (errno={})", errno);

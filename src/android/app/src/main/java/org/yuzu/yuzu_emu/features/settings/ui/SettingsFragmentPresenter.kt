@@ -369,6 +369,7 @@ class SettingsFragmentPresenter(
             add(BooleanSetting.RENDERER_MAXWELL_BYPASS.key)
             add(BooleanSetting.RENDERER_CLEAR_LOADOP.key)
             add(BooleanSetting.RENDERER_STORE_ELISION.key)
+            add(BooleanSetting.RENDERER_RELAXED_PRECISION.key)
             add(BooleanSetting.RENDERER_BCN_TO_ASTC.key)
             add(BooleanSetting.RENDERER_AFBC_LAYOUTS.key)
             add(SettingsItem.GPU_UNSWIZZLE_COMBINED)
@@ -392,6 +393,7 @@ class SettingsFragmentPresenter(
         BooleanSetting.RENDERER_DRAW_STATE_CACHE,
         BooleanSetting.RENDERER_CLEAR_LOADOP,
         BooleanSetting.RENDERER_STORE_ELISION,
+        BooleanSetting.RENDERER_RELAXED_PRECISION,
         BooleanSetting.RENDERER_BCN_TO_ASTC,
         BooleanSetting.RENDERER_AFBC_LAYOUTS,
         BooleanSetting.RENDERER_OPTIMAL_ATTACHMENTS,
@@ -445,6 +447,7 @@ class SettingsFragmentPresenter(
             add(BooleanSetting.ENABLE_GPU_BUFFER_READBACK.key)
 
             add(HeaderSetting(R.string.experiments_group_shaders))
+            add(BooleanSetting.RENDERER_RELAXED_PRECISION.key)
             add(BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS.key)
             add(BooleanSetting.NO_WELL.key)
 

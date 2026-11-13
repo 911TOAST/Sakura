@@ -723,6 +723,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.RENDERER_RELAXED_PRECISION,
+                    titleId = R.string.renderer_relaxed_precision,
+                    descriptionId = R.string.renderer_relaxed_precision_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_BCN_TO_ASTC,
                     titleId = R.string.renderer_bcn_to_astc,
                     descriptionId = R.string.renderer_bcn_to_astc_description
