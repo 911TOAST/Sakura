@@ -50,7 +50,10 @@ patch the checklist asks for is already implemented: `Patcher::Patch`
 (`src/core/arm/nce/patcher.cpp:117-130`) matches `MRS Xn, TPIDR_EL0` / `TPIDRRO_EL0` and
 `WriteMrsHandler` rewrites them to `MRS Xn, TPIDR_EL0; LDR Xn, [Xn, #offset]; B <next>`. The doc
 now records that, plus the Dynarmic path (`ir.GetTPIDRRO()`, x64 emitter reading the config
-pointer), instead of the incorrect "not applicable".
+pointer), instead of the incorrect "not applicable". The Dynarmic half was checked further: on the
+arm64 host backend the guest `TPIDRRO_EL0` read compiles to `MOV Xscratch0, <&conf.tpidrro_el0>`
+plus `LDR Xvalue, [Xscratch0]` in `EmitIR<Opcode::A64GetTPIDRRO>`, so there is no host callback to
+remove — the item is closed for both backends.
 
 ### Verification
 

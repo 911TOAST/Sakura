@@ -46,12 +46,16 @@ further work is needed on this item.
 The second CPU backend in the tree, Dynarmic, needs no patching either: guest
 instructions go through its IR, and `TPIDRRO_EL0` is a first-class IR opcode
 (`externals/dynarmic/src/dynarmic/ir/opcodes.inc:79`,
-`frontend/A64/translate/impl/system.cpp:154` → `ir.GetTPIDRRO()`). On the x64 host
-backend `A64EmitX64` loads the value from the `tpidrro_el0` pointer stored in the
-JitState/config (`backend/x64/a64_emit_x64.cpp:570`, `interface/A64/config.h`
-bit 192) — a plain memory load, not a host call. Note that the concrete host
-configuration only matters on x86-64 hosts; Android ships the arm64 backend,
-which is the one to read when tuning.
+`frontend/A64/translate/impl/system.cpp:154` → `ir.GetTPIDRRO()`). The Android
+build uses the arm64 host backend, and there the read is two emitted
+instructions, not a host call: `EmitIR<Opcode::A64GetTPIDRRO>`
+(`backend/arm64/emit_arm64_a64.cpp`) emits `MOV Xscratch0, <address of
+conf.tpidrro_el0>` followed by `LDR Xvalue, [Xscratch0]`; `A64GetTPIDR` is the
+same shape. The x64 backend does the equivalent through the JitState
+(`backend/x64/a64_emit_x64.cpp:570`). In both cases the guest TLS read is a
+constant-address load, so there is no per-instruction trampoline to remove. The
+remaining cost in a TLS-heavy loop is the address materialisation itself, which
+is upstream Dynarmic's business rather than this fork's.
 
 **Guest RAM aliasing is already hardware-aliased.** On POSIX the whole
 guest-mapped arena is backed by one `memfd_create` object and each guest view is
