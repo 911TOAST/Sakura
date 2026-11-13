@@ -17,6 +17,7 @@
 #include "common/logging.h"
 #include "common/scope_exit.h"
 #include "common/settings.h"
+#include "video_core/asr_state.h"
 #include "video_core/buffer_cache/buffer_cache.h"
 #include "video_core/gpu_logging/gpu_logging.h"
 #include "video_core/control/channel_state.h"
@@ -52,6 +53,13 @@ namespace Vulkan {
 using Maxwell = Tegra::Engines::Maxwell3D::Regs;
 using VideoCommon::ImageViewId;
 using VideoCommon::ImageViewType;
+
+static std::atomic<uint64_t> skp_rb{0};
+static std::atomic<uint64_t> skp_qry{0};
+
+uint64_t RbSkipCount() noexcept { return skp_rb.load(std::memory_order_relaxed); }
+uint64_t QrySkipCount() noexcept { return skp_qry.load(std::memory_order_relaxed); }
+void QrySkipAdd(size_t n) noexcept { skp_qry.fetch_add(n, std::memory_order_relaxed); }
 
 
 namespace {
@@ -745,6 +753,10 @@ void RasterizerVulkan::FlushRegion(DAddr addr, u64 size, VideoCommon::CacheType 
     if (addr == 0 || size == 0) {
         return;
     }
+    if (Settings::values.skip_cpu_readback.GetValue()) {
+        skp_rb.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
     if (True(which & VideoCommon::CacheType::TextureCache)) {
         std::scoped_lock lock{texture_cache.mutex};
         texture_cache.DownloadMemory(addr, size);
@@ -1053,6 +1065,20 @@ std::optional<FramebufferTextureInfo> RasterizerVulkan::AccelerateDisplay(
     return info;
 }
 
+std::optional<AsrDepth> RasterizerVulkan::TakeDepth(u32 w, u32 h) {
+    std::scoped_lock lock{texture_cache.mutex};
+    bool inv = false;
+    ImageView* const iv = texture_cache.TakeSceneDepth(w, h, inv);
+    if (!iv) {
+        return std::nullopt;
+    }
+    const VkImageView dv = iv->DepthView();
+    if (dv == VK_NULL_HANDLE) {
+        return std::nullopt;
+    }
+    return AsrDepth{dv, iv->size.width, iv->size.height, inv};
+}
+
 void RasterizerVulkan::LoadDiskResources(u64 title_id, std::stop_token stop_loading,
                                          const VideoCore::DiskResourceLoadCallback& callback) {
     pipeline_cache.LoadDiskResources(title_id, stop_loading, callback);
@@ -1269,9 +1295,24 @@ void RasterizerVulkan::HandleTransformFeedback() {
 }
 
 void RasterizerVulkan::UpdateViewportsState(Tegra::Engines::Maxwell3D::Regs& regs) {
-    if (!state_tracker.TouchViewports()) {
+    auto& ast = VideoCore::asr_st;
+    const auto& rsi = Settings::values.resolution_info;
+    const bool jw =
+        ast.jon.load(std::memory_order_relaxed) != 0 && regs.viewport_scale_offset_enabled &&
+        regs.depth_test_enable != 0 &&
+        regs.anti_alias_samples_mode == Tegra::Texture::MsaaMode::Msaa1x1 &&
+        texture_cache.IsRescaling() &&
+        rsi.ScaleUp(static_cast<u32>(regs.surface_clip.width)) ==
+            ast.rw.load(std::memory_order_relaxed) &&
+        rsi.ScaleUp(static_cast<u32>(regs.surface_clip.height)) ==
+            ast.rh.load(std::memory_order_relaxed);
+    const u32 jg = ast.jg.load(std::memory_order_relaxed);
+    const bool touched = state_tracker.TouchViewports();
+    if (!touched && jw == jit_on && (!jw || jg == jit_g)) {
         return;
     }
+    jit_on = jw;
+    jit_g = jg;
 
     maxwell3d->dirty.flags[Dirty::Scissors] = true;
 
@@ -1310,6 +1351,14 @@ void RasterizerVulkan::UpdateViewportsState(Tegra::Engines::Maxwell3D::Regs& reg
     std::array<VkViewport, Maxwell::NumViewports> viewport_list{};
     for (u32 index = 0; index < num_viewports; ++index) {
         viewport_list[index] = GetViewportState(device, regs, index, scale);
+    }
+    if (jw) {
+        const f32 ox = ast.jx.load(std::memory_order_relaxed);
+        const f32 oy = ast.jy.load(std::memory_order_relaxed);
+        for (u32 index = 0; index < num_viewports; ++index) {
+            viewport_list[index].x += ox;
+            viewport_list[index].y += oy;
+        }
     }
     scheduler.Record([viewport_list, num_viewports](vk::CommandBuffer cmdbuf) {
         const vk::Span<VkViewport> viewports(viewport_list.data(), num_viewports);

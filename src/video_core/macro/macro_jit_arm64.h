@@ -21,5 +21,7 @@ std::unique_ptr<DynamicCachedMacro> CompileMacroArm64(Core::System& sys, std::sp
 
 uint64_t MmeJitHits() noexcept;
 uint64_t MmeJitMisses() noexcept;
+void MmeJitAddHit() noexcept;
+void MmeJitAddMiss() noexcept;
 
 }

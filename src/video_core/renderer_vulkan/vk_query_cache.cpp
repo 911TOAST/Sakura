@@ -16,6 +16,7 @@
 #include "video_core/renderer_vulkan/vk_texture_cache.h"
 #include "common/bit_util.h"
 #include "common/common_types.h"
+#include "common/settings.h"
 #include "video_core/engines/maxwell_3d.h"
 #include "video_core/host1x/gpu_device_memory_manager.h"
 #include "video_core/query_cache/query_cache.h"
@@ -27,6 +28,7 @@
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_staging_buffer_pool.h"
 #include "video_core/renderer_vulkan/vk_update_descriptor.h"
+#include "video_core/renderer_vulkan/vk_rasterizer.h"
 #include "video_core/vulkan_common/vulkan_device.h"
 #include "video_core/vulkan_common/vulkan_memory_allocator.h"
 #include "video_core/vulkan_common/vulkan_wrapper.h"
@@ -387,6 +389,15 @@ public:
             std::scoped_lock lk(flush_guard);
             current_flush_queries = std::move(pending_flush_sets.front());
             pending_flush_sets.pop_front();
+        }
+        if (Settings::values.approx_occlusion_queries.GetValue()) {
+            for (auto q : current_flush_queries) {
+                auto* query = GetQuery(q);
+                query->value = 1;
+                query->flags |= VideoCommon::QueryFlagBits::IsFinalValueSynced;
+            }
+            QrySkipAdd(current_flush_queries.size());
+            return;
         }
         ApplyBanksWideOp<false>(
             current_flush_queries,

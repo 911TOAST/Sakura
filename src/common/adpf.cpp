@@ -142,6 +142,12 @@ void AdpfRegisterThread(int32_t tid) {
 void AdpfReset() {
     while (g_tid_lock.test_and_set(std::memory_order_acquire)) {}
     g_adpf.Reset();
+    g_tid_lock.clear(std::memory_order_release);
+}
+
+void AdpfPurge() {
+    while (g_tid_lock.test_and_set(std::memory_order_acquire)) {}
+    g_adpf.Reset();
     g_ntids.store(0, std::memory_order_relaxed);
     for (auto& t : g_tids) { t = 0; }
     g_tid_lock.clear(std::memory_order_release);
@@ -151,7 +157,9 @@ void AdpfFrameTick(int64_t act_ns, int64_t tgt_ns) {
     if (!g_adpf.Active()) {
         size_t n = g_ntids.load(std::memory_order_relaxed);
         if (n > 0) {
-            g_adpf.Init(g_tids, std::min(n, MAX_TIDS), tgt_ns);
+            if (g_adpf.Init(g_tids, std::min(n, MAX_TIDS), tgt_ns) && n > std::min(n, MAX_TIDS)) {
+                g_adpf.SetThr(g_tids, std::min(n, MAX_TIDS));
+            }
         }
         return;
     }

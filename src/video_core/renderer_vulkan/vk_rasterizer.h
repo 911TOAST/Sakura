@@ -46,6 +46,10 @@ class Maxwell3D;
 
 namespace Vulkan {
 
+uint64_t RbSkipCount() noexcept;
+uint64_t QrySkipCount() noexcept;
+void QrySkipAdd(size_t n) noexcept;
+
 struct FramebufferTextureInfo;
 
 class StateTracker;
@@ -74,6 +78,13 @@ private:
     BufferCache& buffer_cache;
     TextureCache& texture_cache;
     Scheduler& scheduler;
+};
+
+struct AsrDepth {
+    VkImageView v;
+    u32 w;
+    u32 h;
+    bool inv;
 };
 
 class RasterizerVulkan final : public VideoCore::RasterizerInterface,
@@ -145,6 +156,8 @@ public:
     std::optional<FramebufferTextureInfo> AccelerateDisplay(const Tegra::FramebufferConfig& config,
                                                             VAddr framebuffer_addr,
                                                             u32 pixel_stride);
+
+    std::optional<AsrDepth> TakeDepth(u32 w, u32 h);
 
     /// Exposes the texture cache so the renderer can drop its rescaled copies when the internal
     /// resolution changes while a game is running.
@@ -240,6 +253,8 @@ private:
     boost::container::static_vector<VkSampler, MAX_TEXTURES> sampler_handles;
 
     u32 draw_counter = 0;
+    bool jit_on = false;
+    u32 jit_g = 0;
     /// Guest draws since renderer creation; see TotalDraws() and renderer_static_frame_skip.
     u64 total_draws = 0;
 

@@ -32,6 +32,7 @@ private:
 void AdpfRegisterThread(int32_t tid);
 void AdpfFrameTick(int64_t act_ns, int64_t tgt_ns);
 void AdpfReset();
+void AdpfPurge();
 uint64_t AdpfReports() noexcept;
 uint64_t AdpfSessions() noexcept;
 

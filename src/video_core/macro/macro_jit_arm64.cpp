@@ -34,6 +34,14 @@ uint64_t MmeJitMisses() noexcept {
     return mme_jit_miss.load(std::memory_order_relaxed);
 }
 
+void MmeJitAddHit() noexcept {
+    mme_jit_hits.fetch_add(1, std::memory_order_relaxed);
+}
+
+void MmeJitAddMiss() noexcept {
+    mme_jit_miss.fetch_add(1, std::memory_order_relaxed);
+}
+
 struct CodeMem {
     void* rx{};
     size_t sz{};

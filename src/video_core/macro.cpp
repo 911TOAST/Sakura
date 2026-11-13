@@ -1438,8 +1438,10 @@ AnyCachedMacro MacroEngine::Compile(Core::System& system, Engines::Maxwell3D& ma
     if (!is_interpreted) {
         auto jit = CompileMacroArm64(system, code);
         if (jit) {
+            MmeJitAddHit();
             return jit;
         }
+        MmeJitAddMiss();
     }
 #endif
     return MacroInterpreterImpl(code);

@@ -389,6 +389,12 @@ struct Values {
                                                            Specialization::Percentage,
                                                        true,
                                                        true};
+    SwitchableSetting<bool> asr_jitter{linkage,          false, "asr_jitter",
+                                       Category::Renderer, Specialization::Default, true,
+                                       true};
+    SwitchableSetting<bool> asr_mv_reuse{linkage,          false, "asr_mv_reuse",
+                                         Category::Renderer, Specialization::Default, true,
+                                         true};
     SwitchableSetting<AspectRatio, true> aspect_ratio{linkage,
                                                       AspectRatio::R16_9,
                                                       "aspect_ratio",
@@ -774,6 +780,12 @@ struct Values {
                                                        Specialization::Default,
                                                        true,
                                                        true};
+    SwitchableSetting<bool> skip_cpu_readback{linkage, false, "skip_cpu_readback",
+                                              Category::RendererAdvanced,
+                                              Specialization::Default, true, true};
+    SwitchableSetting<bool> approx_occlusion_queries{linkage, false, "approx_occlusion_queries",
+                                                     Category::RendererAdvanced,
+                                                     Specialization::Default, true, true};
 
     SwitchableSetting<bool> use_asynchronous_shaders{linkage,
 #if defined(__ANDROID__)
