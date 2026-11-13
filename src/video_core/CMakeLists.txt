@@ -398,6 +398,14 @@ if (ARCHITECTURE_x86_64)
     target_link_libraries(video_core PUBLIC xbyak::xbyak)
 endif()
 
+if (ARCHITECTURE_arm64)
+    target_sources(video_core PRIVATE
+        macro/macro_jit_arm64.cpp
+        macro/macro_jit_arm64.h
+    )
+    target_link_libraries(video_core PRIVATE merry::oaknut)
+endif()
+
 if (ARCHITECTURE_x86_64 OR ARCHITECTURE_arm64)
     target_link_libraries(video_core PRIVATE dynarmic::dynarmic)
 endif()

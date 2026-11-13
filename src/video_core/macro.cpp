@@ -15,6 +15,7 @@
 #ifdef ARCHITECTURE_x86_64
 #include "common/x64/xbyak.h"
 #endif
+#include "video_core/macro/macro_jit_arm64.h"
 
 #include "common/assert.h"
 #include "common/scope_exit.h"
@@ -1433,6 +1434,13 @@ AnyCachedMacro MacroEngine::Compile(Core::System& system, Engines::Maxwell3D& ma
 #ifdef ARCHITECTURE_x86_64
     if (!is_interpreted)
         return std::make_unique<MacroJITx64Impl>(system, code);
+#elif defined(ARCHITECTURE_arm64)
+    if (!is_interpreted) {
+        auto jit = CompileMacroArm64(system, code);
+        if (jit) {
+            return jit;
+        }
+    }
 #endif
     return MacroInterpreterImpl(code);
 }
