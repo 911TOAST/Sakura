@@ -20,7 +20,7 @@ Status legend: **present**, **partial**, **absent**, **not applicable**.
 | `memfd_create` + shared mapping for guest RAM | **present** | `src/common/host_memory.cpp:520-593` |
 | Batched I-cache maintenance for SMC | **present (dynarmic)** | `externals/dynarmic` |
 | big.LITTLE core pinning | **present, extended here** | `src/common/thread.cpp:165`, `src/video_core/gpu_thread.cpp:36`, `src/core/cpu_manager.cpp:175` |
-| JNI-free ROM streaming / input | **partial** | `src/android/app/src/main/jni/native_input.cpp`, `native.cpp` |
+| JNI-free ROM streaming / input | **present** | `FileUtil.kt:101` (`detachFd`), `native_input.cpp` |
 
 **TPIDRRO_EL0 is not a trap here.** suyu does not run guest ARM code natively.
 Guest instructions go through Dynarmic, an ARM64-to-host JIT, and
@@ -116,11 +116,11 @@ tuning, not something to bolt onto a shader toggle.
 
 ## 5. Audio and host caches
 
-Audio mixing already runs on its own thread with a lock-free ring into cubeb
-(`src/audio_core`), and the hot host caches use `ankerl::unordered_dense`
-(a flat open-addressed map) rather than `std::unordered_map` in the page,
-buffer and texture caches. Vectorising the mixer with NEON is possible, but the
-mixer is not frame-latency-critical on the devices this fork targets.
+Audio is mixed on its own `AudioManager` thread and handed to the cubeb sink in
+fixed-size buffers, so the mixer is not on the frame path and does not gate
+frame time on the devices this fork targets. Vectorising the voice mixer with
+NEON is possible, but it optimises a thread that is not the bottleneck on a
+title running at 22 fps because of GPU and TLS-style CPU work.
 
 ## What this change set actually alters
 
