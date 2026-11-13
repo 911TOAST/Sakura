@@ -220,6 +220,17 @@
                 android:shadowRadius="3"
                 tools:ignore="RtlHardcoded" />
 
+            <org.yuzu.yuzu_emu.overlay.SparklineView
+                android:id="@+id/frametime_sparkline"
+                android:layout_width="140dp"
+                android:layout_height="36dp"
+                android:layout_gravity="top|start"
+                android:layout_marginStart="@dimen/spacing_large"
+                android:layout_marginTop="40dp"
+                android:clickable="false"
+                android:focusable="false"
+                android:visibility="gone" />
+
         </FrameLayout>
 
         <!-- Blurred snapshot of the game, shown behind the translucent drawers -->

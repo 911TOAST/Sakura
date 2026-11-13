@@ -152,6 +152,8 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
     private lateinit var fwVersion: String
     private lateinit var buildId: String
     private lateinit var driverInUse: String
+    private lateinit var cpuBackend: String
+    private val ftBuf = DoubleArray(64)
 
     private var intentGame: Game? = null
     private var isCustomSettingsIntent = false
@@ -744,6 +746,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         val buildVersion = NativeLibrary.getBuildVersion()
         buildId = buildVersion.split("-").getOrNull(0) ?: ""
         driverInUse = driverViewModel.selectedDriverVersion.value
+        cpuBackend = NativeLibrary.getCpuBackend()
 
         updateQuickOverlayMenuEntry(BooleanSetting.SHOW_INPUT_OVERLAY.getBoolean())
         onPhysicalControllerStateChanged(InputHandler.androidControllers.isNotEmpty())
@@ -1693,6 +1696,16 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
             )
         }
         binding.showStatsOverlayText.setVisible(showPerfOverlay)
+        val showSpark = showPerfOverlay && BooleanSetting.SHOW_FRAMETIME.getBoolean()
+        binding.frametimeSparkline.setVisible(showSpark)
+        if (showSpark) {
+            binding.frametimeSparkline.setColor(
+                MaterialColors.getColor(
+                    binding.frametimeSparkline,
+                    com.google.android.material.R.attr.colorPrimary
+                )
+            )
+        }
         if (showPerfOverlay) {
             //val SYSTEM_FPS = 0
             val FPS = 1
@@ -1710,18 +1723,15 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                     val actualFps = perfStats[FPS]
 
                     if (BooleanSetting.SHOW_FPS.getBoolean(needsGlobal)) {
-                        var fpsText = String.format("FPS: %.1f", actualFps)
-                        sb.append(fpsText)
+                        sb.append("FPS: ")
+                        appendMs(sb, actualFps)
                     }
 
                     if (BooleanSetting.SHOW_FRAMETIME.getBoolean(needsGlobal)) {
                         if (sb.isNotEmpty()) sb.append(" | ")
-                        sb.append(
-                            String.format(
-                                "FT: %.1fms",
-                                (perfStats[FRAMETIME] * 1000.0f).toFloat()
-                            )
-                        )
+                        sb.append("FT: ")
+                        appendMs(sb, perfStats[FRAMETIME] * 1000.0)
+                        sb.append("ms")
                     }
 
                     if (BooleanSetting.SHOW_APP_RAM_USAGE.getBoolean(needsGlobal)) {
@@ -1790,6 +1800,28 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                         val prefix = getString(R.string.shaders_prefix)
                         val suffix = getString(R.string.shaders_suffix)
                         sb.append(String.format("$prefix %d $suffix", shadersBuilding))
+                    }
+
+                    if (BooleanSetting.SHOW_FRAMETIME.getBoolean(needsGlobal)) {
+                        val low = NativeLibrary.getFrametimeLow(240)
+                        if (low > 0.0) {
+                            if (sb.isNotEmpty()) sb.append(" | ")
+                            sb.append("1%: ")
+                            appendMs(sb, low)
+                            sb.append("ms")
+                        }
+                        val cnt = NativeLibrary.fillFrametimeHistory(ftBuf)
+                        binding.frametimeSparkline.push(ftBuf, cnt)
+                    }
+
+                    if (sb.isNotEmpty()) sb.append(" | ")
+                    sb.append(cpuBackend)
+
+                    val built = NativeLibrary.getShadersBuilt()
+                    if (built > 0) {
+                        if (sb.isNotEmpty()) sb.append(" | ")
+                        sb.append("SPV: ")
+                        sb.append(built)
                     }
 
                     val background = if (
@@ -1879,6 +1911,13 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
 
     private fun celsiusToFahrenheit(celsius: Float): Float {
         return (celsius * 9 / 5) + 32
+    }
+
+    private fun appendMs(sb: StringBuilder, v: Double) {
+        val scaled = (v * 10.0).toLong()
+        sb.append(scaled / 10)
+        sb.append('.')
+        sb.append(scaled % 10)
     }
 
     private fun updateSocOverlay() {

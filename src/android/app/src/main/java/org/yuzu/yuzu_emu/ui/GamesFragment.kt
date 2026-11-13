@@ -45,6 +45,7 @@ import org.yuzu.yuzu_emu.model.GamesViewModel
 import org.yuzu.yuzu_emu.model.HomeViewModel
 import org.yuzu.yuzu_emu.model.UpdateViewModel
 import org.yuzu.yuzu_emu.ui.main.MainActivity
+import org.yuzu.yuzu_emu.utils.FavStore
 import org.yuzu.yuzu_emu.utils.SuyuMotion
 import org.yuzu.yuzu_emu.utils.ViewUtils.updateMargins
 import org.yuzu.yuzu_emu.utils.collect
@@ -201,6 +202,12 @@ class GamesFragment : Fragment() {
             viewLifecycleOwner,
             resetState = { gamesViewModel.setShouldScrollToTop(false) }
         ) { if (it) scrollToTop() }
+
+        gamesViewModel.favTick.collect(viewLifecycleOwner) {
+            if (currentFilter == R.id.filter_favorites) {
+                filterAndSearch()
+            }
+        }
 
         gamesViewModel.shouldScrollAfterReload.collect(viewLifecycleOwner) { shouldScroll ->
             if (shouldScroll) {
@@ -538,6 +545,7 @@ class GamesFragment : Fragment() {
             R.id.alphabetical -> binding.filterChips.check(R.id.filter_alphabetical)
             R.id.filter_recently_played -> binding.filterChips.check(R.id.filter_recent)
             R.id.filter_recently_added -> binding.filterChips.check(R.id.filter_new)
+            R.id.filter_favorites -> binding.filterChips.check(R.id.filter_favorites)
             else -> binding.filterChips.check(R.id.filter_all)
         }
         binding.filterChips.setOnCheckedStateChangeListener { _, checkedIds ->
@@ -545,6 +553,7 @@ class GamesFragment : Fragment() {
                 R.id.filter_alphabetical -> R.id.alphabetical
                 R.id.filter_recent -> R.id.filter_recently_played
                 R.id.filter_new -> R.id.filter_recently_added
+                R.id.filter_favorites -> R.id.filter_favorites
                 else -> View.NO_ID
             }
             preferences.edit { putInt(PREF_SORT_TYPE, currentFilter) }
@@ -672,6 +681,7 @@ class GamesFragment : Fragment() {
                     preferences.getLong(it.keyAddedToLibraryTime, 0L) > recentCutoff
                 }.sortedByDescending { preferences.getLong(it.keyAddedToLibraryTime, 0L) }
             }
+            R.id.filter_favorites -> baseList.filter { FavStore.has(it.path) }
             else -> baseList
         }
 

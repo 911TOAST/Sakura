@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.pm.ShortcutInfoCompat
@@ -31,6 +32,7 @@ import org.yuzu.yuzu_emu.databinding.CardGameCarouselBinding
 import org.yuzu.yuzu_emu.model.Game
 import org.yuzu.yuzu_emu.model.GamesViewModel
 import org.yuzu.yuzu_emu.utils.GameIconUtils
+import org.yuzu.yuzu_emu.utils.FavStore
 import org.yuzu.yuzu_emu.utils.SuyuMotion
 import org.yuzu.yuzu_emu.utils.ViewUtils.marquee
 import org.yuzu.yuzu_emu.viewholder.AbstractViewHolder
@@ -344,6 +346,34 @@ class GameAdapter(private val activity: AppCompatActivity) :
         }
 
         fun onLongClick(game: Game): Boolean {
+            val popup = PopupMenu(activity, binding.root)
+            val fav = FavStore.has(game.path)
+            popup.menu.add(0, 1, 0, R.string.game_properties)
+            popup.menu.add(0, 2, 1, if (fav) R.string.unpin_favorite else R.string.pin_favorite)
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    1 -> {
+                        openProperties(game)
+                        true
+                    }
+                    2 -> {
+                        val added = FavStore.toggle(game.path)
+                        Toast.makeText(
+                            YuzuApplication.appContext,
+                            if (added) R.string.favorite_added else R.string.favorite_removed,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        ViewModelProvider(activity)[GamesViewModel::class.java].bumpFavorites()
+                        true
+                    }
+                    else -> false
+                }
+            }
+            popup.show()
+            return true
+        }
+
+        private fun openProperties(game: Game): Boolean {
             val action = HomeNavigationDirections.actionGlobalPerGamePropertiesFragment(game)
 
             // Long press opens the per-game properties screen with plain navigation.

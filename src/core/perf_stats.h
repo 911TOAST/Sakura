@@ -53,6 +53,10 @@ public:
     /// Rolling window of the most recent frametimes (ms), oldest first.
     std::vector<double> GetRecentFrametimes(std::size_t count) const;
 
+    double GetFrametimeLow(std::size_t count) const;
+
+    std::size_t FillRecentFrametimes(double* out, std::size_t cap) const;
+
     /**
      * Gets the ratio between walltime and the emulated time of the previous system frame. This is
      * useful for scaling inputs or outputs moving between the two time domains.

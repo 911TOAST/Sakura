@@ -51,6 +51,7 @@ import org.yuzu.yuzu_emu.utils.GameHelper
 import org.yuzu.yuzu_emu.utils.GameIconUtils
 import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.MemoryUtil
+import org.yuzu.yuzu_emu.utils.ShaderCacheShare
 import org.yuzu.yuzu_emu.utils.ViewUtils.marquee
 import org.yuzu.yuzu_emu.utils.ViewUtils.updateMargins
 import org.yuzu.yuzu_emu.utils.collect
@@ -470,6 +471,26 @@ class GamePropertiesFragment : Fragment() {
                         )
                     )
                 }
+                add(
+                    InstallableProperty(
+                        R.string.share_shader_cache,
+                        R.string.share_shader_cache_description,
+                        R.drawable.ic_share,
+                        {
+                            MessageDialogFragment.newInstance(
+                                requireActivity(),
+                                titleId = R.string.import_shader_cache_warning,
+                                descriptionId = R.string.import_shader_cache_warning_description,
+                                positiveAction = { importShaderCache.launch(arrayOf("application/zip")) }
+                            ).show(parentFragmentManager, MessageDialogFragment.TAG)
+                        },
+                        if (shaderCacheDir.exists()) {
+                            { exportShaderCache.launch(args.game.settingsName + "_shader.zip") }
+                        } else {
+                            null
+                        }
+                    )
+                )
                 if (NativeLibrary.playTimeManagerGetPlayTime(args.game.programId) > 0) {
                     add(
                         SubmenuProperty(
@@ -667,6 +688,92 @@ class GamePropertiesFragment : Fragment() {
     /**
      * Imports an ini file from external storage to internal app directory and override per-game config
      */
+    private val exportShaderCache = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { result ->
+        if (result == null) {
+            return@registerForActivityResult
+        }
+        ProgressDialogFragment.newInstance(
+            requireActivity(),
+            R.string.save_files_exporting,
+            false
+        ) { _, _ ->
+            val dir = File(
+                DirectoryInitialization.userDirectory +
+                    "/cache/shader/" + args.game.settingsName.lowercase()
+            )
+            if (!dir.exists()) {
+                return@newInstance getString(R.string.export_failed)
+            }
+            ShaderCacheShare.write(dir, args.game.programIdHex)
+            val zipResult = FileUtil.zipFromInternalStorage(
+                dir,
+                dir.absolutePath,
+                BufferedOutputStream(requireContext().contentResolver.openOutputStream(result)),
+                compression = false
+            )
+            ShaderCacheShare.clean(dir)
+            return@newInstance when (zipResult) {
+                TaskState.Completed -> getString(R.string.export_success)
+                TaskState.Cancelled, TaskState.Failed -> getString(R.string.export_failed)
+            }
+        }.show(parentFragmentManager, ProgressDialogFragment.TAG)
+    }
+
+    private val importShaderCache = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { result ->
+        if (result == null) {
+            return@registerForActivityResult
+        }
+        val dir = File(
+            DirectoryInitialization.userDirectory +
+                "/cache/shader/" + args.game.settingsName.lowercase()
+        )
+        val tmp = File(requireContext().cacheDir.path + "/shader_share/")
+        tmp.deleteRecursively()
+        tmp.mkdirs()
+        ProgressDialogFragment.newInstance(
+            requireActivity(),
+            R.string.save_files_importing,
+            false
+        ) { _, _ ->
+            try {
+                FileUtil.unzipToInternalStorage(result.toString(), tmp)
+                val manifest = ShaderCacheShare.read(tmp)
+                if (!ShaderCacheShare.compatible(manifest)) {
+                    tmp.deleteRecursively()
+                    withContext(Dispatchers.Main) {
+                        MessageDialogFragment.newInstance(
+                            requireActivity(),
+                            titleId = R.string.shader_cache_incompatible,
+                            descriptionId = R.string.shader_cache_incompatible_description
+                        ).show(parentFragmentManager, MessageDialogFragment.TAG)
+                    }
+                    return@newInstance getString(R.string.import_failed)
+                }
+                ShaderCacheShare.clean(tmp)
+                dir.deleteRecursively()
+                dir.mkdirs()
+                tmp.copyRecursively(dir)
+                tmp.deleteRecursively()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        YuzuApplication.appContext,
+                        getString(R.string.import_success),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    homeViewModel.reloadPropertiesList(true)
+                }
+                return@newInstance getString(R.string.import_success)
+            } catch (e: Exception) {
+                tmp.deleteRecursively()
+                return@newInstance getString(R.string.import_failed)
+            }
+        }.show(parentFragmentManager, ProgressDialogFragment.TAG)
+    }
+
     private val importConfig = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { result ->

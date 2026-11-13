@@ -42,6 +42,13 @@ class GamesViewModel : ViewModel() {
     val searchFocused: StateFlow<Boolean> get() = _searchFocused
     private val _searchFocused = MutableStateFlow(false)
 
+    val favTick: StateFlow<Int> get() = _favTick
+    private val _favTick = MutableStateFlow(0)
+
+    fun bumpFavorites() {
+        _favTick.value = _favTick.value + 1
+    }
+
     val shouldScrollAfterReload: StateFlow<Boolean> get() = _shouldScrollAfterReload
     private val _shouldScrollAfterReload = MutableStateFlow(false)
 

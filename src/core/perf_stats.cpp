@@ -101,6 +101,36 @@ std::vector<double> PerfStats::GetRecentFrametimes(std::size_t count) const {
     return out;
 }
 
+double PerfStats::GetFrametimeLow(std::size_t count) const {
+    std::scoped_lock lock{object_mutex};
+    const std::size_t n = std::min(count, recent_count);
+    if (n == 0) {
+        return 0.0;
+    }
+    std::array<double, RecentWindow> tmp{};
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::size_t idx = (recent_index + RecentWindow - 1 - i) % RecentWindow;
+        tmp[i] = recent_frametimes[idx];
+    }
+    std::sort(tmp.begin(), tmp.begin() + n);
+    const std::size_t k = std::max<std::size_t>(1, n / 100);
+    double sum = 0.0;
+    for (std::size_t i = 0; i < k; ++i) {
+        sum += tmp[n - 1 - i];
+    }
+    return sum / static_cast<double>(k);
+}
+
+std::size_t PerfStats::FillRecentFrametimes(double* out, std::size_t cap) const {
+    std::scoped_lock lock{object_mutex};
+    const std::size_t n = std::min(cap, recent_count);
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::size_t idx = (recent_index + RecentWindow - 1 - i) % RecentWindow;
+        out[n - 1 - i] = recent_frametimes[idx];
+    }
+    return n;
+}
+
 void PerfStats::EndGameFrame() {
     game_frames.fetch_add(1, std::memory_order_relaxed);
 }

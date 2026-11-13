@@ -11,6 +11,10 @@ class ShaderNotify {
 public:
     [[nodiscard]] int ShadersBuilding() noexcept;
 
+    [[nodiscard]] int ShadersBuilt() noexcept {
+        return num_complete.load(std::memory_order::relaxed);
+    }
+
     void MarkShaderComplete() noexcept {
         ++num_complete;
     }

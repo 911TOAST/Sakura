@@ -297,6 +297,12 @@
     <string name="home_filter_az">A\u2013Z</string>
     <string name="home_filter_recent">Recent</string>
     <string name="home_filter_new">New</string>
+    <string name="home_filter_favorites">Favorites</string>
+    <string name="pin_favorite">Pin to favorites</string>
+    <string name="unpin_favorite">Unpin from favorites</string>
+    <string name="favorite_added">Added to favorites</string>
+    <string name="favorite_removed">Removed from favorites</string>
+    <string name="game_properties">Properties</string>
     <string name="empty_state_eyebrow">A LITTLE ROOM TO PLAY</string>
     <string name="empty_library_title">Your library is waiting</string>
     <string name="empty_library_message">Choose the folder where you keep your games. Sakura will find the titles for you.</string>
@@ -984,6 +990,12 @@
     <string name="clear_shader_cache_description">Removes all shaders built while playing this game</string>
     <string name="clear_shader_cache_warning_description">You will experience more stuttering as the shader cache regenerates</string>
     <string name="cleared_shaders_successfully">Cleared shaders successfully</string>
+        <string name="share_shader_cache">Share shader cache</string>
+        <string name="share_shader_cache_description">Export or import the compiled shader and pipeline cache for this game</string>
+        <string name="import_shader_cache_warning">Import shader cache</string>
+        <string name="import_shader_cache_warning_description">This replaces the current shader cache for this game. Only import a cache exported from the same device and GPU driver.</string>
+        <string name="shader_cache_incompatible">Incompatible shader cache</string>
+        <string name="shader_cache_incompatible_description">This cache was exported from a different device or GPU driver and was not imported to avoid crashes.</string>
     <string name="driver_shader_wipe_dialog_title">Shaders Cleared</string>
     <string name="driver_shader_wipe_dialog_message">Sakura cleared the shader cache after a GPU driver change to prevent crashes and graphical corruption. You may experience some stuttering while shaders rebuild.</string>
     <string name="addons_game">Addons: %1$s</string>

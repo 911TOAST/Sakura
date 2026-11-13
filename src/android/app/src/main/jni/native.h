@@ -52,6 +52,7 @@ public:
 
     const Core::PerfStatsResults& PerfStats();
     int ShadersBuilding();
+    int ShadersBuilt();
     void ConfigureFilesystemProvider(const std::string& filepath);
     void ConfigureFilesystemProviderFromGameFolder(const std::string& filepath);
     void InitializeSystem(bool reload);

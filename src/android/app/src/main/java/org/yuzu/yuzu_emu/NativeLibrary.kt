@@ -219,6 +219,12 @@ object NativeLibrary {
      */
     external fun getShadersBuilding(): Int
 
+    external fun getShadersBuilt(): Int
+
+    external fun getFrametimeLow(limit: Int): Double
+
+    external fun fillFrametimeHistory(buf: DoubleArray): Int
+
     /**
      * Returns the current CPU backend.
      */
@@ -259,6 +265,7 @@ object NativeLibrary {
     external fun getVulkanDriverVersion(): String
     external fun getVulkanApiVersion(): String
     external fun getGpuModel(): String
+    external fun getGpuId(): String
 
     /**
      * Returns a summary of detailed information about the CPU.

@@ -284,6 +284,10 @@ int EmulationSession::ShadersBuilding() {
     return m_shaders_building;
 }
 
+int EmulationSession::ShadersBuilt() {
+    return m_system.GPU().ShaderNotify().ShadersBuilt();
+}
+
 void EmulationSession::SurfaceChanged() {
     if (!IsRunning()) {
         return;
@@ -1125,6 +1129,45 @@ jint Java_org_yuzu_yuzu_1emu_NativeLibrary_getShadersBuilding(JNIEnv* env, jclas
     return j_shaders;
 }
 
+jint Java_org_yuzu_yuzu_1emu_NativeLibrary_getShadersBuilt(JNIEnv* env, jclass clazz) {
+    if (EmulationSession::GetInstance().IsRunning()) {
+        return EmulationSession::GetInstance().ShadersBuilt();
+    }
+    return 0;
+}
+
+jdouble Java_org_yuzu_yuzu_1emu_NativeLibrary_getFrametimeLow(JNIEnv* env, jclass clazz, jint limit) {
+    if (EmulationSession::GetInstance().IsRunning() && limit > 0) {
+        return EmulationSession::GetInstance().System().GetPerfStats().GetFrametimeLow(
+            static_cast<std::size_t>(limit));
+    }
+    return 0.0;
+}
+
+jint Java_org_yuzu_yuzu_1emu_NativeLibrary_fillFrametimeHistory(JNIEnv* env, jclass clazz,
+                                                               jdoubleArray arr) {
+    if (!arr) {
+        return 0;
+    }
+    const jsize cap = env->GetArrayLength(arr);
+    if (cap <= 0) {
+        return 0;
+    }
+    double buf[240];
+    std::size_t lim = static_cast<std::size_t>(cap);
+    if (lim > 240) {
+        lim = 240;
+    }
+    std::size_t n = 0;
+    if (EmulationSession::GetInstance().IsRunning()) {
+        n = EmulationSession::GetInstance().System().GetPerfStats().FillRecentFrametimes(buf, lim);
+    }
+    if (n > 0) {
+        env->SetDoubleArrayRegion(arr, 0, static_cast<jsize>(n), buf);
+    }
+    return static_cast<jint>(n);
+}
+
 jstring Java_org_yuzu_yuzu_1emu_NativeLibrary_getCpuBackend(JNIEnv* env, jclass clazz) {
     if (Settings::IsNceEnabled()) {
         return Common::Android::ToJString(env, "NCE");
@@ -1339,6 +1382,15 @@ jstring Java_org_yuzu_yuzu_1emu_NativeLibrary_getGpuModel(JNIEnv* env, jobject j
     }
 
     return Common::Android::ToJString(env, props.deviceName);
+}
+
+jstring Java_org_yuzu_yuzu_1emu_NativeLibrary_getGpuId(JNIEnv* env, jobject jobj) {
+    const auto props = GetVulkanDeviceProperties();
+    if (props.deviceID == 0) {
+        return Common::Android::ToJString(env, "0:0");
+    }
+    const auto id = fmt::format("{:04x}:{:04x}", props.vendorID, props.deviceID);
+    return Common::Android::ToJString(env, id);
 }
 
 void Java_org_yuzu_yuzu_1emu_NativeLibrary_applySettings(JNIEnv* env, jobject jobj) {
