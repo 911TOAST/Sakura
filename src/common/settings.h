@@ -209,6 +209,8 @@ struct Values {
                                      linkage, false, "audio_muted", Category::Audio, Specialization::Default, true, true};
     Setting<bool, false> dump_audio_commands{
                                              linkage, false, "dump_audio_commands", Category::Audio, Specialization::Default, false};
+    SwitchableSetting<bool> fast_audio_dsp{linkage, false, "fast_audio_dsp", Category::Audio,
+                                           Specialization::Default, true, true};
 
     // Core
     SwitchableSetting<bool> use_multi_core{linkage, true, "use_multi_core", Category::Core};

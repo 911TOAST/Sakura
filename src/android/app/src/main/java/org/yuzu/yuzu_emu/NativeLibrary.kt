@@ -203,6 +203,8 @@ object NativeLibrary {
      */
     external fun getPerfStats(): DoubleArray
 
+    external fun getSkipStats(): LongArray
+
     /**
      * Frametime mean in ms, the emulation speed ratio, and shaders still building.
      * Does not reset the counters, unlike [getPerfStats].

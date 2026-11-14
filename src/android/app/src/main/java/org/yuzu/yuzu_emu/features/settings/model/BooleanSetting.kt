@@ -10,6 +10,7 @@ import org.yuzu.yuzu_emu.utils.NativeConfig
 
 enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     AUDIO_MUTED("audio_muted"),
+    FAST_AUDIO_DSP("fast_audio_dsp"),
     FASTMEM("cpuopt_fastmem"),
     FASTMEM_EXCLUSIVES("cpuopt_fastmem_exclusives"),
     CORE_SYNC_CORE_SPEED("sync_core_speed"),
@@ -38,6 +39,8 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     RENDERER_OPTIMAL_ATTACHMENTS("renderer_optimal_attachments"),
     RENDERER_FEEDBACK_LOOP_LAYOUT("renderer_feedback_loop_layout"),
     RENDERER_NARROW_PASS_BARRIERS("renderer_narrow_pass_barriers"),
+    SKIP_CPU_READBACK("skip_cpu_readback"),
+    APPROX_OCCLUSION_QUERIES("approx_occlusion_queries"),
     RENDERER_DRAW_STATE_CACHE("renderer_draw_state_cache"),
     RENDERER_STATIC_FRAME_SKIP("renderer_static_frame_skip"),
     RENDERER_CORE_PINNING("renderer_core_pinning"),
@@ -105,6 +108,7 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     SHOW_BAT_TEMPERATURE("show_bat_temperature"),
     SHOW_POWER_INFO("show_power_info"),
     SHOW_SHADERS_BUILDING("show_shaders_building"),
+    SHOW_SKIP_STATS("show_skip_stats"),
 
     DEBUG_FLUSH_BY_LINE("flush_line"),
     DONT_SHOW_DRIVER_SHADER_WARNING("dont_show_driver_shader_warning"),

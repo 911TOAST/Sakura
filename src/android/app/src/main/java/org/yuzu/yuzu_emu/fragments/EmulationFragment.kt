@@ -1824,6 +1824,19 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                         sb.append(built)
                     }
 
+                    if (BooleanSetting.SHOW_SKIP_STATS.getBoolean(needsGlobal)) {
+                        val sk = NativeLibrary.getSkipStats()
+                        if (sb.isNotEmpty()) sb.append(" | ")
+                        sb.append("RB:")
+                        sb.append(sk[0])
+                        sb.append(" Q:")
+                        sb.append(sk[1])
+                        sb.append(" JIT:")
+                        sb.append(sk[2])
+                        sb.append("/")
+                        sb.append(sk[3])
+                    }
+
                     val background = if (
                         BooleanSetting.PERF_OVERLAY_BACKGROUND.getBoolean(needsGlobal)
                     ) {

@@ -501,6 +501,13 @@ abstract class SettingsItem(
                     descriptionId = R.string.show_shaders_building_description
                 )
             )
+            put(
+                SwitchSetting(
+                    BooleanSetting.SHOW_SKIP_STATS,
+                    R.string.show_skip_stats,
+                    descriptionId = R.string.show_skip_stats_description
+                )
+            )
 
             put(
                 SwitchSetting(
@@ -761,6 +768,20 @@ abstract class SettingsItem(
                     BooleanSetting.RENDERER_NARROW_PASS_BARRIERS,
                     titleId = R.string.renderer_narrow_pass_barriers,
                     descriptionId = R.string.renderer_narrow_pass_barriers_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.SKIP_CPU_READBACK,
+                    titleId = R.string.skip_cpu_readback,
+                    descriptionId = R.string.skip_cpu_readback_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.APPROX_OCCLUSION_QUERIES,
+                    titleId = R.string.approx_occlusion_queries,
+                    descriptionId = R.string.approx_occlusion_queries_description
                 )
             )
             put(
@@ -1055,6 +1076,13 @@ abstract class SettingsItem(
                     titleId = R.string.audio_volume,
                     descriptionId = R.string.audio_volume_description,
                     units = "%"
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.FAST_AUDIO_DSP,
+                    titleId = R.string.fast_audio_dsp,
+                    descriptionId = R.string.fast_audio_dsp_description
                 )
             )
             put(

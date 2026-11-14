@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "audio_core/renderer/command/resample/resample.h"
+#include "common/settings.h"
 
 namespace AudioCore::Renderer {
 
@@ -867,7 +868,9 @@ void Resample(std::span<s32> output, std::span<const s16> input,
               Common::FixedPoint<49, 15>& fraction, const u32 samples_to_write,
               const SrcQuality src_quality) {
 
-    switch (src_quality) {
+    const SrcQuality q =
+        Settings::values.fast_audio_dsp.GetValue() ? SrcQuality::Low : src_quality;
+    switch (q) {
     case SrcQuality::Low:
         ResampleLowQuality(output, input, sample_rate_ratio, fraction, samples_to_write);
         break;

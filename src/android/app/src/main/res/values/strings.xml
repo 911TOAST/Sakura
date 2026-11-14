@@ -71,6 +71,8 @@
     <string name="show_power_info_description">Display current power draw and remaining capacity on battery</string>
     <string name="show_shaders_building">Show Shaders Building</string>
     <string name="show_shaders_building_description">Display current number of shaders being built</string>
+    <string name="show_skip_stats">Show skip counters</string>
+    <string name="show_skip_stats_description">Display the readback-skip, occlusion-skip and macro JIT hit/miss counters in the performance overlay.</string>
     <string name="pipeline_worker_cores">Pipeline Worker Threads</string>
     <string name="pipeline_worker_cores_description">Manage the amount of cores used for building Vulkan pipelines, the higher value will improve pipeline compilation performance but temperatures will increase as well.</string>
     <string name="mali_stream_buffer">Upload Buffer Size</string>
@@ -657,6 +659,10 @@
     <string name="renderer_feedback_loop_layout_description">When a draw samples the render target it is writing to (bloom, post-processing, UI compositing), keeps the target in a compressible feedback-loop layout instead of GENERAL, so Mali framebuffer compression stays active and the feedback barrier no longer breaks the render pass. Requires driver support for VK_EXT_attachment_feedback_loop_layout; without it nothing changes. Turn this off if a feedback-heavy scene shows artifacts.</string>
     <string name="renderer_narrow_pass_barriers">Narrow render pass barriers (experimental)</string>
     <string name="renderer_narrow_pass_barriers_description">Narrows the render pass synchronization stage masks from all commands to the stages that actually write and read the render targets, so the next pass can start its vertex work sooner instead of waiting for all fragment work. Based on Arm Mali pipeline guidance; access masks are unchanged so memory coherency is kept. May improve frame time on Mali. Correctness-sensitive: turn it off if a scene shows stale or missing pixels. Set it before launching a game.</string>
+    <string name="skip_cpu_readback">Skip CPU readback (experimental)</string>
+    <string name="skip_cpu_readback_description">Skips copying GPU-rendered data back into guest memory when the game reads a render target or buffer on the CPU. On a unified-memory phone this removes a full GPU-to-CPU copy and the stall waiting for it. Most games never read these surfaces back, so nothing changes; a game that does will show stale or missing data. Turn it off if a scene shows wrong or frozen pixels where the CPU reads GPU output.</string>
+    <string name="approx_occlusion_queries">Approximate occlusion queries (experimental)</string>
+    <string name="approx_occlusion_queries_description">Answers occlusion queries from the game with a constant visible result instead of counting samples on the GPU, so the query never forces a flush and wait. Games use these to decide whether to draw an object; treating everything as visible skips that cost but can draw objects that should have been culled. Turn it off if a game shows missing culling, extra geometry or flickering.</string>
     <string name="renderer_async_direct_present">Malikan async present</string>
     <string name="renderer_async_direct_present_description">Hands the zero-copy Malikan frame to the display from a dedicated thread, so the CPU starts the next frame instead of waiting for the render worker to drain. Mali GPUs only, and it takes effect when a game starts. Turn it off if a device shows pacing or surface glitches.</string>
     <string name="renderer_reactive_flushing">Use reactive flushing</string>
@@ -765,6 +771,8 @@
     <string name="audio_output_engine">Output engine</string>
     <string name="audio_volume">Volume</string>
     <string name="audio_volume_description">Specifies the volume of audio output.</string>
+    <string name="fast_audio_dsp">Fast audio resampling (experimental)</string>
+    <string name="fast_audio_dsp_description">Forces the cheapest sample-rate conversion path for every voice instead of the quality the game requests. This skips the multi-tap resampling filter and lowers audio CPU use, but pitch-shifted voices can sound coarser or alias. Reverb and other effects are unchanged. Turn it off if audio sounds wrong.</string>
 
     <!-- Input strings -->
     <string name="buttons">Buttons</string>

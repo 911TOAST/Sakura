@@ -95,6 +95,7 @@ extern "C" {
 #include <libavcodec/jni.h>
 }
 
+#include "common/adpf.h"
 #include "common/android/multiplayer/multiplayer.h"
 #include "common/android/android_common.h"
 #include "common/android/id_cache.h"
@@ -151,6 +152,9 @@ extern "C" {
 #include "video_core/vulkan_common/vulkan_instance.h"
 #include "video_core/vulkan_common/vulkan_surface.h"
 #include "video_core/shader_notify.h"
+#ifdef ARCHITECTURE_arm64
+#include "video_core/macro/macro_jit_arm64.h"
+#endif
 #include "network/announce_multiplayer_session.h"
 
 #define jconst [[maybe_unused]] const auto
@@ -430,6 +434,8 @@ void EmulationSession::ShutdownEmulation() {
     }
 
     m_is_running = false;
+
+    Common::AdpfPurge();
 
     // Unload user input.
     m_system.HIDCore().UnloadInputDevices();
@@ -1039,6 +1045,22 @@ jdoubleArray Java_org_yuzu_yuzu_1emu_NativeLibrary_getPerfStats(JNIEnv* env, jcl
     }
 
     return j_stats;
+}
+
+jlongArray Java_org_yuzu_yuzu_1emu_NativeLibrary_getSkipStats(JNIEnv* env, jclass clazz) {
+    jlongArray out = env->NewLongArray(4);
+    if (!out) {
+        return nullptr;
+    }
+    jlong v[4] = {};
+    v[0] = static_cast<jlong>(Vulkan::RbSkipCount());
+    v[1] = static_cast<jlong>(Vulkan::QrySkipCount());
+#ifdef ARCHITECTURE_arm64
+    v[2] = static_cast<jlong>(Tegra::MmeJitHits());
+    v[3] = static_cast<jlong>(Tegra::MmeJitMisses());
+#endif
+    env->SetLongArrayRegion(out, 0, 4, v);
+    return out;
 }
 
 // Non-destructive: getPerfStats() resets its window, so a second reader would starve the

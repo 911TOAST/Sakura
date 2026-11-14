@@ -178,6 +178,10 @@ namespace AndroidSettings {
                                                       Settings::Category::Overlay,
                                                       Settings::Specialization::Default, true, true,
                                                       &show_performance_overlay};
+        Settings::Setting<bool> show_skip_stats{linkage, false, "show_skip_stats",
+                                                Settings::Category::Overlay,
+                                                Settings::Specialization::Default, true, true,
+                                                &show_performance_overlay};
 
 
         // These threads run the driver's shader compiler via vkCreateGraphicsPipelines, which is

@@ -369,6 +369,8 @@ class SettingsFragmentPresenter(
             add(BooleanSetting.RENDERER_MAXWELL_BYPASS.key)
             add(BooleanSetting.RENDERER_CLEAR_LOADOP.key)
             add(BooleanSetting.RENDERER_STORE_ELISION.key)
+            add(BooleanSetting.SKIP_CPU_READBACK.key)
+            add(BooleanSetting.APPROX_OCCLUSION_QUERIES.key)
             add(BooleanSetting.RENDERER_RELAXED_PRECISION.key)
             add(BooleanSetting.RENDERER_BCN_TO_ASTC.key)
             add(BooleanSetting.RENDERER_AFBC_LAYOUTS.key)
@@ -407,7 +409,9 @@ class SettingsFragmentPresenter(
         BooleanSetting.NO_WELL,
         BooleanSetting.RENDERER_ASYNC_PRESENTATION,
         BooleanSetting.RENDERER_REACTIVE_FLUSHING,
-        BooleanSetting.SKIP_CPU_INNER_INVALIDATION
+        BooleanSetting.SKIP_CPU_INNER_INVALIDATION,
+        BooleanSetting.SKIP_CPU_READBACK,
+        BooleanSetting.APPROX_OCCLUSION_QUERIES
     )
 
     private fun addExperimentSettings(sl: ArrayList<SettingsItem>) {
@@ -455,6 +459,8 @@ class SettingsFragmentPresenter(
             add(BooleanSetting.RENDERER_ASYNC_PRESENTATION.key)
             add(BooleanSetting.RENDERER_REACTIVE_FLUSHING.key)
             add(BooleanSetting.SKIP_CPU_INNER_INVALIDATION.key)
+            add(BooleanSetting.SKIP_CPU_READBACK.key)
+            add(BooleanSetting.APPROX_OCCLUSION_QUERIES.key)
         }
     }
 
@@ -474,6 +480,7 @@ class SettingsFragmentPresenter(
             add(IntSetting.BAT_TEMPERATURE_UNIT.key)
             add(BooleanSetting.SHOW_POWER_INFO.key)
             add(BooleanSetting.SHOW_SHADERS_BUILDING.key)
+            add(BooleanSetting.SHOW_SKIP_STATS.key)
         }
     }
 
@@ -524,6 +531,7 @@ class SettingsFragmentPresenter(
         sl.apply {
             add(IntSetting.AUDIO_OUTPUT_ENGINE.key)
             add(ByteSetting.AUDIO_VOLUME.key)
+            add(BooleanSetting.FAST_AUDIO_DSP.key)
         }
     }
 
