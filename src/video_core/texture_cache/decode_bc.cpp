@@ -6,16 +6,28 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <span>
 #include <bc_decoder.h>
 
 #include "common/common_types.h"
+#include "common/logging.h"
 #include "video_core/texture_cache/decode_bc.h"
 
 namespace VideoCommon {
 
 namespace {
 constexpr u32 BLOCK_SIZE = 4;
+
+u64 NowUs() noexcept {
+    return static_cast<u64>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                std::chrono::steady_clock::now().time_since_epoch())
+                                .count());
+}
+
+std::atomic<u64> bc_bytes{};
+std::atomic<u64> bc_us{};
 
 using VideoCore::Surface::PixelFormat;
 
@@ -98,6 +110,7 @@ void DecompressBlocks(std::span<const u8> input, std::span<u8> output, BufferIma
 
 void DecompressBCn(std::span<const u8> input, std::span<u8> output, BufferImageCopy& copy,
                    VideoCore::Surface::PixelFormat pixel_format) {
+    const u64 t0 = NowUs();
     switch (pixel_format) {
     case PixelFormat::BC1_RGBA_UNORM:
     case PixelFormat::BC1_RGBA_SRGB:
@@ -132,6 +145,16 @@ void DecompressBCn(std::span<const u8> input, std::span<u8> output, BufferImageC
         break;
     default:
         LOG_WARNING(HW_GPU, "Unimplemented BCn decompression {}", pixel_format);
+    }
+
+    const u64 dt = NowUs() - t0;
+    const u64 bytes = bc_bytes.fetch_add(output.size(), std::memory_order_relaxed) + output.size();
+    const u64 us = bc_us.fetch_add(dt, std::memory_order_relaxed) + dt;
+    if (bytes >= (32ull << 20) && us > 0) {
+        LOG_INFO(HW_GPU, "BCn decode {} MB in {} us {} MB/s", bytes >> 20, us,
+                 (bytes * 1000000ull) / (us << 20));
+        bc_bytes.store(0, std::memory_order_relaxed);
+        bc_us.store(0, std::memory_order_relaxed);
     }
 }
 
