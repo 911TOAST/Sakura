@@ -10,6 +10,14 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#define BCN_NEON 1
+#include <arm_neon.h>
+#else
+#define BCN_NEON 0
+#endif
 
 namespace {
     constexpr int BlockWidth = 4;
@@ -1464,6 +1472,154 @@ namespace {
         };
 
     }  // namespace BC7
+
+#if BCN_NEON
+    inline uint64_t BcLoad64(const uint8_t *src) {
+        uint64_t v;
+        memcpy(&v, src, sizeof(v));
+        return v;
+    }
+
+    inline uint32_t BcExpand565(unsigned c) {
+        const unsigned r = ((c & 0x1Fu) << 3) | ((c & 0x1Cu) >> 2);
+        const unsigned g = ((c & 0x7E0u) >> 3) | ((c & 0x600u) >> 9);
+        const unsigned b = ((c & 0xF800u) >> 8) | ((c & 0xE000u) >> 13);
+        return (r << 16) | (g << 8) | b | 0xFF000000u;
+    }
+
+    inline uint32_t BcBlend3(uint32_t a, uint32_t b, unsigned wa, unsigned wb) {
+        uint32_t o = 0;
+        for (int s = 0; s < 32; s += 8) {
+            const unsigned av = (a >> s) & 0xFFu;
+            const unsigned bv = (b >> s) & 0xFFu;
+            o |= (((av * wa) + (bv * wb)) / 3u) << s;
+        }
+        return o;
+    }
+
+    inline uint32_t BcAvg(uint32_t a, uint32_t b) {
+        uint32_t o = 0;
+        for (int s = 0; s < 32; s += 8) {
+            o |= ((((a >> s) & 0xFFu) + ((b >> s) & 0xFFu)) >> 1) << s;
+        }
+        return o;
+    }
+
+    inline void BcColorBlock(const uint8_t *src, uint8_t *dst, size_t pitch, bool four) {
+        const unsigned c0 = unsigned(src[0]) | (unsigned(src[1]) << 8);
+        const unsigned c1 = unsigned(src[2]) | (unsigned(src[3]) << 8);
+        const uint32_t idx = uint32_t(src[4]) | (uint32_t(src[5]) << 8) |
+                             (uint32_t(src[6]) << 16) | (uint32_t(src[7]) << 24);
+        const uint32_t p0 = BcExpand565(c0);
+        const uint32_t p1 = BcExpand565(c1);
+        uint32_t p[4] = {p0, p1, 0, 0};
+        if (four || c0 > c1) {
+            p[2] = BcBlend3(p0, p1, 2, 1);
+            p[3] = BcBlend3(p0, p1, 1, 2);
+        } else {
+            p[2] = BcAvg(p0, p1);
+        }
+        static const uint8_t kBo[16] = {0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3};
+        static const int8_t kSh[16] = {0, 0, 0, 0, -2, -2, -2, -2, -4, -4, -4, -4, -6, -6, -6, -6};
+        uint8_t tb[16];
+        memcpy(tb, p, sizeof(tb));
+        const uint8x16_t tbl = vld1q_u8(tb);
+        const uint8x16_t bo = vld1q_u8(kBo);
+        const int8x16_t sh = vld1q_s8(kSh);
+        const uint8x16_t m3 = vdupq_n_u8(3);
+        for (int r = 0; r < BlockHeight; ++r) {
+            const uint8x16_t d = vdupq_n_u8(uint8_t((idx >> (r * 8)) & 0xFFu));
+            const uint8x16_t ii = vandq_u8(vshlq_u8(d, sh), m3);
+            const uint8x16_t off = vaddq_u8(vshlq_n_u8(ii, 2), bo);
+            vst1q_u8(dst + size_t(r) * pitch, vqtbl1q_u8(tbl, off));
+        }
+    }
+
+    inline void BcChannelPalette(uint64_t data, bool isSigned, uint8_t out[8]) {
+        int c0;
+        int c1;
+        if (isSigned) {
+            c0 = int(static_cast<signed char>(data & 0xFFu));
+            c1 = int(static_cast<signed char>((data >> 8) & 0xFFu));
+        } else {
+            c0 = int(uint8_t(data & 0xFFu));
+            c1 = int(uint8_t((data >> 8) & 0xFFu));
+        }
+        out[0] = uint8_t(c0);
+        out[1] = uint8_t(c1);
+        if (c0 > c1) {
+            for (int i = 2; i < 8; ++i) {
+                out[i] = uint8_t(((8 - i) * c0 + (i - 1) * c1) / 7);
+            }
+        } else {
+            for (int i = 2; i < 6; ++i) {
+                out[i] = uint8_t(((6 - i) * c0 + (i - 1) * c1) / 5);
+            }
+            out[6] = isSigned ? uint8_t(-128) : uint8_t(0);
+            out[7] = isSigned ? uint8_t(127) : uint8_t(255);
+        }
+    }
+
+    inline uint32_t BcRowIdx(uint64_t data, int r) {
+        const uint32_t b = uint32_t((data >> (16 + 12 * r)) & 0xFFFu);
+        return (b & 7u) | (((b >> 3) & 7u) << 8) | (((b >> 6) & 7u) << 16) |
+               (((b >> 9) & 7u) << 24);
+    }
+
+    inline uint32x2_t BcGather4(const uint8_t pal[8], uint32_t ip) {
+        const uint8x8_t tbl = vld1_u8(pal);
+        const uint8x8_t ix = vand_u8(vreinterpret_u8_u32(vld1_dup_u32(&ip)), vdup_n_u8(7));
+        return vreinterpret_u32_u8(vtbl1_u8(tbl, ix));
+    }
+
+    inline void BcAlphaRow(const uint8_t pal[8], uint16_t bits, uint8_t *row) {
+        const uint32_t w = uint32_t(pal[bits & 7]) | (uint32_t(pal[(bits >> 3) & 7]) << 8) |
+                           (uint32_t(pal[(bits >> 6) & 7]) << 16) |
+                           (uint32_t(pal[(bits >> 9) & 7]) << 24);
+        static const int32_t kSh[4] = {24, 16, 8, 0};
+        static const uint8_t kMask[16] = {0, 0, 0, 0xFF, 0, 0, 0, 0xFF,
+                                          0, 0, 0, 0xFF, 0, 0, 0, 0xFF};
+        const uint32x4_t sv = vshlq_u32(vdupq_n_u32(w), vld1q_s32(kSh));
+        const uint8x16_t px = vld1q_u8(row);
+        vst1q_u8(row, vbslq_u8(vld1q_u8(kMask), vreinterpretq_u8_u32(sv), px));
+    }
+
+    inline void Bc3Block(const uint8_t *src, uint8_t *dst, size_t pitch) {
+        const uint64_t ad = BcLoad64(src);
+        uint8_t pal[8];
+        BcChannelPalette(ad, false, pal);
+        BcColorBlock(src + 8, dst, pitch, true);
+        for (int r = 0; r < BlockHeight; ++r) {
+            BcAlphaRow(pal, uint16_t((ad >> (16 + 12 * r)) & 0xFFFu), dst + size_t(r) * pitch);
+        }
+    }
+
+    inline void Bc4Block(const uint8_t *src, uint8_t *dst, size_t pitch, bool isSigned) {
+        const uint64_t data = BcLoad64(src);
+        uint8_t pal[8];
+        BcChannelPalette(data, isSigned, pal);
+        for (int r = 0; r < BlockHeight; ++r) {
+            const uint32_t v = vget_lane_u32(BcGather4(pal, BcRowIdx(data, r)), 0);
+            memcpy(dst + size_t(r) * pitch, &v, sizeof(v));
+        }
+    }
+
+    inline void Bc5Block(const uint8_t *src, uint8_t *dst, size_t pitch, bool isSigned) {
+        const uint64_t rd = BcLoad64(src);
+        const uint64_t gd = BcLoad64(src + 8);
+        uint8_t rp[8];
+        uint8_t gp[8];
+        BcChannelPalette(rd, isSigned, rp);
+        BcChannelPalette(gd, isSigned, gp);
+        for (int r = 0; r < BlockHeight; ++r) {
+            const uint8x8_t rv = vreinterpret_u8_u32(BcGather4(rp, BcRowIdx(rd, r)));
+            const uint8x8_t gv = vreinterpret_u8_u32(BcGather4(gp, BcRowIdx(gd, r)));
+            uint8_t o[8];
+            vst1_u8(o, vzip_u8(rv, gv).val[0]);
+            memcpy(dst + size_t(r) * pitch, o, sizeof(o));
+        }
+    }
+#endif
 }  // anonymous namespace
 
 namespace bcn {
@@ -1473,6 +1629,12 @@ namespace bcn {
     constexpr size_t R16g16b16a16Bpp{8}; //!< The amount of bytes per pixel in R16G16B16
 
     void DecodeBc1(const uint8_t *src, uint8_t *dst, size_t x, size_t y, size_t width, size_t height) {
+#if BCN_NEON
+        if (x + BlockWidth <= width && y + BlockHeight <= height) {
+            BcColorBlock(src, dst, R8g8b8a8Bpp * width, false);
+            return;
+        }
+#endif
         const auto *color{reinterpret_cast<const BC_color *>(src)};
         size_t pitch{R8g8b8a8Bpp * width};
         color->decode(dst, x, y, width, height, pitch, R8g8b8a8Bpp, true, false);
@@ -1487,6 +1649,12 @@ namespace bcn {
     }
 
     void DecodeBc3(const uint8_t *src, uint8_t *dst, size_t x, size_t y, size_t width, size_t height) {
+#if BCN_NEON
+        if (x + BlockWidth <= width && y + BlockHeight <= height) {
+            Bc3Block(src, dst, R8g8b8a8Bpp * width);
+            return;
+        }
+#endif
         const auto *alpha{reinterpret_cast<const BC_channel *>(src)};
         const auto *color{reinterpret_cast<const BC_color *>(src + 8)};
         size_t pitch{R8g8b8a8Bpp * width};
@@ -1495,12 +1663,24 @@ namespace bcn {
     }
 
     void DecodeBc4(const uint8_t *src, uint8_t *dst, size_t x, size_t y, size_t width, size_t height, bool isSigned) {
+#if BCN_NEON
+        if (x + BlockWidth <= width && y + BlockHeight <= height) {
+            Bc4Block(src, dst, R8Bpp * width, isSigned);
+            return;
+        }
+#endif
         const auto *red{reinterpret_cast<const BC_channel *>(src)};
         size_t pitch{R8Bpp * width};
         red->decode(dst, x, y, width, height, pitch, R8Bpp, 0, isSigned);
     }
 
     void DecodeBc5(const uint8_t *src, uint8_t *dst, size_t x, size_t y, size_t width, size_t height, bool isSigned) {
+#if BCN_NEON
+        if (x + BlockWidth <= width && y + BlockHeight <= height) {
+            Bc5Block(src, dst, R8g8Bpp * width, isSigned);
+            return;
+        }
+#endif
         const auto *red{reinterpret_cast<const BC_channel *>(src)};
         const auto *green{reinterpret_cast<const BC_channel *>(src + 8)};
         size_t pitch{R8g8Bpp * width};
