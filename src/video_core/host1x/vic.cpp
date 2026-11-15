@@ -5,10 +5,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <tuple>
 #include <stdint.h>
 
-#if defined(ARCHITECTURE_x86_64)
+#if defined(ARCHITECTURE_arm64)
+#include <sse2neon.h>
+#elif defined(ARCHITECTURE_x86_64)
 #include <immintrin.h>
 #endif
 
@@ -42,7 +46,9 @@ extern "C" {
 #include "common/cpu_features.h"
 #endif
 
-#if defined(ARCHITECTURE_x86_64) \
+#if defined(ARCHITECTURE_arm64)
+#define COMPILED_HAS_SSE41 1
+#elif defined(ARCHITECTURE_x86_64) \
     && (defined(_MSC_VER) \
     || (defined(__GNUC__) && defined(__SSE4_1__)) \
     || (defined(__clang__) && defined(__SSE4_1__)))
@@ -54,8 +60,19 @@ extern "C" {
 namespace Tegra::Host1x {
 namespace {
 
+u64 NowUs() noexcept {
+    return static_cast<u64>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                std::chrono::steady_clock::now().time_since_epoch())
+                                .count());
+}
+
+std::atomic<u64> vic_convert_us{};
+std::atomic<u64> vic_convert_frames{};
+
 static bool HasSSE41() {
-#ifdef ARCHITECTURE_x86_64
+#if defined(ARCHITECTURE_arm64)
+    return true;
+#elif defined(ARCHITECTURE_x86_64)
     return Common::g_cpu_caps.sse4_1;
 #else
     return false;
@@ -112,6 +129,7 @@ void Vic::ProcessMethod(u32 method, u32 arg) noexcept {
 void Vic::Execute() noexcept {
     ConfigStruct config{};
     host1x.gmmu_manager.ReadBlock(regs.config_struct_offset.Address(), &config, sizeof(ConfigStruct));
+    const u64 t0 = NowUs();
 
     auto output_width = config.output_surface_config.out_surface_width + 1;
     auto output_height = config.output_surface_config.out_surface_height + 1;
@@ -166,6 +184,13 @@ void Vic::Execute() noexcept {
     default:
         UNIMPLEMENTED_MSG("Unknown video pixel format {}", format.Value());
         break;
+    }
+
+    const u64 dt = NowUs() - t0;
+    const u64 frames = vic_convert_frames.fetch_add(1, std::memory_order_relaxed) + 1;
+    const u64 us = vic_convert_us.fetch_add(dt, std::memory_order_relaxed) + dt;
+    if ((frames % 600) == 0) {
+        LOG_INFO(HW_GPU, "VIC convert {} frames {} us {} us/frame", frames, us, us / frames);
     }
 }
 

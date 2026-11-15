@@ -538,6 +538,10 @@ message(STATUS "Platform Libraries: ${PLATFORM_LIBRARIES}")
 
 add_subdirectory(externals)
 
+if (ARCHITECTURE_arm64)
+    include_directories("${CMAKE_CURRENT_SOURCE_DIR}/externals/sse2neon")
+endif()
+
 # pass targets from externals
 # TODO(crueter): CPMUtil Propagate func?
 find_package(enet)
