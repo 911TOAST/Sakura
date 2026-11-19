@@ -524,6 +524,14 @@ struct Values {
     SwitchableSetting<bool> renderer_static_frame_skip{linkage, false, "renderer_static_frame_skip",
                                                        Category::RendererDebug,
                                                        Specialization::Default, true, true};
+    // Composites only the largest display layer of a multi-layer frame and drops the rest. The
+    // composition pass draws one full-screen quad per layer, so every additional layer costs a
+    // full-target blend on Mali. The largest layer is the game surface; small overlay layers
+    // (system HUD, capture indicators) are skipped, lowering fill rate at the price of losing
+    // those overlays. Single-layer frames composite unchanged. Developer switch, off by default.
+    SwitchableSetting<bool> renderer_layer_skip{linkage, false, "renderer_layer_skip",
+                                                Category::RendererDebug,
+                                                Specialization::Default, true, true};
     // *nix platforms may have issues with the borderless windowed fullscreen mode.
     // Default to exclusive fullscreen on these platforms for now.
     SwitchableSetting<FullscreenMode, true> fullscreen_mode{linkage,
