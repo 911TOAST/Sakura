@@ -345,6 +345,7 @@ class SettingsFragmentPresenter(
             }
             add(BooleanSetting.RENDERER_REACTIVE_FLUSHING.key)
             add(BooleanSetting.MALI_AFRC.key)
+            add(BooleanSetting.FRAME_GEN.key)
             add(BooleanSetting.NATIVE_GPU_MODE.key)
             add(BooleanSetting.NO_WELL.key)
             add(BooleanSetting.ENABLE_BUFFER_HISTORY.key)

@@ -42,6 +42,11 @@ vk::DescriptorPool CreateWrappedDescriptorPool(const Device& device, size_t max_
                                                    VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER});
 vk::DescriptorSetLayout CreateWrappedDescriptorSetLayout(
     const Device& device, std::initializer_list<VkDescriptorType> types);
+
+/// Port of Lemon-Project's CreateWrappedDescriptorSetLayout(span, stages).
+vk::DescriptorSetLayout CreateWrappedDescriptorSetLayout(const Device& device,
+                                                         std::span<const VkDescriptorType> types,
+                                                         VkShaderStageFlags stages);
 vk::DescriptorSets CreateWrappedDescriptorSets(vk::DescriptorPool& pool,
                                                vk::Span<VkDescriptorSetLayout> layouts);
 vk::PipelineLayout CreateWrappedPipelineLayout(const Device& device,

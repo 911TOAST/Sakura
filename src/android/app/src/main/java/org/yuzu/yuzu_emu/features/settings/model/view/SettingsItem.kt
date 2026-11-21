@@ -964,6 +964,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.FRAME_GEN,
+                    titleId = R.string.frame_gen,
+                    descriptionId = R.string.frame_gen_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.NATIVE_GPU_MODE,
                     titleId = R.string.native_gpu_mode,
                     descriptionId = R.string.native_gpu_mode_description

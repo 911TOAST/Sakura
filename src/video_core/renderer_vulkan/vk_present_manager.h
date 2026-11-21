@@ -35,6 +35,10 @@ struct Frame {
     vk::CommandBuffer cmdbuf;
     vk::Semaphore render_ready;
     vk::Fence present_done;
+    /// Lemon FG (ported): storage view of the frame image used as the FG chain input.
+    vk::ImageView storage_view;
+    /// Lemon FG (ported): index of this frame in PresentManager::frames.
+    u32 index{};
     /// The frame is a swapchain image handed out by GetRenderFrame(). No intermediate image,
     /// no copy and no free queue are involved; Present() hands the image straight to the WSI.
     bool direct_present{};

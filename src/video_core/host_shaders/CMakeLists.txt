@@ -77,6 +77,14 @@ set(SHADER_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/vulkan_turbo_mode.comp
     ${CMAKE_CURRENT_SOURCE_DIR}/vulkan_uint8.comp
 
+    # Lemon FG, ported from Lemon-Project (Ghael-V)
+    ${CMAKE_CURRENT_SOURCE_DIR}/lemon_fg_generate.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/lemon_fg_luma.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/lemon_fg_median.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/lemon_fg_project.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/lemon_fg_search.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/lemon_fg_still.comp
+
     # Snapdragon Game Super Resolution
     ${CMAKE_CURRENT_SOURCE_DIR}/sgsr1_shader.vert
     ${CMAKE_CURRENT_SOURCE_DIR}/sgsr1_shader_mobile.frag

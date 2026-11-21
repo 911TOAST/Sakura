@@ -346,6 +346,30 @@ vk::DescriptorSetLayout CreateWrappedDescriptorSetLayout(
     });
 }
 
+// Port of Lemon-Project's CreateWrappedDescriptorSetLayout(span, stages).
+vk::DescriptorSetLayout CreateWrappedDescriptorSetLayout(const Device& device,
+                                                          std::span<const VkDescriptorType> types,
+                                                          VkShaderStageFlags stages) {
+    std::vector<VkDescriptorSetLayoutBinding> bindings(types.size());
+    for (size_t i = 0; i < types.size(); i++) {
+        bindings[i] = {
+            .binding = static_cast<u32>(i),
+            .descriptorType = types[i],
+            .descriptorCount = 1,
+            .stageFlags = stages,
+            .pImmutableSamplers = nullptr,
+        };
+    }
+
+    return device.GetLogical().CreateDescriptorSetLayout(VkDescriptorSetLayoutCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .bindingCount = static_cast<u32>(bindings.size()),
+        .pBindings = bindings.data(),
+    });
+}
+
 vk::DescriptorSets CreateWrappedDescriptorSets(vk::DescriptorPool& pool,
                                                vk::Span<VkDescriptorSetLayout> layouts) {
     return pool.Allocate(VkDescriptorSetAllocateInfo{

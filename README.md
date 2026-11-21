@@ -189,6 +189,10 @@ Thanks also to everyone who reported a crash with a log attached
 
 The Sakura name, icon, and UI art are original to this fork.
 
+**Lemon FG** — the frame generation ported into Sakura's renderer — comes from
+[Lemon-Project](https://github.com/Ghael-V/Lemon-Project), credited to Ghael and Team Lemon
+(Ghael, Seak, Sidgey, BitRanger and rcssf).
+
 Also worth a look: [NE0TR0N!!](https://www.roblox.com/games/78128522742858/NE0TR0N),
 a small game made by one dev ~
 

@@ -634,6 +634,13 @@ struct Values {
 #endif
                                       "mali_afrc", Category::RendererAdvanced};
 
+    // Lemon FG (ported from Lemon-Project): insert generated frames between real ones.
+    SwitchableSetting<bool> frame_gen{linkage, false, "frame_gen", Category::RendererAdvanced};
+
+    // 2x to 4x generated frames per real frame (Lemon FG); clamped in FrameGen.
+    SwitchableSetting<u32> frame_gen_multiplier{linkage, 2, "frame_gen_multiplier",
+                                               Category::RendererAdvanced};
+
     // Vulkan instance layers requested by name, separated by ':' or ','. Android only discovers
     // layers bundled in the application's native library directory or provided by the GPU driver.
     // Layers the loader does not report are dropped by RemoveUnavailableLayers.

@@ -54,6 +54,7 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     RENDERER_ASYNCHRONOUS_SHADERS("use_asynchronous_shaders"),
     RENDERER_REACTIVE_FLUSHING("use_reactive_flushing"),
     MALI_AFRC("mali_afrc"),
+    FRAME_GEN("frame_gen"),
     ENABLE_BUFFER_HISTORY("enable_buffer_history"),
     USE_OPTIMIZED_VERTEX_BUFFERS("use_optimized_vertex_buffers"),
     ENABLE_GPU_BUFFER_READBACK("enable_gpu_buffer_readback"),

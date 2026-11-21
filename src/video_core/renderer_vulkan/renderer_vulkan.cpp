@@ -125,6 +125,7 @@ try
     , memory_allocator(device)
     , state_tracker()
     , scheduler(device, state_tracker)
+    , frame_gen{memory_allocator, scheduler}
     , swapchain(*surface,
                 device,
                 scheduler,
@@ -250,6 +251,17 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
     // must wait for the acquire semaphore before the render pass performs its UNDEFINED ->
     // PRESENT_SRC_KHR transition. The fallback path returns VK_NULL_HANDLE and is unaffected.
     scheduler.Flush(*frame->render_ready, present_manager.GetPresentWaitSemaphore());
+
+    // Lemon FG (ported from Lemon-Project): analyse the composed frame, then present the
+    // interpolated frames between it and the next real one.
+    frame_gen.Process(device, frame, swapchain.GetImageFormat());
+    const size_t generated_frames = frame_gen.GeneratedFrameCount();
+    for (size_t generation = 0; generation < generated_frames; ++generation) {
+        Frame* generated = present_manager.GetRenderFrame();
+        frame_gen.GenerateInto(device, generated, generation);
+        scheduler.Flush(*generated->render_ready);
+        present_manager.Present(generated);
+    }
 
     present_manager.Present(frame);
     RememberCompositedFrame(framebuffers);

@@ -120,7 +120,10 @@ PresentManager::PresentManager(const vk::Instance& instance_,
     // every other driver.
     , use_direct_present{device_.IsMali() && device_.IsMalikanMode() &&
                          (swapchain.GetImageViewFormat() == swapchain.GetImageFormat() ||
-                          device_.IsKhrSwapchainMutableFormatEnabled())}
+                          device_.IsKhrSwapchainMutableFormatEnabled()) &&
+                          // Lemon FG analyses the composed frame through a copy into its chain
+                          // images; that uses the copy path, not the direct presentation.
+                          !Settings::values.frame_gen.GetValue()}
     // Malikan always presents asynchronously. Waiting for the worker on every frame serialises
     // command recording with presentation and costs a full frame of GPU/CPU overlap. The direct
     // path needs no copy work, so the async win there is purely "do not drain the worker", which
@@ -157,6 +160,7 @@ PresentManager::PresentManager(const vk::Instance& instance_,
     frames.resize(image_count);
     for (u32 i = 0; i < frames.size(); i++) {
         Frame& frame = frames[i];
+        frame.index = i;
         frame.cmdbuf = vk::CommandBuffer{cmdbuffers[i], device.GetDispatchLoader()};
         frame.render_ready = dld.CreateSemaphore({
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
@@ -225,6 +229,7 @@ Frame* PresentManager::GetRenderFrame() {
         }
 
         Frame* frame = &frames[swapchain.GetImageIndex()];
+        frame->index = static_cast<u32>(swapchain.GetImageIndex());
         frame->direct_present = true;
         frame->swapchain_image_index = static_cast<u32>(swapchain.GetImageIndex());
         return frame;
@@ -352,7 +357,8 @@ Frame* PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height,
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                 (Settings::values.frame_gen.GetValue() ? VK_IMAGE_USAGE_STORAGE_BIT : 0),
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -395,6 +401,33 @@ Frame* PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height,
         .height = height,
         .layers = 1,
     });
+
+    // Lemon FG (ported): storage view of the composed frame, the chain input.
+    if (Settings::values.frame_gen.GetValue()) {
+        frame->storage_view = dld.CreateImageView({
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .image = *frame->image,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = swapchain.GetImageFormat(),
+            .components =
+                {
+                    .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                },
+            .subresourceRange =
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+        });
+    }
     return frame;
 }
 

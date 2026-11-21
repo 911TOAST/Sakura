@@ -14,6 +14,7 @@
 #include "core/frontend/framebuffer_layout.h"
 #include "video_core/host1x/gpu_device_memory_manager.h"
 #include "video_core/renderer_base.h"
+#include "video_core/renderer_vulkan/present/frame_gen.h"
 #include "video_core/renderer_vulkan/vk_blit_screen.h"
 #include "video_core/renderer_vulkan/vk_present_manager.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
@@ -113,6 +114,8 @@ private:
     MemoryAllocator memory_allocator;
     StateTracker state_tracker;
     Scheduler scheduler;
+    /// Lemon FG (ported from Lemon-Project): drives LemonFgChain from Composite.
+    FrameGen frame_gen;
     Swapchain swapchain;
     PresentManager present_manager;
     BlitScreen blit_swapchain;
