@@ -3,7 +3,7 @@
 <details>
 <summary>
 <img src="docs/assets/sakura-banner.png" alt="Sakura, a suyu-based Android emulator" width="760">
-<sub>click the logo to see it move</sub>
+<sub></sub>
 </summary>
 
 <img src="docs/assets/sakura-logo-loop.webp" alt="The Sakura logo animating: a glowing pink blossom over the wordmark, on a dark rounded card" width="760">
@@ -24,6 +24,7 @@
 [legal](#legal) ·
 [credits](#credits)
 
+[discord](https://discord.gg/mzFQadXBJ)
 </div>
 
 ---
@@ -118,8 +119,8 @@ Open Actions, choose Android CI, then Run workflow and pick a flavor. The runner
 builds it and leaves an APK artifact for you. The fans stay quiet and the laptop
 lives (｡•̀ᴗ-)✧
 
-My ZBook 15 G3 would not survive a four-flavor ninja build 💀 so the compiling
-happens on GitHub's machines. The laptop only touches Kotlin and XML.
+My ZBook 15 G3 would survive a four-flavor ninja build 💀 so the compiling might not 
+happens on GitHub's machines. The github only source code (: .
 
 ```
 assembleMainlineRelease
