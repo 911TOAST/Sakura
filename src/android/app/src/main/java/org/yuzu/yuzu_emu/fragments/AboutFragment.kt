@@ -24,13 +24,13 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.findNavController
 import org.yuzu.yuzu_emu.HomeNavigationDirections
+import org.yuzu.yuzu_emu.NativeLibrary
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.databinding.FragmentAboutBinding
 import org.yuzu.yuzu_emu.features.settings.ui.SettingsSubscreen
 import org.yuzu.yuzu_emu.model.HomeViewModel
 import org.yuzu.yuzu_emu.utils.BrandAnimation
 import org.yuzu.yuzu_emu.utils.ViewUtils.updateMargins
-import org.yuzu.yuzu_emu.NativeLibrary
 
 class AboutFragment : Fragment() {
     private var _binding: FragmentAboutBinding? = null
@@ -40,10 +40,6 @@ class AboutFragment : Fragment() {
 
     // Looping decorators, cancelled when the view goes away.
     private val brandAnimators = mutableListOf<Animator>()
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -71,9 +67,7 @@ class AboutFragment : Fragment() {
         }
 
         binding.buttonContributors.setOnClickListener {
-            openLink(
-                getString(R.string.contributors_link)
-            )
+            openLink(getString(R.string.contributors_link))
         }
         binding.buttonLicenses.setOnClickListener {
             val action = HomeNavigationDirections.actionGlobalSettingsSubscreenActivity(
@@ -87,7 +81,11 @@ class AboutFragment : Fragment() {
         val buildVersion = NativeLibrary.getBuildVersion()
         val fullVersionText = "$buildName ($buildVersion)"
 
+        // Hero pill shows the short build; the footer keeps the full string for screenshots.
+        binding.textVersionChip.text = buildVersion.ifEmpty { buildName }
+        binding.textVersionChip.contentDescription = getString(R.string.about_copy_version)
         binding.textVersionName.text = fullVersionText
+
         binding.buttonVersionName.setOnClickListener {
             val clipBoard =
                 requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -104,8 +102,6 @@ class AboutFragment : Fragment() {
         }
 
         binding.buttonReddit.setOnClickListener { openLink(getString(R.string.reddit_link)) }
-        // Small, quiet pointer to a one-developer game. It reads as a thank-you note, not a store
-        // banner: outlined card, small type, no popup.
         binding.neotronLink.setOnClickListener { openLink(getString(R.string.neotron_link)) }
 
         setInsets()
@@ -141,9 +137,9 @@ class AboutFragment : Fragment() {
         val targets = listOf(
             binding.imageLogo,
             binding.aboutWordmark,
+            binding.buttonVersionName,
             binding.buttonContributors,
             binding.buttonLicenses,
-            binding.buttonVersionName,
             binding.buttonReddit,
             binding.neotronLink
         )
@@ -161,13 +157,13 @@ class AboutFragment : Fragment() {
         }
 
         // The hero logo already owns translationY for its entrance, so its ambient drift starts
-        // once the rise is done.
+        // once the rise is done (entrance finishes around 1 s).
         binding.root.postDelayed({
             if (_binding != null) {
                 brandAnimators += BrandAnimation.float(binding.imageLogo, 6f * density, 2600L)
                 brandAnimators += BrandAnimation.sway(binding.imageLogo, 2.5f, 4200L)
             }
-        }, 900L)
+        }, 1100L)
     }
 
     /** System animator scale can be zero, in which case the screen should be completely still. */
@@ -183,6 +179,10 @@ class AboutFragment : Fragment() {
     override fun onDestroyView() {
         brandAnimators.forEach { it.cancel() }
         brandAnimators.clear()
+        // Restores the plain wordmark colour before the views go away. Without this the paint can
+        // stay transparent and the wordmark disappears the next time the screen opens.
+        BrandAnimation.stopShimmer(binding.aboutWordmark)
+        BrandAnimation.stopShimmer(binding.neotronTitle)
         _binding = null
         super.onDestroyView()
     }
@@ -205,7 +205,8 @@ class AboutFragment : Fragment() {
             binding.toolbarAbout.updateMargins(left = leftInsets, right = rightInsets)
             binding.scrollAbout.updateMargins(left = leftInsets, right = rightInsets)
 
-            binding.contentAbout.updatePadding(bottom = barInsets.bottom)
+            val bottomPadding = (24 * resources.displayMetrics.density).toInt()
+            binding.contentAbout.updatePadding(bottom = barInsets.bottom + bottomPadding)
 
             windowInsets
         }

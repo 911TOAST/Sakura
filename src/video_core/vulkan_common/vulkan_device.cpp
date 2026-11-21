@@ -18,6 +18,7 @@
 #include "common/assert.h"
 #include "common/literals.h"
 #include <ranges>
+#include "common/memory_budget.h"
 #include "common/settings.h"
 #include "common/settings_enums.h"
 #include "video_core/vulkan_common/nsight_aftermath_tracker.h"
@@ -442,7 +443,7 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
     : instance{instance_}, dld{dld_}, physical{physical_},
     format_properties(GetFormatProperties(physical)) {
     // Get suitability and device properties.
-    const bool is_suitable = GetSuitability(surface != VkSurfaceKHR{});
+    is_suitable = GetSuitability(surface != VkSurfaceKHR{});
 
     const VkDriverId driver_id = properties.driver.driverID;
 
@@ -460,14 +461,22 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
     const bool is_turnip = driver_id == VK_DRIVER_ID_MESA_TURNIP;
     const bool is_mali = driver_id == VK_DRIVER_ID_ARM_PROPRIETARY ||
                          properties.properties.vendorID == 0x13B5;
+    const bool is_panvk = driver_id == VK_DRIVER_ID_MESA_PANVK;
     // Native GPU mode opts Mali into the same throughput-first device profile as Malikan:
     // larger descriptor pools, dynamic vertex input, immediate presentation, extra swapchain
     // images, draw batching and AFRC. The setting should not be a no-op outside the Malikan
     // backend.
+    const bool requested_malikan_mode =
+        Settings::values.renderer_backend.GetValue() == Settings::RendererBackend::Malikan ||
+        Settings::values.native_gpu_mode.GetValue();
     malikan_mode =
-        is_mali &&
-        (Settings::values.renderer_backend.GetValue() == Settings::RendererBackend::Malikan ||
-         Settings::values.native_gpu_mode.GetValue());
+        is_mali && is_suitable && !is_panvk && requested_malikan_mode;
+
+    if (is_mali && !is_suitable && !is_panvk && requested_malikan_mode) {
+        LOG_WARNING(Render_Vulkan,
+                    "Mali driver does not meet Vulkan requirements; disabling Malikan fast paths "
+                    "for stability.");
+    }
 
     if (!is_suitable)
         LOG_WARNING(Render_Vulkan, "Unsuitable driver - continuing anyways");
@@ -1670,29 +1679,35 @@ void Device::CollectPhysicalMemoryInfo() {
         const s64 available_memory = static_cast<s64>(device_access_memory - device_initial_usage);
 #if defined(__ANDROID__)
         // Mali's DDK does not expose VK_EXT_memory_budget, so at this point device_access_memory
-        // is the size of the shared system heap, not free video memory. Clamping that to 6 GiB
-        // lets the texture cache plan for ~2.4 GiB of expected and ~5.5 GiB of critical use on
-        // top of the guest's 4 GiB of DRAM. The process then lives far above what the platform
-        // keeps resident, and the resulting reclaim and LMK activity surfaces as stutter. Size
-        // the caches off real system RAM instead, leaving the bulk of it to the guest and OS.
-        u64 memory_size = 2'500_MiB;
-        const long phys_pages = sysconf(_SC_PHYS_PAGES);
-        const long page_size = sysconf(_SC_PAGE_SIZE);
-        if (phys_pages > 0 && page_size > 0) {
-            const u64 system_ram =
-                static_cast<u64>(phys_pages) * static_cast<u64>(page_size);
-            // The user's ceiling wins over the system-RAM estimate so the caches have something
-            // to plan against; 1 GiB stays as the lower bound for very small devices.
-            const s64 budget_mib =
-                std::clamp(AndroidSettings::values.vram_budget_mib.GetValue(), 1024, 3072);
-            memory_size =
-                std::clamp<u64>(system_ram / 5, 1_GiB, static_cast<u64>(budget_mib) * 1_MiB);
+        // is the size of the shared system heap, not free video memory. On 8 GiB-and-below
+        // phones the caches are sized off the central memory budget (common/memory_budget.cpp)
+        // so the texture cache, the buffer cache and the staging pools share one ceiling that
+        // keeps the process under the 6 GiB target. Devices with more RAM keep the previous
+        // behaviour: a share of system RAM, capped by the user's slider.
+        u64 memory_size = Common::MemoryBudget::CacheBudgetBytes();
+        if (memory_size == 0) {
+            const long phys_pages = sysconf(_SC_PHYS_PAGES);
+            const long page_size = sysconf(_SC_PAGE_SIZE);
+            if (phys_pages > 0 && page_size > 0) {
+                memory_size = static_cast<u64>(phys_pages) * static_cast<u64>(page_size) / 5;
+            }
         }
+        if (memory_size == 0) {
+            memory_size = 1_GiB;
+        }
+        // The user's ceiling wins over the budget estimate so the caches always have something
+        // to plan against. The slider floor is 512 MiB so a 6 GiB device can go below the old
+        // 1 GiB default.
+        const s64 budget_mib =
+            std::clamp(AndroidSettings::values.vram_budget_mib.GetValue(), 512, 3072);
+        memory_size =
+            (std::min)(memory_size, static_cast<u64>(budget_mib) * 1_MiB);
 #else
         const u64 memory_size = Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive ? 6_GiB : 4_GiB;
 #endif
         const s64 budget = available_memory > 0 ? (available_memory * 3 / 4) : static_cast<s64>(local_memory);
-        device_access_memory = static_cast<u64>(std::clamp<s64>(budget, 1_GiB, static_cast<s64>(memory_size)));
+        device_access_memory =
+            static_cast<u64>(std::clamp<s64>(budget, 512_MiB, static_cast<s64>(memory_size)));
     } else {
         const u64 reserve_memory = std::min<u64>(device_access_memory / 8, 1_GiB);
         device_access_memory -= reserve_memory;
@@ -1763,7 +1778,7 @@ void Device::InitializeGPULogging() {
         detected_driver = GPU::Logging::DriverType::Turnip;
     } else if (driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY) {
         detected_driver = GPU::Logging::DriverType::Qualcomm;
-    } else if (driver_id == VK_DRIVER_ID_ARM_PROPRIETARY) {
+    } else if (IsMali()) {
         detected_driver = GPU::Logging::DriverType::Mali;
     }
 

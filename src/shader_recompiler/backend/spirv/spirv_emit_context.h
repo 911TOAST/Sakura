@@ -188,13 +188,6 @@ public:
         return type;
     }
 
-    Id Relax(Id op) {
-        if (CanRelaxF32()) {
-            Decorate(op, spv::Decoration::RelaxedPrecision);
-        }
-        return op;
-    }
-
     [[nodiscard]] Id Def(const IR::Value& value);
 
     [[nodiscard]] Id BitOffset8(const IR::Value& offset);

@@ -7,6 +7,8 @@
 #define VMA_IMPLEMENTATION
 #include "video_core/vulkan_common/vma.h"
 
+#include <algorithm>
+#include <array>
 #include <codecvt>
 #include <cstdio>
 #include <cstring>
@@ -88,6 +90,21 @@ void LogMappedVulkanDrivers() {
     for (const std::string& lib : libs) {
         LOG_INFO(Frontend, "[Driver] mapped: {}", lib);
     }
+    if (!g_custom_driver_name.empty()) {
+        const std::string expected_path = g_custom_driver_dir + g_custom_driver_name;
+        const bool custom_driver_mapped =
+            std::any_of(libs.begin(), libs.end(), [&](const std::string& lib) {
+                return lib.find(expected_path) != std::string::npos;
+            });
+        if (custom_driver_mapped) {
+            LOG_INFO(Frontend, "[Driver] custom Vulkan driver loaded from '{}'", expected_path);
+        } else {
+            LOG_ERROR(Frontend,
+                      "[Driver] requested custom Vulkan driver '{}' is not mapped; the loader "
+                      "may have fallen back to the system driver",
+                      expected_path);
+        }
+    }
 }
 } // namespace
 
@@ -107,6 +124,7 @@ extern "C" {
 #include "common/settings.h"
 #include "common/string_util.h"
 #include "frontend_common/play_time_manager.h"
+#include "jni/recomp_loader.h"
 #include "core/constants.h"
 #include "core/core.h"
 #include "core/cpu_manager.h"
@@ -152,10 +170,11 @@ extern "C" {
 #include "video_core/vulkan_common/vulkan_instance.h"
 #include "video_core/vulkan_common/vulkan_surface.h"
 #include "video_core/shader_notify.h"
+#include "network/announce_multiplayer_session.h"
+#include "video_core/asr_state.h"
 #ifdef ARCHITECTURE_arm64
 #include "video_core/macro/macro_jit_arm64.h"
 #endif
-#include "network/announce_multiplayer_session.h"
 
 #define jconst [[maybe_unused]] const auto
 #define jauto [[maybe_unused]] auto
@@ -393,6 +412,10 @@ Core::SystemResultStatus EmulationSession::InitializeEmulation(const std::string
     // Initialize filesystem.
     ConfigureFilesystemProvider(filepath);
 
+    // Load statically recompiled game images, if the game ships any.
+    m_filepath = filepath;
+    Sakura::Android::LoadRecompiledImagesForGame(m_filepath);
+
     // Load the ROM.
     Service::AM::FrontendAppletParameters params{
         .applet_id = static_cast<Service::AM::AppletId>(m_applet_id),
@@ -482,10 +505,17 @@ void EmulationSession::RunEmulation() {
     }
 
     // Load the disk shader cache.
-    if (Settings::values.use_disk_shader_cache.GetValue()) {
+    const u64 program_id{m_system.GetApplicationProcessProgramID()};
+    // A queued "Recompile GPU" request has to run even when the user turned the disk shader cache
+    // off, otherwise the menu action would silently do nothing.
+    const auto recompile_marker{Common::FS::GetSuyuPath(Common::FS::SuyuPath::ShaderDir) /
+                                fmt::format("{:016x}", program_id) /
+                                "force_gpu_recompile.once"};
+    if (Settings::values.use_disk_shader_cache.GetValue() ||
+        Common::FS::Exists(recompile_marker)) {
         LoadDiskCacheProgress(VideoCore::LoadCallbackStage::Prepare, 0, 0);
-        m_system.Renderer().ReadRasterizer()->LoadDiskResources(
-            m_system.GetApplicationProcessProgramID(), std::stop_token{}, LoadDiskCacheProgress);
+        m_system.Renderer().ReadRasterizer()->LoadDiskResources(program_id, std::stop_token{},
+                                                                LoadDiskCacheProgress);
         LoadDiskCacheProgress(VideoCore::LoadCallbackStage::Complete, 0, 0);
     }
 
@@ -1045,6 +1075,19 @@ jdoubleArray Java_org_yuzu_yuzu_1emu_NativeLibrary_getPerfStats(JNIEnv* env, jcl
     }
 
     return j_stats;
+}
+
+jfloatArray Java_org_yuzu_yuzu_1emu_NativeLibrary_getAsrStats(JNIEnv* env, jclass clazz) {
+    const auto& st = VideoCore::asr_st;
+    const std::array<jfloat, 4> v{
+        static_cast<jfloat>(st.mode.load(std::memory_order_relaxed)),
+        static_cast<jfloat>(st.up_us.load(std::memory_order_relaxed)) / 1000.0f,
+        static_cast<jfloat>(st.mv_us.load(std::memory_order_relaxed)) / 1000.0f,
+        static_cast<jfloat>(st.asr_us.load(std::memory_order_relaxed)) / 1000.0f,
+    };
+    jfloatArray out = env->NewFloatArray(static_cast<jsize>(v.size()));
+    env->SetFloatArrayRegion(out, 0, static_cast<jsize>(v.size()), v.data());
+    return out;
 }
 
 jlongArray Java_org_yuzu_yuzu_1emu_NativeLibrary_getSkipStats(JNIEnv* env, jclass clazz) {

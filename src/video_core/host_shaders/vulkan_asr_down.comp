@@ -1,0 +1,20 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform mediump sampler2D s;
+layout(set = 0, binding = 1) uniform writeonly mediump image2D o;
+
+layout(push_constant) uniform Pc {
+    ivec2 sz;
+} pc;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(p, pc.sz))) {
+        return;
+    }
+    vec2 t = (vec2(p) + 0.5) / vec2(pc.sz);
+    mediump float l = textureLod(s, t, 0.0).r;
+    imageStore(o, p, vec4(l));
+}

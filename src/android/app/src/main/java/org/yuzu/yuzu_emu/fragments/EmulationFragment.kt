@@ -178,6 +178,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
 
     var shouldUseCustom = false
     private var isQuickSettingsMenuOpen = false
+    private var quickSettingsBuilt = false
     private val quickSettings = QuickSettings(this)
 
     private val loadAmiiboLauncher =
@@ -1202,7 +1203,8 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
         }
     }
 
-    private fun addQuickSettings() {
+    private fun addQuickSettings(forceRefresh: Boolean = false) {
+        if (quickSettingsBuilt && !forceRefresh) return
         binding.quickSettingsSheet.apply {
             val container = binding.quickSettingsSheet.findViewById<ViewGroup>(R.id.quick_settings_container)
             val isSharpnessFilterSelected = isSharpnessScalingFilterSelected()
@@ -1264,11 +1266,17 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                 units = "%",
             )
 
-            quickSettings.addBooleanSetting(
+            quickSettings.addCustomToggle(
                 R.string.use_docked_mode,
-                container,
-                BooleanSetting.USE_DOCKED_MODE,
-            )
+                BooleanSetting.USE_DOCKED_MODE.getBoolean(),
+                true,
+                container
+            ) { enabled ->
+                // Native first: it compares against the old mode to decide whether to notify
+                // the game, then the Kotlin write records the per-game override if one is open.
+                NativeInput.setDockedMode(enabled)
+                BooleanSetting.USE_DOCKED_MODE.setBoolean(enabled)
+            }
 
             quickSettings.addDivider(container)
 
@@ -1300,7 +1308,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                 R.array.rendererScalingFilterNames,
                 R.array.rendererScalingFilterValues
             ) {
-                addQuickSettings()
+                addQuickSettings(forceRefresh = true)
             }
 
             if (isSharpnessFilterSelected) {
@@ -1314,6 +1322,19 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                 )
             }
 
+            if (isAsrScalingFilterSelected()) {
+                quickSettings.addBooleanSetting(
+                    R.string.asr_jitter,
+                    container,
+                    BooleanSetting.ASR_JITTER,
+                )
+                quickSettings.addBooleanSetting(
+                    R.string.asr_mv_reuse,
+                    container,
+                    BooleanSetting.ASR_MV_REUSE,
+                )
+            }
+
             quickSettings.addIntSetting(
                 R.string.renderer_anti_aliasing,
                 container,
@@ -1322,24 +1343,40 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                 R.array.rendererAntiAliasingValues
             )
         }
+        quickSettingsBuilt = true
     }
 
     private fun isSharpnessScalingFilterSelected(): Boolean {
         val selectedFilter = IntSetting.RENDERER_SCALING_FILTER.getInt(needsGlobal = false)
-        return selectedFilter in resolveSharpnessScalingFilterValues()
+        return selectedFilter in resolveScalingFilterValues(
+            setOf(
+                getString(R.string.scaling_filter_fsr),
+                getString(R.string.scaling_filter_sgsr),
+                getString(R.string.scaling_filter_sgsr_edge),
+                getString(R.string.scaling_filter_asr_quality),
+                getString(R.string.scaling_filter_asr_balanced),
+                getString(R.string.scaling_filter_asr_performance),
+            )
+        )
     }
 
-    private fun resolveSharpnessScalingFilterValues(): Set<Int> {
+    private fun isAsrScalingFilterSelected(): Boolean {
+        val selectedFilter = IntSetting.RENDERER_SCALING_FILTER.getInt(needsGlobal = false)
+        return selectedFilter in resolveScalingFilterValues(
+            setOf(
+                getString(R.string.scaling_filter_asr_quality),
+                getString(R.string.scaling_filter_asr_balanced),
+                getString(R.string.scaling_filter_asr_performance),
+            )
+        )
+    }
+
+    private fun resolveScalingFilterValues(filterNames: Set<String>): Set<Int> {
         val names = resources.getStringArray(R.array.rendererScalingFilterNames)
         val values = resources.getIntArray(R.array.rendererScalingFilterValues)
-        val sharpnessFilterNames = setOf(
-            getString(R.string.scaling_filter_fsr),
-            getString(R.string.scaling_filter_sgsr),
-            getString(R.string.scaling_filter_sgsr_edge),
-        )
         return names.asSequence()
             .mapIndexedNotNull { index, name ->
-                if (name in sharpnessFilterNames && index in values.indices) values[index] else null
+                if (name in filterNames && index in values.indices) values[index] else null
             }
             .toSet()
     }
@@ -1392,6 +1429,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
 
     private fun pauseEmulationAndCaptureFrame() {
         emulationState.pause()
+        (activity as? EmulationActivity)?.onEmulationPaused()
         updatePauseMenuEntry(true)
         capturePausedFrameFromCore()
         updatePausedFrameVisibility()
@@ -1443,6 +1481,9 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
     private fun resumeEmulationFromUi() {
         clearPausedFrame()
         emulationState.resume()
+        if (!emulationState.isPaused) {
+            (activity as? EmulationActivity)?.onEmulationResumed()
+        }
         updatePauseMenuEntry(emulationState.isPaused)
         updatePausedFrameVisibility()
     }
@@ -1732,6 +1773,26 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                         sb.append("FT: ")
                         appendMs(sb, perfStats[FRAMETIME] * 1000.0)
                         sb.append("ms")
+                        val up = NativeLibrary.getAsrStats()
+                        when (up[0].toInt()) {
+                            1 -> {
+                                sb.append(" | UP: ")
+                                appendMs(sb, up[1].toDouble())
+                                sb.append("ms")
+                            }
+                            2 -> {
+                                sb.append(" | ASR: ")
+                                appendMs(sb, up[1].toDouble())
+                                sb.append("ms MV: ")
+                                appendMs(sb, up[2].toDouble())
+                                sb.append("ms")
+                            }
+                            3 -> {
+                                sb.append(" | ASR>FSR: ")
+                                appendMs(sb, up[1].toDouble())
+                                sb.append("ms")
+                            }
+                        }
                     }
 
                     if (BooleanSetting.SHOW_APP_RAM_USAGE.getBoolean(needsGlobal)) {

@@ -27,6 +27,7 @@ private:
     void (*upd)(void*, int64_t){};
     void (*setThr)(void*, const int32_t*, size_t){};
     void (*cls)(void*){};
+    int64_t last_tgt{0};
 };
 
 void AdpfRegisterThread(int32_t tid);

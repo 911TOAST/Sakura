@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <string>
+#include <exception>
 
 #include <jni.h>
 
@@ -35,6 +36,20 @@ Settings::Setting<T>* getSetting(JNIEnv* env, jstring jkey) {
     const auto android = AndroidSettings::values.linkage.by_key.find(key);
     if (android != AndroidSettings::values.linkage.by_key.end() && android->second != nullptr) {
         return static_cast<Settings::Setting<T>*>(android->second);
+    }
+    LOG_ERROR(Frontend, "[Android Native] Could not find setting - {}", key);
+    return nullptr;
+}
+
+Settings::BasicSetting* getBasicSetting(JNIEnv* env, jstring jkey) {
+    const auto key = Common::Android::GetJString(env, jkey);
+    const auto core = Settings::values.linkage.by_key.find(key);
+    if (core != Settings::values.linkage.by_key.end() && core->second != nullptr) {
+        return core->second;
+    }
+    const auto android = AndroidSettings::values.linkage.by_key.find(key);
+    if (android != AndroidSettings::values.linkage.by_key.end() && android->second != nullptr) {
+        return android->second;
     }
     LOG_ERROR(Frontend, "[Android Native] Could not find setting - {}", key);
     return nullptr;
@@ -142,20 +157,27 @@ void Java_org_yuzu_yuzu_1emu_utils_NativeConfig_setShort(JNIEnv* env, jobject ob
 
 jint Java_org_yuzu_yuzu_1emu_utils_NativeConfig_getInt(JNIEnv* env, jobject obj, jstring jkey,
                                                        jboolean needGlobal) {
-    auto setting = getSetting<int>(env, jkey);
+    auto setting = getBasicSetting(env, jkey);
     if (setting == nullptr) {
         return -1;
     }
-    return setting->GetValue(needGlobal);
+    try {
+        const auto value = needGlobal ? setting->ToStringGlobal() : setting->ToString();
+        return std::stoi(value);
+    } catch (const std::exception& error) {
+        LOG_ERROR(Frontend, "[Android Native] Setting is not an integer - {} ({})",
+                  Common::Android::GetJString(env, jkey), error.what());
+        return -1;
+    }
 }
 
 void Java_org_yuzu_yuzu_1emu_utils_NativeConfig_setInt(JNIEnv* env, jobject obj, jstring jkey,
                                                        jint value) {
-    auto setting = getSetting<int>(env, jkey);
+    auto setting = getBasicSetting(env, jkey);
     if (setting == nullptr) {
         return;
     }
-    setting->SetValue(value);
+    setting->LoadString(std::to_string(value));
 }
 
 jfloat Java_org_yuzu_yuzu_1emu_utils_NativeConfig_getFloat(JNIEnv* env, jobject obj, jstring jkey,

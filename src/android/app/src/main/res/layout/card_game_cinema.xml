@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Cinema layout: one game per row, full-width cover artwork with the label underneath. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:focusable="false"
+    android:focusableInTouchMode="false"
+    android:padding="6dp">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/card_game_cinema"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clickable="true"
+        android:clipToPadding="true"
+        android:focusable="true"
+        android:transitionName="card_game"
+        app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/image_game_cinema"
+                android:layout_width="match_parent"
+                android:layout_height="190dp"
+                android:scaleType="centerCrop"
+                android:transitionName="game_artwork"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.sakura.GameArtworkTop"
+                tools:src="@drawable/default_icon" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/text_game_cinema_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="16dp"
+                android:layout_marginBottom="16dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/google_sans_semibold"
+                android:letterSpacing="0.005"
+                android:maxLines="2"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="17sp"
+                tools:text="Your Game Title" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+</FrameLayout>

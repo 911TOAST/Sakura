@@ -1,0 +1,77 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform mediump sampler2D s_cur;
+layout(set = 0, binding = 1) uniform mediump sampler2D s_prv;
+layout(set = 0, binding = 2) uniform mediump sampler2D s_crs;
+layout(set = 0, binding = 3) uniform highp sampler2D s_d;
+layout(set = 0, binding = 4) uniform writeonly mediump image2D o_f;
+
+layout(push_constant) uniform Pc {
+    ivec2 sz;
+    int r;
+    int crs;
+    int sub;
+} pc;
+
+vec2 ts;
+mediump vec4 g0;
+mediump vec4 g1;
+mediump vec4 g2;
+mediump vec4 g3;
+
+mediump float sad(vec2 b) {
+    mediump vec4 a = abs(g0 - textureGather(s_prv, b, 0));
+    a += abs(g1 - textureGather(s_prv, b + vec2(2.0, 0.0) * ts, 0));
+    a += abs(g2 - textureGather(s_prv, b + vec2(0.0, 2.0) * ts, 0));
+    a += abs(g3 - textureGather(s_prv, b + vec2(2.0) * ts, 0));
+    return dot(a, vec4(1.0));
+}
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(p, pc.sz))) {
+        return;
+    }
+    ts = 1.0 / vec2(pc.sz);
+    vec2 c = vec2(p) * ts;
+    g0 = textureGather(s_cur, c, 0);
+    g1 = textureGather(s_cur, c + vec2(2.0, 0.0) * ts, 0);
+    g2 = textureGather(s_cur, c + vec2(0.0, 2.0) * ts, 0);
+    g3 = textureGather(s_cur, c + vec2(2.0) * ts, 0);
+    vec2 pr = vec2(0.0);
+    if (pc.crs != 0) {
+        pr = round(textureLod(s_crs, (vec2(p) + 0.5) * ts, 0.0).xy * vec2(pc.sz));
+    }
+    vec2 bo = vec2(0.0);
+    mediump float bc = sad(c) * 0.95;
+    for (int y = -pc.r; y <= pc.r; ++y) {
+        for (int x = -pc.r; x <= pc.r; ++x) {
+            vec2 o = pr + vec2(x, y);
+            mediump float k = sad(c + o * ts) + 0.01 * float(abs(x) + abs(y));
+            if (k < bc) {
+                bc = k;
+                bo = o;
+            }
+        }
+    }
+    vec2 sp = vec2(0.0);
+    if (pc.sub != 0) {
+        mediump float b0 = sad(c + bo * ts);
+        mediump float xl = sad(c + (bo - vec2(1.0, 0.0)) * ts);
+        mediump float xr = sad(c + (bo + vec2(1.0, 0.0)) * ts);
+        mediump float yu = sad(c + (bo - vec2(0.0, 1.0)) * ts);
+        mediump float yd = sad(c + (bo + vec2(0.0, 1.0)) * ts);
+        mediump float dx = xl - 2.0 * b0 + xr;
+        mediump float dy = yu - 2.0 * b0 + yd;
+        if (dx > 0.001) {
+            sp.x = clamp(0.5 * (xl - xr) / dx, -0.5, 0.5);
+        }
+        if (dy > 0.001) {
+            sp.y = clamp(0.5 * (yu - yd) / dy, -0.5, 0.5);
+        }
+    }
+    float d = textureLod(s_d, (vec2(p) + 0.5) * ts, 0.0).r;
+    imageStore(o_f, p, vec4((bo + sp) * ts, bc * 0.0625, d));
+}

@@ -4,6 +4,7 @@
 // SPDX-FileCopyrightText: Copyright 2018 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "common/adpf.h"
 #include "common/logging/log.h"
 #include "common/fiber.h"
 #include "common/scope_exit.h"
@@ -176,8 +177,13 @@ void CpuManager::RunThread(std::stop_token token, std::size_t core) {
     std::string name = is_multicore ? ("CPUCore_" + std::to_string(core)) : std::string{"CPUThread"};
     Common::SetCurrentThreadName(name.c_str());
     Common::SetCurrentThreadPriority(Common::ThreadPriority::Critical);
-    if (core < 3 && Settings::values.renderer_core_pinning.GetValue()) {
-        Common::PinCurrentThreadToFastCores();
+    if (core < 3) {
+#if defined(__unix__) || defined(__ANDROID__)
+        Common::AdpfRegisterThread(static_cast<int32_t>(gettid()));
+#endif
+        if (Settings::values.renderer_core_pinning.GetValue()) {
+            Common::PinCurrentThreadToFastCores();
+        }
     }
     auto& data = core_data[core];
     data.host_context = Common::Fiber::ThreadToFiber();

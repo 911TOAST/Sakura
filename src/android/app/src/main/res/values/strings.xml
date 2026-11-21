@@ -246,6 +246,15 @@
     <string name="view_grid">Grid</string>
     <string name="view_grid_compact">Compact Grid</string>
     <string name="view_carousel">Carousel</string>
+    <string name="view_cinema">Cinema</string>
+
+    <!-- App layout presets -->
+    <string name="ui_layout_sakura">Sakura</string>
+    <string name="ui_layout_compact">Compact</string>
+    <string name="ui_layout_cinema">Cinema</string>
+    <string name="ui_layout_list">List</string>
+    <string name="ui_layout_carousel">Carousel</string>
+    <string name="ui_layout_outline">Outline</string>
     <string name="game_image_desc">Screenshot for %1$s</string>
     <string name="folder">Folder</string>
     <string name="dont_show_again">Don\'t Show Again</string>
@@ -305,6 +314,9 @@
     <string name="favorite_added">Added to favorites</string>
     <string name="favorite_removed">Removed from favorites</string>
     <string name="game_properties">Properties</string>
+    <string name="recompile_gpu">Recompile shaders</string>
+    <string name="recompile_gpu_description">Recompile this game\'s saved shaders and rebuild its GPU pipelines before gameplay starts. Use this after changing drivers or if graphics are corrupted. The first launch may take longer.</string>
+    <string name="recompile_gpu_queue_failed">Couldn\'t queue the shader recompile. Check that the cache directory is writable.</string>
     <string name="empty_state_eyebrow">A LITTLE ROOM TO PLAY</string>
     <string name="empty_library_title">Your library is waiting</string>
     <string name="empty_library_message">Choose the folder where you keep your games. Sakura will find the titles for you.</string>
@@ -468,6 +480,10 @@
     <string name="gaia_is_not_real">Gaia isn\'t real</string>
     <string name="copied_to_clipboard">Copied to clipboard</string>
     <string name="about_app_description">A community Switch emulator, based on the suyu codebase</string>
+    <string name="about_section_project">Project</string>
+    <string name="about_section_links">Links</string>
+    <string name="about_community">Community</string>
+    <string name="about_copy_version">Copy build version</string>
     <string name="contributors">Contributors</string>
     <string name="contributors_description">People who made Sakura for Android possible</string>
     <string name="contributors_link" translatable="false">https://web.archive.org/web/*/https://git.suyu.dev/suyu/suyu/graphs/contributors</string>
@@ -920,6 +936,15 @@
     <string name="driver_failed_title">Driver installation failed</string>
     <string name="failed_install_driver">Failed to install %1$s driver, does your system support it?</string>
     <string name="driver_empty">Downloaded driver is empty, check your internet</string>
+    <string name="driver_active_title">Active driver</string>
+    <string name="driver_installed_title">Installed drivers</string>
+    <string name="driver_selected_badge">Selected driver</string>
+    <string name="driver_empty_title">No custom drivers</string>
+    <string name="driver_empty_message">Install a GPU driver package to override the system driver. Browse the available releases below.</string>
+    <string name="driver_min_api">API %1$d+</string>
+    <string name="driver_by_author">by %1$s</string>
+    <string name="driver_delete_title">Delete driver?</string>
+    <string name="driver_delete_message">Remove %1$s? The driver file will be deleted.</string>
     <string name="downloading">Downloading…</string>
     <string name="installing">Installing…</string>
     <string name="latest">Latest</string>
@@ -1042,6 +1067,14 @@
     <string name="import_config">Import Config</string>
     <string name="export_config">Export Config</string>
     <string name="share_config_failed">Failed to share configuration file</string>
+    <string name="community_config_import_title">Apply shared game configuration?</string>
+    <string name="community_config_import_warning">This file has no verifiable test record. It may not match this game build or emulator version. Your current settings will be backed up before import. Current device: %1$s · GPU: %2$s · Driver: %3$s · Game version: %4$s.</string>
+    <string name="apply_config">Back up and apply</string>
+    <string name="restore_config_backup">Restore previous settings</string>
+    <string name="restore_config_backup_warning">Restore the most recent settings backup for this game? Your current settings will be saved as another backup first.</string>
+    <string name="restore">Restore</string>
+    <string name="config_backup_failed">Could not back up the current settings. The imported configuration was not applied.</string>
+    <string name="config_backup_restored">Previous settings restored.</string>
 
     <!-- ROM loading errors -->
     <string name="loader_error_encrypted">Your ROM is encrypted</string>
@@ -1257,6 +1290,10 @@
     <string name="vram_usage_aggressive">Aggressive</string>
 
     <!-- Resolutions -->
+    <string name="resolution_target_540p" translatable="false">540p (Auto)</string>
+    <string name="resolution_target_720p" translatable="false">720p (Auto)</string>
+    <string name="resolution_target_900p" translatable="false">900p (Auto)</string>
+    <string name="resolution_target_1080p" translatable="false">1080p (Auto)</string>
     <string name="resolution_quarter" translatable="false">0.25X (180p/270p)</string>
     <string name="resolution_half" translatable="false">0.5X (360p/540p)</string>
     <string name="resolution_three_quarter" translatable="false">0.75X (540p/810p)</string>
@@ -1289,6 +1326,13 @@
     <string name="scaling_filter_mmpx" translatable="false">MMPX</string>
     <string name="scaling_filter_sgsr" translatable="false">Snapdragon GSR</string>
     <string name="scaling_filter_sgsr_edge" translatable="false">Snapdragon GSR EdgeDir</string>
+    <string name="scaling_filter_asr_quality" translatable="false">ArmASR (Quality)</string>
+    <string name="scaling_filter_asr_balanced" translatable="false">ArmASR (Balanced)</string>
+    <string name="scaling_filter_asr_performance" translatable="false">ArmASR (Performance)</string>
+
+    <!-- ArmASR tuning -->
+    <string name="asr_jitter">ASR jitter</string>
+    <string name="asr_mv_reuse">ASR motion vector reuse</string>
 
     <!-- Anti-Aliasing -->
     <string name="anti_aliasing_none">None</string>
@@ -1359,6 +1403,14 @@
     <string name="theme_material_you">Material You</string>
     <string name="app_settings">Interface</string>
     <string name="theme_and_color">Theme And Color</string>
+    <string name="change_app_font">App font</string>
+    <string name="font_default">Google Sans (default)</string>
+    <string name="font_sakura">Sakura Display</string>
+    <string name="font_custom_folder">Custom font folder</string>
+    <string name="font_custom_folder_description">Choose a folder containing .ttf, .otf or .ttc files. New files appear in App font without a rebuild.</string>
+    <string name="font_folder_selected">Font folder: %1$s</string>
+    <string name="font_folder_updated">Font folder updated</string>
+    <string name="font_folder_error">Could not access that folder</string>
     <string name="interface_motion">Motion &amp; Animation</string>
     <string name="interface_look">Look &amp; Layout</string>
     <string name="interface_overlays">Overlays</string>
@@ -1380,6 +1432,8 @@
     <string name="ui_press_feedback_description">Scale cards and rows while they are pressed.</string>
     <string name="ui_haptic_feedback">UI haptics</string>
     <string name="ui_haptic_feedback_description">Vibrate briefly when cards, rows, and tiles are pressed.</string>
+    <string name="ui_sound_feedback">UI click sounds</string>
+    <string name="ui_sound_feedback_description">Play the device\'s standard click sound when tapping interface cards and rows. Uses Android system sound settings.</string>
     <string name="ui_entrance_animation">List entrance animation</string>
     <string name="ui_entrance_animation_description">Rise and fade list rows the first time they scroll into view.</string>
     <string name="ui_transition_animation">Screen transitions</string>
@@ -2126,7 +2180,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <string name="autotune_warning">Stay on a representative scene and leave the controls alone. The game runs at unlocked speed during each test, and the whole session takes about two minutes.</string>
     <string name="autotune_start">Start benchmark</string>
     <string name="autotune_running">Benchmarking…</string>
-    <string name="autotune_run_of">Test %1$d of %2$d</string>
+    <string name="autotune_run_of">Test %1$d · maximum %2$d</string>
     <string name="autotune_settling">Applying settings…</string>
     <string name="autotune_measuring">Measuring</string>
     <string name="autotune_results">Results so far</string>

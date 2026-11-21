@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Library card: artwork on top, label block underneath, single 24dp container. -->
+<!-- Library card: artwork on top, label block underneath. The card fills its grid cell instead of
+     a fixed width, so three- and four-column layouts do not clip or overlap their neighbours. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -13,7 +14,7 @@
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/card_game_grid"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:clickable="true"
@@ -26,15 +27,16 @@
         app:strokeWidth="0dp">
 
         <androidx.constraintlayout.widget.ConstraintLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/image_game_screen"
-                android:layout_width="148dp"
-                android:layout_height="148dp"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
                 android:scaleType="centerCrop"
                 android:transitionName="game_artwork"
+                app:layout_constraintDimensionRatio="1:1"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"

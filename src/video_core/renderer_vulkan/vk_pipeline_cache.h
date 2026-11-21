@@ -178,6 +178,8 @@ private:
     VideoCore::ShaderNotify& shader_notify;
     bool use_asynchronous_shaders{};
     bool use_vulkan_pipeline_cache{};
+    bool force_gpu_recompile{};
+    std::unique_ptr<PipelineStatistics> runtime_statistics;
 
     GraphicsPipelineCacheKey graphics_key{};
     GraphicsPipeline* current_pipeline{};

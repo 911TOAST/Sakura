@@ -123,6 +123,7 @@ private:
     std::jthread present_thread;
     std::atomic<bool> direct_recreate_pending{false};
     bool blit_supported;
+    VkFilter blit_filter;
     bool use_direct_present;
     bool use_present_thread;
     std::size_t image_count{};

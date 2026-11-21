@@ -8,24 +8,23 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.edit
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.findNavController
 import androidx.navigation.fragment.navArgs
-import androidx.preference.PreferenceManager
-import androidx.recyclerview.widget.GridLayoutManager
-import org.yuzu.yuzu_emu.HomeNavigationDirections
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.yuzu.yuzu_emu.HomeNavigationDirections
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.adapters.DriverAdapter
 import org.yuzu.yuzu_emu.databinding.FragmentDriverManagerBinding
-import org.yuzu.yuzu_emu.features.settings.model.Settings
 import org.yuzu.yuzu_emu.features.settings.model.StringSetting
 import org.yuzu.yuzu_emu.features.settings.ui.SettingsSubscreen
 import org.yuzu.yuzu_emu.model.DriverViewModel
@@ -33,6 +32,7 @@ import org.yuzu.yuzu_emu.model.HomeViewModel
 import org.yuzu.yuzu_emu.utils.FileUtil
 import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.NativeConfig
+import org.yuzu.yuzu_emu.utils.UiLayout
 import org.yuzu.yuzu_emu.utils.ViewUtils.updateMargins
 import org.yuzu.yuzu_emu.utils.collect
 import java.io.File
@@ -46,10 +46,6 @@ class DriverManagerFragment : Fragment() {
     private val driverViewModel: DriverViewModel by activityViewModels()
 
     private val args by navArgs<DriverManagerFragmentArgs>()
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -71,8 +67,7 @@ class DriverManagerFragment : Fragment() {
             binding.toolbarDrivers.setOnMenuItemClickListener {
                 when (it.itemId) {
                     R.id.menu_driver_use_global -> {
-                        StringSetting.DRIVER_PATH.global = true
-                        driverViewModel.updateDriverList()
+                        driverViewModel.onUseGlobalDriver()
                         (binding.listDrivers.adapter as DriverAdapter)
                             .replaceList(driverViewModel.driverList.value)
                         driverViewModel.showClearButton(false)
@@ -92,6 +87,17 @@ class DriverManagerFragment : Fragment() {
             if (shouldShow) {
                 showDriverShaderWipeDialog()
             }
+        }
+
+        // Keep the header honest: it always names the driver the next launch will load.
+        driverViewModel.selectedDriverTitle.collect(viewLifecycleOwner) { title ->
+            binding.textActiveDriver.text = title.ifEmpty {
+                getString(R.string.select_gpu_driver_default)
+            }
+        }
+        driverViewModel.selectedDriverVersion.collect(viewLifecycleOwner) { version ->
+            binding.textActiveVersion.isVisible = version.isNotBlank()
+            binding.textActiveVersion.text = version
         }
 
         if (!driverViewModel.isInteractionAllowed.value) {
@@ -118,24 +124,60 @@ class DriverManagerFragment : Fragment() {
         }
 
         binding.listDrivers.apply {
-            layoutManager = GridLayoutManager(
-                requireContext(),
-                resources.getInteger(R.integer.grid_columns)
-            )
+            // One full-width row per driver: the title, badge and delete action need the room.
+            layoutManager = LinearLayoutManager(requireContext())
             adapter = DriverAdapter(driverViewModel)
         }
+
+        // The header follows the same shape language as the rows below it.
+        binding.cardActiveDriver.radius =
+            UiLayout.current(requireContext()).cornerRadiusPx(requireContext())
+        // The list always holds the system driver; show guidance only while it is alone.
+        (binding.listDrivers.adapter as DriverAdapter).registerAdapterDataObserver(
+            object : RecyclerView.AdapterDataObserver() {
+                override fun onChanged() = updateHeader()
+
+                override fun onItemRangeInserted(positionStart: Int, itemCount: Int) =
+                    updateHeader()
+
+                override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) =
+                    updateHeader()
+            }
+        )
+        updateHeader()
 
         setInsets()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        driverViewModel.onCloseDriverManager(args.game)
+    /**
+     * Keeps the installed counter and the empty guidance in sync with the adapter, including
+     * after the fetcher screen installs a driver behind this list.
+     */
+    private fun updateHeader() {
+        val adapter = binding.listDrivers.adapter as? DriverAdapter ?: return
+        // Position 0 is always the system driver; only count the installed custom ones.
+        val customDriverCount = (adapter.itemCount - 1).coerceAtLeast(0)
+        val hasCustomDrivers = customDriverCount > 0
+
+        binding.textDriverCount.text = customDriverCount.toString()
+        binding.sectionDrivers.isVisible = hasCustomDrivers
+        binding.listDrivers.isVisible = hasCustomDrivers
+        binding.emptyDrivers.isVisible = !hasCustomDrivers
     }
 
     override fun onResume() {
         super.onResume()
         refreshDriverList()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        driverViewModel.onCloseDriverManager(args.game)
     }
 
     private fun refreshDriverList() {
@@ -153,26 +195,18 @@ class DriverManagerFragment : Fragment() {
 
             val leftInsets = barInsets.left + cutoutInsets.left
             val rightInsets = barInsets.right + cutoutInsets.right
+            val density = resources.displayMetrics.density
 
             binding.toolbarDrivers.updateMargins(left = leftInsets, right = rightInsets)
-            binding.listDrivers.updateMargins(left = leftInsets, right = rightInsets)
+            binding.contentDrivers.updatePadding(left = leftInsets, right = rightInsets)
 
-            val fabSpacing = resources.getDimensionPixelSize(R.dimen.spacing_fab)
-            binding.buttonInstall.updateMargins(
-                left = leftInsets + fabSpacing,
-                right = rightInsets + fabSpacing,
-                bottom = barInsets.bottom + fabSpacing
+            // The action bar owns the navigation-bar inset; the list just needs breathing room
+            // above it so the last driver is never hidden behind the buttons.
+            binding.driverActions.updatePadding(
+                bottom = barInsets.bottom + (10 * density).toInt()
             )
-
-            binding.buttonFetch.updateMargins(
-                left = leftInsets + fabSpacing,
-                right = rightInsets + fabSpacing,
-                bottom = barInsets.bottom + fabSpacing
-            )
-
             binding.listDrivers.updatePadding(
-                bottom = barInsets.bottom +
-                    resources.getDimensionPixelSize(R.dimen.spacing_bottom_list_fab)
+                bottom = (8 * density).toInt()
             )
 
             windowInsets
@@ -230,28 +264,6 @@ class DriverManagerFragment : Fragment() {
                 return@newInstance Any()
             }.show(childFragmentManager, ProgressDialogFragment.TAG)
         }
-
-    fun showDriverWarningDialog() {
-        val shouldDisplayGpuWarning =
-            PreferenceManager.getDefaultSharedPreferences(requireContext())
-                .getBoolean(Settings.PREF_SHOULD_SHOW_DRIVER_WARNING, true)
-        if (shouldDisplayGpuWarning) {
-            MessageDialogFragment.newInstance(
-                activity,
-                titleId = R.string.unsupported_gpu,
-                descriptionId = R.string.unsupported_gpu_warning,
-                positiveButtonTitleId = R.string.dont_show_again,
-                negativeButtonTitleId = R.string.close,
-                showNegativeButton = true,
-                positiveAction = {
-                    PreferenceManager.getDefaultSharedPreferences(requireContext())
-                        .edit() {
-                            putBoolean(Settings.PREF_SHOULD_SHOW_DRIVER_WARNING, false)
-                        }
-                }
-            ).show(requireActivity().supportFragmentManager, MessageDialogFragment.TAG)
-        }
-    }
 
     private fun showDriverShaderWipeDialog() {
         com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())

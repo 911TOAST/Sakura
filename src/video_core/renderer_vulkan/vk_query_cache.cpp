@@ -86,6 +86,30 @@ public:
 
     void Sync(size_t start, size_t size) {
         const auto& dev = device.GetLogical();
+        // On Mali, vkGetQueryPoolResults with VK_QUERY_RESULT_WAIT_BIT can block indefinitely
+        // if the query was never submitted (e.g. during Dynamax Adventure's conditional render
+        // passes). Try a non-blocking read first; if the results are unavailable, treat them
+        // as "visible" (value = 1) so the game proceeds instead of hanging at 0 FPS.
+        if (device.IsMali()) {
+            // We need 2 u64s per query: [result, availability].
+            std::array<u64, BANK_SIZE * 2> avail_buf{};
+            const VkResult avail_result = dev.GetQueryResults(
+                *query_pool, static_cast<u32>(start), static_cast<u32>(size),
+                sizeof(u64) * 2 * size, avail_buf.data(), sizeof(u64) * 2,
+                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+            if (avail_result == VK_SUCCESS || avail_result == VK_NOT_READY) {
+                for (size_t i = 0; i < size; i++) {
+                    const u64 availability = avail_buf[i * 2 + 1];
+                    // If availability == 0 the query is not done; treat as visible (non-zero).
+                    host_results[start + i] = availability ? avail_buf[i * 2] : 1ULL;
+                }
+                return;
+            }
+            if (avail_result == VK_ERROR_DEVICE_LOST) {
+                device.ReportLoss();
+            }
+            throw vk::Exception(avail_result);
+        }
         const VkResult query_result = dev.GetQueryResults(
             *query_pool, static_cast<u32>(start), static_cast<u32>(size), sizeof(u64) * size,
             &host_results[start], sizeof(u64), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
@@ -238,8 +262,8 @@ public:
         }
         PauseCounter();
         const auto driver_id = device.GetDriverID();
-        if (driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY ||
-            driver_id == VK_DRIVER_ID_ARM_PROPRIETARY || driver_id == VK_DRIVER_ID_MESA_TURNIP) {
+        if (driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY || device.IsMali() ||
+            driver_id == VK_DRIVER_ID_MESA_TURNIP) {
             pending_sync.clear();
             sync_values_stash.clear();
             return;
@@ -1532,7 +1556,9 @@ bool QueryCacheRuntime::HostConditionalRenderingCompareValues(VideoCommon::Looku
     auto driver_id = impl->device.GetDriverID();
     const bool is_gpu_high = Settings::IsGPULevelHigh();
 
-    if ((!is_gpu_high && driver_id == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS) || driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY || driver_id == VK_DRIVER_ID_ARM_PROPRIETARY || driver_id == VK_DRIVER_ID_MESA_TURNIP) {
+    if ((!is_gpu_high && driver_id == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS) ||
+        driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY || impl->device.IsMali() ||
+        driver_id == VK_DRIVER_ID_MESA_TURNIP) {
         EndHostConditionalRendering();
         return true;
     }

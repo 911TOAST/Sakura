@@ -18,7 +18,9 @@ object MemoryUtil {
         get() = String.format(Locale.ROOT, "%.2f", this)
 
     // Required total system memory
-    const val REQUIRED_MEMORY = 8
+    // The emulator targets a 6 GiB process budget on Android (see common/memory_budget.cpp), so
+    // devices below 6 GB are the ones the warning should cover.
+    const val REQUIRED_MEMORY = 6
 
     const val Kb: Float = 1024F
     const val Mb = Kb * 1024

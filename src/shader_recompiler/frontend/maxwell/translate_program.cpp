@@ -295,6 +295,14 @@ IR::Program TranslateProgram(ObjectPool<IR::Inst>& inst_pool, ObjectPool<IR::Blo
     Optimization::SsaRewritePass(program);
 
     Optimization::ConstantPropagationPass(env, program);
+    Optimization::AlgebraicSimplificationPass(program);
+    Optimization::GvnPass(program);
+    Optimization::CopyPropagationPass(program);
+    Optimization::CsePass(program);
+    Optimization::IdentityRemovalPass(program);
+    // The custom passes above can expose dead chains that constant propagation could not see.
+    // Remove them before position/texture lowering so later passes process a smaller IR.
+    Optimization::DeadCodeEliminationPass(program);
 
     Optimization::PositionPass(env, program);
 

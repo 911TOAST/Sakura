@@ -110,9 +110,8 @@ protected:
 private:
     static oboe::AudioStreamBuilder* ConfigureBuilder(oboe::AudioStreamBuilder& builder,
                                                       oboe::Direction direction) {
-        // TODO: investigate callback delay issues when using AAudio
         return builder.setPerformanceMode(oboe::PerformanceMode::LowLatency)
-            ->setAudioApi(oboe::AudioApi::OpenSLES)
+            ->setAudioApi(oboe::AudioApi::AAudio)
             ->setDirection(direction)
             ->setSampleRate(TargetSampleRate)
             ->setSampleRateConversionQuality(oboe::SampleRateConversionQuality::High)

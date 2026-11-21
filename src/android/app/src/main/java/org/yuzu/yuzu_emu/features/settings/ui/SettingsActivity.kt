@@ -83,7 +83,7 @@ class SettingsActivity : AppCompatActivity() {
         settingsViewModel.shouldRecreate.collect(
             this,
             resetState = { settingsViewModel.setShouldRecreate(false) }
-        ) { if (it) recreate() }
+        ) { if (it && !isFinishing && !isDestroyed) recreateWithThemeMotion() }
         settingsViewModel.shouldNavigateBack.collect(
             this,
             resetState = { settingsViewModel.setShouldNavigateBack(false) }

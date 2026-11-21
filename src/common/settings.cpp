@@ -253,11 +253,6 @@ void ApplyPerformanceProfile() {
     values.dyna_state.SetValue(ExtendedDynamicState::EDS2);
     values.vertex_input_dynamic_state.SetValue(true);
 
-    // Composition: the display path blends every framebuffer onto the swapchain image, so on
-    // Mailkan every extra layer is a full-target blend on fill rate. Composing only the largest
-    // layer keeps the game surface and drops overlay layers; single-layer frames are unchanged.
-    values.renderer_layer_skip.SetValue(true);
-
     // Native guest resolution, no supersampling: the profile never pays for extra shaded pixels,
     // and FSR's extra full-screen taps cost more than the 0.75x fill saving on this GPU.
     if (values.resolution_setup.GetValue() > ResolutionSetup::Res1X) {
@@ -287,7 +282,7 @@ void ApplyPerformanceProfile() {
 
     LOG_INFO(Common,
              "[Malikan] Performance defaults applied once: native 1x + bilinear, mailbox present, "
-             "async GPU, EDS2 + dynamic vertex input, composite layer skip, reactive flushing, "
+             "async GPU, EDS2 + dynamic vertex input, reactive flushing, "
              "low GPU accuracy");
 #endif
 }

@@ -10,6 +10,9 @@ import android.view.View
 import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -67,6 +70,13 @@ class DiscordPresenceActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_discord_presence)
+
+        val root = findViewById<View>(R.id.root)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            view.updatePadding(top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top)
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
 
         bindViews()
         (findViewById<MaterialToolbar>(R.id.toolbar)).setNavigationOnClickListener { finish() }

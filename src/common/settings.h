@@ -442,6 +442,28 @@ struct Values {
     SwitchableSetting<bool> renderer_clear_loadop{linkage, true, "renderer_clear_loadop",
                                                   Category::RendererDebug,
                                                   Specialization::Default, true, true};
+    // Drop degenerate draws that cannot produce a primitive: triangles with fewer than three
+    // vertices and lines with fewer than two. Titles issue these for empty batches and the pipeline
+    // setup costs more than the draw. Turn it off if a scene loses geometry.
+    SwitchableSetting<bool> skip_micro_draws{linkage, false, "skip_micro_draws",
+                                             Category::RendererDebug,
+                                             Specialization::Default, true, true};
+    // Skip draws that provably write neither colour nor depth/stencil, and depth-only passes that
+    // target an offscreen (non-widescreen, non-colour-sized) surface. The main camera depth
+    // pre-pass is kept so geometry does not vanish. Turn it off if shadows or geometry go missing.
+    SwitchableSetting<bool> skip_depth_only_draws{linkage, false, "skip_depth_only_draws",
+                                                  Category::RendererDebug,
+                                                  Specialization::Default, true, true};
+    // Drop a depth/stencil-only clear when no draw has written depth since the previous one, so
+    // the attachment already holds the value the clear would write.
+    SwitchableSetting<bool> skip_depth_clears{linkage, false, "skip_depth_clears",
+                                              Category::RendererDebug,
+                                              Specialization::Default, true, true};
+    // Skip compute dispatches that are not driven by an indirect buffer. Debug aid for isolating
+    // compute-side cost; a title that depends on direct dispatches will render incorrectly.
+    SwitchableSetting<bool> skip_compute_shaders{linkage, false, "skip_compute_shaders",
+                                                 Category::RendererDebug,
+                                                 Specialization::Default, true, true};
     // Skip the DRAM writeback of a render target whose contents the very next pass discards by
     // clearing it again. On a tiler the store writes the whole tile to memory only for the next
     // pass's clear to throw it away. The store op is chosen when the pass ends and the next pass is

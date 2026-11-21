@@ -1,4 +1,11 @@
 {
+    "arm-asr": {
+        "bundled": true,
+        "hash": "cba12e325354bc521fdce0472b7c6dca05a3dc24c9622354a5d1d509c9f8fb5bcc5ad34ba784de3262394e4b5e4316bfeed2d2e3a87a235394ca9729a74603d6",
+        "package": "ArmASR",
+        "repo": "arm/accuracy-super-resolution-generic-library",
+        "version": "25.06"
+    },
     "biscuit": {
         "hash": "1229f345b014f7ca544dedb4edb3311e41ba736f9aa9a67f88b5f26f3c983288c6bb6cdedcfb0b8a02c63088a37e6a0d7ba97d9c2a4d721b213916327cffe28a",
         "min_version": "0.9.1",

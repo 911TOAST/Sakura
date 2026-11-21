@@ -82,6 +82,10 @@ object ViewUtils {
      * @param delay Optional parameter for changing the start delay. 3 seconds of delay by default.
      */
     fun TextView.marquee(delay: Long = 3000) {
+        // Decorative only: it must never steal a tap from the card it labels, and a tap on the
+        // row is enough to make the view selectable, so the sweep starts right away.
+        isClickable = false
+        isFocusable = false
         ellipsize = null
         marqueeRepeatLimit = -1
         isSingleLine = true

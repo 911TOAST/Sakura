@@ -29,20 +29,25 @@ import org.yuzu.yuzu_emu.YuzuApplication
 import org.yuzu.yuzu_emu.databinding.CardGameListBinding
 import org.yuzu.yuzu_emu.databinding.CardGameGridBinding
 import org.yuzu.yuzu_emu.databinding.CardGameCarouselBinding
+import org.yuzu.yuzu_emu.databinding.CardGameCinemaBinding
 import org.yuzu.yuzu_emu.model.Game
 import org.yuzu.yuzu_emu.model.GamesViewModel
 import org.yuzu.yuzu_emu.utils.GameIconUtils
 import org.yuzu.yuzu_emu.utils.FavStore
 import org.yuzu.yuzu_emu.utils.SuyuMotion
+import org.yuzu.yuzu_emu.utils.UiLayout
 import org.yuzu.yuzu_emu.utils.ViewUtils.marquee
 import org.yuzu.yuzu_emu.viewholder.AbstractViewHolder
 import androidx.core.net.toUri
 import androidx.core.content.edit
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import java.io.File
 import org.yuzu.yuzu_emu.NativeLibrary
 import org.yuzu.yuzu_emu.databinding.CardGameGridCompactBinding
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.Settings
+import org.yuzu.yuzu_emu.ui.CarouselRecyclerView
+import org.yuzu.yuzu_emu.utils.DirectoryInitialization
 
 class GameAdapter(private val activity: AppCompatActivity) :
     AbstractDiffAdapter<Game, GameAdapter.GameViewHolder>(exact = false) {
@@ -52,6 +57,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
         const val VIEW_TYPE_GRID_COMPACT = 1
         const val VIEW_TYPE_LIST = 2
         const val VIEW_TYPE_CAROUSEL = 3
+        const val VIEW_TYPE_CINEMA = 4
     }
 
     private var viewType = 0
@@ -113,11 +119,19 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 carouselBinding.cardGameCarousel.scaleY = 0f
                 carouselBinding.cardGameCarousel.alpha = 0f
             }
+
+            VIEW_TYPE_CINEMA -> {
+                val cinemaBinding = holder.binding as CardGameCinemaBinding
+                cinemaBinding.cardGameCinema.scaleX = 1f
+                cinemaBinding.cardGameCinema.scaleY = 1f
+                cinemaBinding.cardGameCinema.alpha = 1f
+            }
         }
         // Raw M3 entrance: staggered fade+slide when the library first lays out.
         if (entranceRemaining > 0) {
             entranceRemaining--
             val itemView = holder.itemView
+            itemView.animate().cancel()
             itemView.alpha = 0f
             itemView.translationY =
                 itemView.resources.getDimensionPixelSize(R.dimen.spacing_large).toFloat()
@@ -136,12 +150,20 @@ class GameAdapter(private val activity: AppCompatActivity) :
      * and whenever the view mode changes).
      */
     fun playEntranceAnimation(tileCount: Int = 24) {
+        // A portrait library that falls back to a grid must still show its tiles: the bind pass
+        // above fades carousel cards out, and a grid here would leave them invisible for good.
+        viewType = VIEW_TYPE_GRID
         if (!SuyuMotion.entrancesEnabled()) {
             entranceRemaining = 0
             return
         }
         // Cap to roughly two screens so later scroll binds never re-animate.
         entranceRemaining = tileCount.coerceAtMost(24)
+    }
+
+    /** Drops the pending entrance budget, called once a layout pass has consumed it. */
+    fun clearEntranceAnimation() {
+        entranceRemaining = 0
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): GameViewHolder {
@@ -170,6 +192,12 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 false
             )
 
+            VIEW_TYPE_CINEMA -> CardGameCinemaBinding.inflate(
+                LayoutInflater.from(parent.context),
+                parent,
+                false
+            )
+
             else -> throw IllegalArgumentException("Invalid view type")
         }
         return GameViewHolder(binding, viewType)
@@ -186,6 +214,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 VIEW_TYPE_GRID -> bindGridView(model)
                 VIEW_TYPE_CAROUSEL -> bindCarouselView(model)
                 VIEW_TYPE_GRID_COMPACT -> bindGridCompactView(model)
+                VIEW_TYPE_CINEMA -> bindCinemaView(model)
             }
         }
 
@@ -204,6 +233,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
             listBinding.textGameDeveloper.visibility = if (titlesVisible) View.VISIBLE else View.GONE
 
             listBinding.textGameTitle.marquee()
+            UiLayout.current(listBinding.root.context).applyToCard(listBinding.cardGameList)
             listBinding.cardGameList.setOnClickListener { onClick(model) }
             listBinding.cardGameList.setOnLongClickListener { onLongClick(model) }
             SuyuMotion.installPressFeedback(listBinding.cardGameList)
@@ -223,6 +253,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
             gridBinding.textGameTitle.visibility =
                 if (BooleanSetting.HIDE_GAME_TITLES.getBoolean()) View.GONE else View.VISIBLE
 
+            UiLayout.current(gridBinding.root.context).applyToCard(gridBinding.cardGameGrid)
             gridBinding.cardGameGrid.setOnClickListener { onClick(model) }
             gridBinding.cardGameGrid.setOnLongClickListener { onLongClick(model) }
             SuyuMotion.installPressFeedback(gridBinding.cardGameGrid)
@@ -242,6 +273,8 @@ class GameAdapter(private val activity: AppCompatActivity) :
             gridCompactBinding.textGameTitleCompact.visibility =
                 if (BooleanSetting.HIDE_GAME_TITLES.getBoolean()) View.GONE else View.VISIBLE
 
+            UiLayout.current(gridCompactBinding.root.context)
+                .applyToCard(gridCompactBinding.cardGameGridCompact)
             gridCompactBinding.cardGameGridCompact.setOnClickListener { onClick(model) }
             gridCompactBinding.cardGameGridCompact.setOnLongClickListener { onLongClick(model) }
             SuyuMotion.installPressFeedback(gridCompactBinding.cardGameGridCompact)
@@ -249,6 +282,23 @@ class GameAdapter(private val activity: AppCompatActivity) :
             // Reset layout params to XML defaults (same as normal grid)
             gridCompactBinding.root.layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
             gridCompactBinding.root.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+
+        private fun bindCinemaView(model: Game) {
+            val cinemaBinding = binding as CardGameCinemaBinding
+
+            cinemaBinding.imageGameCinema.scaleType = ImageView.ScaleType.CENTER_CROP
+            GameIconUtils.loadGameIcon(model, cinemaBinding.imageGameCinema)
+
+            cinemaBinding.textGameCinemaTitle.text =
+                model.title.replace("[\\t\\n\\r]+".toRegex(), " ")
+            cinemaBinding.textGameCinemaTitle.visibility =
+                if (BooleanSetting.HIDE_GAME_TITLES.getBoolean()) View.GONE else View.VISIBLE
+
+            UiLayout.current(cinemaBinding.root.context).applyToCard(cinemaBinding.cardGameCinema)
+            cinemaBinding.cardGameCinema.setOnClickListener { onClick(model) }
+            cinemaBinding.cardGameCinema.setOnLongClickListener { onLongClick(model) }
+            SuyuMotion.installPressFeedback(cinemaBinding.cardGameCinema)
         }
 
         private fun bindCarouselView(model: Game) {
@@ -260,6 +310,8 @@ class GameAdapter(private val activity: AppCompatActivity) :
             carouselBinding.textGameTitle.text = model.title.replace("[\\t\\n\\r]+".toRegex(), " ")
             carouselBinding.textGameTitle.visibility =
                 if (BooleanSetting.HIDE_GAME_TITLES.getBoolean()) View.GONE else View.VISIBLE
+            UiLayout.current(carouselBinding.root.context)
+                .applyToCard(carouselBinding.cardGameCarousel)
             carouselBinding.cardGameCarousel.setOnClickListener { onClick(model) }
             carouselBinding.cardGameCarousel.setOnLongClickListener { onLongClick(model) }
             SuyuMotion.installPressFeedback(carouselBinding.cardGameCarousel)
@@ -271,7 +323,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
             carouselBinding.root.layoutParams.width = cardSize
         }
 
-        fun onClick(game: Game) {
+        fun onClick(game: Game, recompileGpu: Boolean = false) {
             val gameExists = DocumentFile.fromSingleUri(
                 YuzuApplication.appContext,
                 game.path.toUri()
@@ -317,8 +369,16 @@ class GameAdapter(private val activity: AppCompatActivity) :
                     }
                 }
 
-                val action = HomeNavigationDirections.actionGlobalEmulationActivity(game, true)
-                binding.root.findNavController().navigate(action)
+                if (!recompileGpu || queueGpuRecompile(game)) {
+                    val action = HomeNavigationDirections.actionGlobalEmulationActivity(game, true)
+                    binding.root.findNavController().navigate(action)
+                } else {
+                    Toast.makeText(
+                        activity,
+                        R.string.recompile_gpu_queue_failed,
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
 
             // With fake system software enabled there is nothing to warn about: the applets the
@@ -350,6 +410,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
             val fav = FavStore.has(game.path)
             popup.menu.add(0, 1, 0, R.string.game_properties)
             popup.menu.add(0, 2, 1, if (fav) R.string.unpin_favorite else R.string.pin_favorite)
+            popup.menu.add(0, 3, 2, R.string.recompile_gpu).isEnabled = game.programIdHex != "0"
             popup.setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     1 -> {
@@ -366,11 +427,37 @@ class GameAdapter(private val activity: AppCompatActivity) :
                         ViewModelProvider(activity)[GamesViewModel::class.java].bumpFavorites()
                         true
                     }
+                    3 -> {
+                        confirmGpuRecompile(game)
+                        true
+                    }
                     else -> false
                 }
             }
             popup.show()
             return true
+        }
+
+        private fun confirmGpuRecompile(game: Game) {
+            MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.recompile_gpu)
+                .setMessage(R.string.recompile_gpu_description)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.launch) { _, _ -> onClick(game, recompileGpu = true) }
+                .show()
+        }
+
+        private fun queueGpuRecompile(game: Game): Boolean {
+            val cacheDir = File(
+                DirectoryInitialization.userDirectory,
+                "cache/shader/${game.programIdHex.lowercase()}"
+            )
+            val marker = File(cacheDir, "force_gpu_recompile.once")
+            return runCatching {
+                (cacheDir.mkdirs() || cacheDir.isDirectory).also { created ->
+                    if (created) marker.writeText("1")
+                }
+            }.getOrDefault(false)
         }
 
         private fun openProperties(game: Game): Boolean {

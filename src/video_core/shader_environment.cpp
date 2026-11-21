@@ -478,6 +478,7 @@ void FileEnvironment::Deserialize(std::ifstream& file) {
         .read(reinterpret_cast<char*>(&read_highest), sizeof(read_highest))
         .read(reinterpret_cast<char*>(&viewport_transform_state), sizeof(viewport_transform_state))
         .read(reinterpret_cast<char*>(&stage), sizeof(stage));
+    code_bytes = code_size;
     code.resize(Common::DivCeil(code_size, sizeof(u64)));
     file.read(reinterpret_cast<char*>(code.data()), code_size);
     for (size_t i = 0; i < num_texture_types; ++i) {
@@ -520,6 +521,56 @@ void FileEnvironment::Deserialize(std::ifstream& file) {
         }
     }
     is_proprietary_driver = texture_bound == 2;
+}
+
+void FileEnvironment::Serialize(std::ofstream& file) const {
+    const u64 num_texture_types{static_cast<u64>(texture_types.size())};
+    const u64 num_texture_pixel_formats{static_cast<u64>(texture_pixel_formats.size())};
+    const u64 num_cbuf_values{static_cast<u64>(cbuf_values.size())};
+    const u64 num_cbuf_replacement_values{static_cast<u64>(cbuf_replacements.size())};
+
+    file.write(reinterpret_cast<const char*>(&code_bytes), sizeof(code_bytes))
+        .write(reinterpret_cast<const char*>(&num_texture_types), sizeof(num_texture_types))
+        .write(reinterpret_cast<const char*>(&num_texture_pixel_formats),
+               sizeof(num_texture_pixel_formats))
+        .write(reinterpret_cast<const char*>(&num_cbuf_values), sizeof(num_cbuf_values))
+        .write(reinterpret_cast<const char*>(&num_cbuf_replacement_values),
+               sizeof(num_cbuf_replacement_values))
+        .write(reinterpret_cast<const char*>(&local_memory_size), sizeof(local_memory_size))
+        .write(reinterpret_cast<const char*>(&texture_bound), sizeof(texture_bound))
+        .write(reinterpret_cast<const char*>(&start_address), sizeof(start_address))
+        .write(reinterpret_cast<const char*>(&read_lowest), sizeof(read_lowest))
+        .write(reinterpret_cast<const char*>(&read_highest), sizeof(read_highest))
+        .write(reinterpret_cast<const char*>(&viewport_transform_state),
+               sizeof(viewport_transform_state))
+        .write(reinterpret_cast<const char*>(&stage), sizeof(stage))
+        .write(reinterpret_cast<const char*>(code.data()), code_bytes);
+    for (const auto& [key, type] : texture_types) {
+        file.write(reinterpret_cast<const char*>(&key), sizeof(key))
+            .write(reinterpret_cast<const char*>(&type), sizeof(type));
+    }
+    for (const auto& [key, format] : texture_pixel_formats) {
+        file.write(reinterpret_cast<const char*>(&key), sizeof(key))
+            .write(reinterpret_cast<const char*>(&format), sizeof(format));
+    }
+    for (const auto& [key, value] : cbuf_values) {
+        file.write(reinterpret_cast<const char*>(&key), sizeof(key))
+            .write(reinterpret_cast<const char*>(&value), sizeof(value));
+    }
+    for (const auto& [key, replacement] : cbuf_replacements) {
+        file.write(reinterpret_cast<const char*>(&key), sizeof(key))
+            .write(reinterpret_cast<const char*>(&replacement), sizeof(replacement));
+    }
+    if (stage == Shader::Stage::Compute) {
+        file.write(reinterpret_cast<const char*>(&workgroup_size), sizeof(workgroup_size))
+            .write(reinterpret_cast<const char*>(&shared_memory_size), sizeof(shared_memory_size));
+    } else {
+        file.write(reinterpret_cast<const char*>(&sph), sizeof(sph));
+        if (stage == Shader::Stage::Geometry) {
+            file.write(reinterpret_cast<const char*>(&gp_passthrough_mask),
+                       sizeof(gp_passthrough_mask));
+        }
+    }
 }
 
 void FileEnvironment::Dump(u64 pipeline_hash, u64 shader_hash) {
@@ -592,9 +643,11 @@ std::optional<Shader::ReplaceConstant> FileEnvironment::GetReplaceConstBuffer(u3
     return it->second;
 }
 
-void SerializePipeline(std::span<const char> key, std::span<const GenericEnvironment* const> envs,
-                       const std::filesystem::path& filename, u32 cache_version,
-                       std::span<const u8> extra_data) try {
+namespace {
+template <typename Env>
+void SerializePipelineImpl(std::span<const char> key, std::span<const Env* const> envs,
+                           const std::filesystem::path& filename, u32 cache_version,
+                           std::span<const u8> extra_data) try {
     std::ofstream file(filename, std::ios::binary | std::ios::ate | std::ios::app);
     file.exceptions(std::ifstream::failbit);
     if (!file.is_open()) {
@@ -607,12 +660,12 @@ void SerializePipeline(std::span<const char> key, std::span<const GenericEnviron
         file.write(MAGIC_NUMBER.data(), MAGIC_NUMBER.size())
             .write(reinterpret_cast<const char*>(&cache_version), sizeof(cache_version));
     }
-    if (!std::ranges::all_of(envs, &GenericEnvironment::CanBeSerialized)) {
+    if (!std::ranges::all_of(envs, [](const Env* env) { return env->CanBeSerialized(); })) {
         return;
     }
     const u32 num_envs{static_cast<u32>(envs.size())};
     file.write(reinterpret_cast<const char*>(&num_envs), sizeof(num_envs));
-    for (const GenericEnvironment* const env : envs) {
+    for (const Env* const env : envs) {
         env->Serialize(file);
     }
     file.write(key.data(), key.size_bytes());
@@ -635,6 +688,19 @@ void SerializePipeline(std::span<const char> key, std::span<const GenericEnviron
         LOG_ERROR(Common_Filesystem, "Failed to delete pipeline cache file {}",
                   Common::FS::PathToUTF8String(filename));
     }
+}
+} // Anonymous namespace
+
+void SerializePipeline(std::span<const char> key, std::span<const GenericEnvironment* const> envs,
+                       const std::filesystem::path& filename, u32 cache_version,
+                       std::span<const u8> extra_data) {
+    SerializePipelineImpl(key, envs, filename, cache_version, extra_data);
+}
+
+void SerializePipeline(std::span<const char> key, std::span<const FileEnvironment* const> envs,
+                       const std::filesystem::path& filename, u32 cache_version,
+                       std::span<const u8> extra_data) {
+    SerializePipelineImpl(key, envs, filename, cache_version, extra_data);
 }
 
 void LoadPipelines(

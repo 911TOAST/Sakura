@@ -80,6 +80,13 @@ object ThemeHelper {
         }
 
         setThemeMode(activity)
+
+        // The layout preset only touches shape tokens, so it can be layered on top of whichever
+        // palette was selected above instead of replacing the theme.
+        val layoutOverlay = UiLayout.current(activity).themeOverlay
+        if (layoutOverlay != 0) {
+            activity.theme.applyStyle(layoutOverlay, true)
+        }
     }
 
     private fun isMaterialYou(): Boolean =
@@ -122,6 +129,9 @@ object ThemeHelper {
     fun setCorrectTheme(activity: AppCompatActivity) {
         val provider = activity as? ThemeProvider
         val previousThemeId = provider?.themeId ?: 0
+        val desiredNightMode = runCatching { IntSetting.THEME_MODE.getInt() }
+            .getOrDefault(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        val nightModeWillRecreate = activity.delegate.localNightMode != desiredNightMode
 
         setTheme(activity)
 
@@ -131,7 +141,11 @@ object ThemeHelper {
         if (activity.isFinishing || activity.isDestroyed) {
             return
         }
-        activity.recreate()
+        // AppCompat schedules its own recreation when localNightMode changes. Requesting another
+        // one here races that transition and can destroy the activity while its views are rebinding.
+        if (!nightModeWillRecreate) {
+            activity.recreateWithThemeMotion()
+        }
     }
 
     fun setThemeMode(activity: AppCompatActivity) {
@@ -180,7 +194,8 @@ object ThemeHelper {
             if (key !in listOf(
                     Settings.PREF_STATIC_THEME_COLOR,
                     Settings.PREF_THEME_MODE,
-                    Settings.PREF_BLACK_BACKGROUNDS
+                    Settings.PREF_BLACK_BACKGROUNDS,
+                    Settings.PREF_UI_LAYOUT
                 )
             ) {
                 return@OnSharedPreferenceChangeListener
@@ -189,7 +204,7 @@ object ThemeHelper {
             if (target.isFinishing || target.isDestroyed) {
                 return@OnSharedPreferenceChangeListener
             }
-            target.recreate()
+            target.recreateWithThemeMotion()
         }
         listener = newListener
         preferences.registerOnSharedPreferenceChangeListener(newListener)

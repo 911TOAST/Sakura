@@ -13,6 +13,7 @@
 #include "android_config.h"
 #include "common/android/android_common.h"
 #include "common/android/id_cache.h"
+#include "core/hle/service/am/applet_manager.h"
 #include "hid_core/frontend/emulated_controller.h"
 #include "hid_core/hid_core.h"
 #include "input_common/drivers/android.h"
@@ -191,6 +192,29 @@ extern "C" {
 jboolean Java_org_yuzu_yuzu_1emu_features_input_NativeInput_isHandheldOnly(JNIEnv* env,
                                                                            jobject j_obj) {
     return IsHandheldOnly();
+}
+
+void Java_org_yuzu_yuzu_1emu_features_input_NativeInput_setDockedMode(JNIEnv* env, jobject j_obj,
+                                                                      jboolean j_docked) {
+    const bool docked = j_docked;
+    const bool was_docked = Settings::IsDockedMode();
+    Settings::values.use_docked_mode.SetValue(docked ? Settings::ConsoleMode::Docked
+                                                     : Settings::ConsoleMode::Handheld);
+
+    auto& session = EmulationSession::GetInstance();
+    // The guest rejects the Handheld npad while docked, so move player 1 to a Pro Controller.
+    auto* player_one = session.System().HIDCore().GetEmulatedController(
+        Core::HID::NpadIdType::Player1);
+    if (docked && player_one->GetNpadStyleIndex(true) == Core::HID::NpadStyleIndex::Handheld) {
+        ApplyControllerConfig(0, [](Core::HID::EmulatedController* controller) {
+            controller->SetNpadStyleIndex(Core::HID::NpadStyleIndex::Fullkey);
+        });
+        ConnectController(0, true);
+    }
+
+    if (docked != was_docked && session.IsRunning()) {
+        session.System().GetAppletManager().OperationModeChanged();
+    }
 }
 
 void Java_org_yuzu_yuzu_1emu_features_input_NativeInput_onGamePadButtonEvent(

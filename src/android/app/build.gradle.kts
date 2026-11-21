@@ -263,6 +263,11 @@ android {
                     // Drop stack canaries only in the aggressive flavor. The mainline, legacy
                     // and debug builds keep the NDK's default stack protector.
                     cppFlags.add("-fno-stack-protector")
+                    // The optimized flavor exports no symbol a later object could
+                    // legally preempt (all internals are hidden-visibility), so
+                    // skipping ELF semantic-interposition checks removes a loader
+                    // indirection the default NDK flags would otherwise keep.
+                    cppFlags.add("-fno-semantic-interposition")
                 }
             }
 

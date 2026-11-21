@@ -50,7 +50,6 @@ import org.yuzu.yuzu_emu.utils.FileUtil
 import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.Log
 import org.yuzu.yuzu_emu.utils.NativeConfig
-import org.yuzu.yuzu_emu.utils.background.WallpaperSettings
 
 class HomeSettingsFragment : Fragment() {
     private var _binding: FragmentHomeSettingsBinding? = null
@@ -76,7 +75,7 @@ class HomeSettingsFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        _binding = FragmentHomeSettingsBinding.inflate(layoutInflater)
+        _binding = FragmentHomeSettingsBinding.inflate(inflater, container, false)
         return binding.root
     }
 
@@ -112,14 +111,6 @@ class HomeSettingsFragment : Fragment() {
                     R.string.library_hide_titles_description,
                     R.drawable.ic_m3_view_agenda,
                     { toggleGameTitles() }
-                )
-            )
-            add(
-                HomeSetting(
-                    R.string.library_aurora,
-                    R.string.library_aurora_description,
-                    R.drawable.ic_m3_new_releases,
-                    { toggleAurora() }
                 )
             )
             add(
@@ -432,22 +423,6 @@ class HomeSettingsFragment : Fragment() {
         ).show()
     }
 
-    private fun toggleAurora() {
-        val appearance = WallpaperSettings.appearance()
-        val updated = appearance.copy(aurora = !appearance.aurora)
-        runCatching { WallpaperSettings.setAppearance(updated) }
-            .onSuccess {
-                Toast.makeText(
-                    requireContext(),
-                    if (updated.aurora) R.string.library_aurora_on else R.string.library_aurora_off,
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-            .onFailure {
-                Toast.makeText(requireContext(), R.string.wallpaper_save_error, Toast.LENGTH_SHORT).show()
-            }
-    }
-
     private fun showPerformancePresetDialog() {
         val choices = arrayOf(
             getString(R.string.performance_preset_max),
@@ -648,9 +623,17 @@ class HomeSettingsFragment : Fragment() {
             val barInsets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             val cutoutInsets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
 
+            // Same rule as the library: on gesture-nav devices the pill and the cutout both live
+            // in the bottom band, and barInsets.bottom alone left the last row underneath them.
+            val bottomInset = maxOf(
+                barInsets.bottom,
+                cutoutInsets.bottom,
+                windowInsets.getInsets(WindowInsetsCompat.Type.systemGestures()).bottom
+            )
+
             binding.scrollViewSettings.updatePadding(
                 top = barInsets.top + resources.getDimensionPixelSize(R.dimen.spacing_small),
-                bottom = barInsets.bottom
+                bottom = bottomInset + resources.getDimensionPixelSize(R.dimen.spacing_large)
             )
 
             binding.linearLayoutSettings.updatePadding(

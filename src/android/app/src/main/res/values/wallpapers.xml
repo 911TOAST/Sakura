@@ -5,10 +5,6 @@
     <string name="wallpaper_thumbnail_failed">Preview unavailable. Tap to try the full image.</string>
     <string name="wallpapers_title">Wallpapers</string>
     <string name="wallpapers_description">Discover wallpapers and fine-tune your library background.</string>
-    <string name="library_aurora">Aurora veil</string>
-    <string name="library_aurora_description">Ambient glow and theme colours drawn from your wallpaper, with gentle tilt parallax.</string>
-    <string name="library_aurora_on">Aurora veil on</string>
-    <string name="library_aurora_off">Aurora veil off</string>
     <string name="wallpaper_surprise">Surprise me</string>
     <string name="wallpaper_current">Your library, your style</string>
     <string name="wallpaper_edit">Edit background</string>

@@ -3,6 +3,7 @@
 
 package org.yuzu.yuzu_emu.ui.theme
 
+import android.graphics.Typeface
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.utils.ArtworkColors
+import org.yuzu.yuzu_emu.utils.FontManager
 import org.yuzu.yuzu_emu.utils.Theme
 
 // =============================================================================
@@ -131,78 +133,78 @@ private val GoogleSans = FontFamily(
 //   - Body: neutral tracking unchanged (readability first)
 //   - Label: positive tracking (legibility at small sizes)
 // =============================================================================
-private val SuyuTypography = run {
+private fun suyuTypography(fontFamily: FontFamily): Typography {
     val base = Typography()
-    Typography(
+    return Typography(
         displayLarge = base.displayLarge.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = (-0.5).sp,
         ),
         displayMedium = base.displayMedium.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = (-0.35).sp,
         ),
         displaySmall = base.displaySmall.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = (-0.2).sp,
         ),
         headlineLarge = base.headlineLarge.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.2).sp,
         ),
         headlineMedium = base.headlineMedium.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.1).sp,
         ),
         headlineSmall = base.headlineSmall.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.sp,
         ),
         titleLarge = base.titleLarge.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.sp,
         ),
         titleMedium = base.titleMedium.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.05.sp,
         ),
         titleSmall = base.titleSmall.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.05.sp,
         ),
         bodyLarge = base.bodyLarge.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             letterSpacing = 0.1.sp,
         ),
         bodyMedium = base.bodyMedium.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             letterSpacing = 0.1.sp,
         ),
         bodySmall = base.bodySmall.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             letterSpacing = 0.15.sp,
         ),
         labelLarge = base.labelLarge.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.Medium,
             letterSpacing = 0.1.sp,
         ),
         labelMedium = base.labelMedium.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.Medium,
             letterSpacing = 0.2.sp,
         ),
         labelSmall = base.labelSmall.copy(
-            fontFamily = GoogleSans,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.Medium,
             letterSpacing = 0.25.sp,
         ),
@@ -237,10 +239,16 @@ fun suyuScheme(artworkSeed: Int? = null): ColorScheme {
 
 @Composable
 fun SuyuM3Theme(artworkSeed: Int? = null, content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val baseTypeface = remember(context) { FontManager.currentTypeface(context) }
+    val fontFamily = remember(baseTypeface) {
+        if (baseTypeface == null) GoogleSans else FontFamily(baseTypeface as Typeface)
+    }
+    val typography = remember(fontFamily) { suyuTypography(fontFamily) }
     MaterialTheme(
         colorScheme = suyuScheme(artworkSeed),
         shapes = SuyuShapes,
-        typography = SuyuTypography,
+        typography = typography,
         content = content
     )
 }

@@ -16,6 +16,9 @@
 #include "video_core/renderer_vulkan/present/sgsr.h"
 #include "video_core/renderer_vulkan/present/fxaa.h"
 #include "video_core/renderer_vulkan/present/smaa.h"
+#ifdef SAKURA_ASR
+#include "video_core/renderer_vulkan/present/asr.h"
+#endif
 
 namespace Layout {
 struct FramebufferLayout;
@@ -94,7 +97,12 @@ private:
 
     Settings::AntiAliasing anti_alias_setting{};
     std::variant<std::monostate, FXAA, SMAA> anti_alias{};
+#ifdef SAKURA_ASR
+    std::variant<std::monostate, SGSR, FSR, ASR> sr_filter{};
+    Tq tq;
+#else
     std::variant<std::monostate, SGSR, FSR> sr_filter{};
+#endif
     std::vector<u64> resource_ticks{};
 };
 

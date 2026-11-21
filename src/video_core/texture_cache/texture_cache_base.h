@@ -230,6 +230,8 @@ public:
     [[nodiscard]] std::pair<ImageView*, bool> TryFindFramebufferImageView(
         const Tegra::FramebufferConfig& config, DAddr cpu_addr);
 
+    [[nodiscard]] ImageView* TakeSceneDepth(u32 w, u32 h, bool& inv);
+
     /// Return true when there are uncommitted images to be downloaded
     [[nodiscard]] bool HasUncommittedFlushes() const noexcept;
 
@@ -443,6 +445,14 @@ private:
     u32 rt_active_mask = 0;
     std::array<ImageId, 8> rt_image_id{};
     ImageId rt_depth_image_id{};
+    struct Sd {
+        ImageViewId v{};
+        u32 n{};
+        u32 gt{};
+        u32 lt{};
+    };
+    std::array<Sd, 4> sd{};
+    void NoteSceneDepth();
     u64 texture_bindings_serial = 0;
     u64 last_feedback_loop_serial = 0;
     u64 last_feedback_texture_serial = 0;

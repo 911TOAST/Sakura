@@ -9,6 +9,7 @@ package org.yuzu.yuzu_emu
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ComponentCallbacks2
 import android.content.Context
 import org.yuzu.yuzu_emu.features.input.NativeInput
 import java.io.File
@@ -21,9 +22,11 @@ import android.os.LocaleList
 import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.utils.DirectoryInitialization
 import org.yuzu.yuzu_emu.utils.DocumentsTree
+import org.yuzu.yuzu_emu.utils.FontManager
 import org.yuzu.yuzu_emu.utils.CrashReporter
 import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.Log
+import org.yuzu.yuzu_emu.utils.MemoryPressure
 import org.yuzu.yuzu_emu.utils.PowerStateUpdater
 import org.yuzu.yuzu_emu.utils.ControllerNavigationGlobalHook
 import java.util.Locale
@@ -61,6 +64,7 @@ class YuzuApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         application = this
+        FontManager.install(this)
         // Must be installed before any other startup work so the first crash is captured.
         CrashReporter.install(this)
         CrashReporter.showLastCrashHeadline(this)
@@ -80,6 +84,21 @@ class YuzuApplication : Application() {
         ControllerNavigationGlobalHook.install(this)
 
         createNotificationChannels()
+    }
+
+    /**
+     * Android's own signal that this process is under memory pressure. The emulator keeps large
+     * soft caches (decoded covers, the library wallpaper) and the system would otherwise let them
+     * grow until it kills the app mid-game on 8-12 GB phones.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        MemoryPressure.trim(level)
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        MemoryPressure.trim(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
     }
 
     companion object {

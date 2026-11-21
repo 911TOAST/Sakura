@@ -9,7 +9,10 @@ data class Driver(
     override var selected: Boolean,
     val title: String,
     val version: String = "",
-    val description: String = ""
+    val description: String = "",
+    val vendor: String = "",
+    val author: String = "",
+    val minApi: Int = 0
 ) : SelectableItem {
     override fun onSelectionStateChanged(selected: Boolean) {
         this.selected = selected
@@ -21,7 +24,10 @@ data class Driver(
                 selected,
                 this.name ?: "",
                 this.version ?: "",
-                this.description ?: ""
+                this.description ?: "",
+                this.vendor ?: "",
+                this.author ?: "",
+                this.minApi
             )
     }
 }

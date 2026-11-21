@@ -187,8 +187,9 @@ namespace AndroidSettings {
         // These threads run the driver's shader compiler via vkCreateGraphicsPipelines, which is
         // the slow path on Mali. Each worker holds its own compile working set, so eight of them
         // spike memory on a phone that has none to spare. GetTotalPipelineWorkers() also caps the
-        // pool at hardware_concurrency - 1. Raise it in Graphics -> Advanced for faster warm-up.
-        Settings::Setting<s32> pipeline_worker_count{linkage, 4, "pipeline_worker_count",
+        // pool at hardware_concurrency - 1. Raise it in Graphics -> Advanced for faster warm-up,
+        // at the cost of more resident memory.
+        Settings::Setting<s32> pipeline_worker_count{linkage, 2, "pipeline_worker_count",
                                  Settings::Category::Android,
                                  Settings::Specialization::Default,
                                  true,
@@ -196,7 +197,7 @@ namespace AndroidSettings {
 
         // Host-visible upload buffer, which is plain system RAM on an integrated Mali part and is
         // committed up front. Read at renderer construction, so it needs a restart to take effect.
-        Settings::Setting<s32> mali_stream_buffer_mib{linkage, 64, "mali_stream_buffer_mib",
+        Settings::Setting<s32> mali_stream_buffer_mib{linkage, 32, "mali_stream_buffer_mib",
                                                       Settings::Category::Android,
                                                       Settings::Specialization::Default,
                                                       true,
@@ -204,8 +205,9 @@ namespace AndroidSettings {
 
         // Ceiling for the video memory the caches may plan against. Mali's DDK reports no memory
         // budget, so without this the estimate falls back to a share of system RAM and the caches
-        // keep absolute desktop floors that outrank it. Read at device construction.
-        Settings::Setting<s32> vram_budget_mib{linkage, 1536, "vram_budget_mib",
+        // keep absolute desktop floors that outrank it. Read at device construction. The real
+        // ceiling is the lower of this value and the process memory budget.
+        Settings::Setting<s32> vram_budget_mib{linkage, 1024, "vram_budget_mib",
                                               Settings::Category::Android,
                                               Settings::Specialization::Default,
                                               true,

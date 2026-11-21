@@ -96,13 +96,11 @@ class WallpaperRepository(context: Context) {
     private val prefs = app.getSharedPreferences("wallpaper_discovery", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
     private var catalog: Pair<String, List<OnlineBackground>>? = null
-    @Volatile private var lastProvider = WallpaperProviders.WALLHAVEN
     private val recommendationLock = Any()
     private var recommendationGeneration = 0L
 
     suspend fun search(spec: WallpaperSearchSpec, page: Int): WallpaperPage = withContext(Dispatchers.IO) {
         if (spec.catalogUrl.isNotBlank()) return@withContext searchCatalog(spec, page)
-        lastProvider = WallpaperProviders.normalize(spec.provider)
         val result = when (WallpaperProviders.normalize(spec.provider)) {
             WallpaperProviders.SAFEBOORU -> parseSafebooruPage(
                 WallpaperHttp.get(safebooruSearchUrl(spec, page).toString(), api = true).decodeToString(), page
@@ -138,25 +136,32 @@ class WallpaperRepository(context: Context) {
     }
 
     /** One-tap discovery: each provider contributes its own flavour of random. */
-    suspend fun surprise(): WallpaperPage = withContext(Dispatchers.IO) {
-        when (lastProvider) {
+    suspend fun surprise(spec: WallpaperSearchSpec): WallpaperPage = withContext(Dispatchers.IO) {
+        if (spec.catalogUrl.isNotBlank()) {
+            val firstPage = searchCatalog(spec, 1)
+            if (firstPage.items.isEmpty()) return@withContext firstPage
+            val page = if (firstPage.lastPage > 1) Random.nextInt(1, firstPage.lastPage + 1) else 1
+            val candidates = if (page == 1) firstPage else searchCatalog(spec, page)
+            return@withContext candidates.copy(items = listOf(candidates.items.randomOrNull() ?: firstPage.items.random()))
+        }
+        when (WallpaperProviders.normalize(spec.provider)) {
             WallpaperProviders.SAFEBOORU -> parseSafebooruPage(
                 WallpaperHttp.get(
-                    safebooruSearchUrl(WallpaperSearchSpec(sort = 2), Random.nextInt(1, 41)).toString(),
+                    safebooruSearchUrl(spec.copy(sort = 2), Random.nextInt(1, 41)).toString(),
                     api = true
                 ).decodeToString(), 1
-            )
+            ).let { it.copy(items = filterWallpaperResults(it.items, spec)) }
             WallpaperProviders.BING -> parseBingPage(
                 WallpaperHttp.get(bingWallpaperUrl(Random.nextInt(1, 3)).toString(), api = true)
                     .decodeToString(), 1
-            )
+            ).let { it.copy(items = filterBingResults(it.items, spec)) }
             else -> parseWallhavenPage(
                 WallpaperHttp.get(
-                    wallhavenSearchUrl(WallpaperSearchSpec(), 1).newBuilder()
+                    wallhavenSearchUrl(spec, 1).newBuilder()
                         .setQueryParameter("sorting", "random").build().toString(),
                     api = true
                 ).decodeToString()
-            )
+            ).let { it.copy(items = filterWallpaperResults(it.items, spec)) }
         }
     }
 

@@ -33,6 +33,17 @@ static u64 GetUint64(const VkPipelineExecutableStatisticKHR& statistic) {
 
 PipelineStatistics::PipelineStatistics(const Device& device_) {}
 
+void PipelineStatistics::RecordCacheHit() noexcept { cache_hits.fetch_add(1, std::memory_order_relaxed); }
+void PipelineStatistics::RecordCacheMiss() noexcept { cache_misses.fetch_add(1, std::memory_order_relaxed); }
+void PipelineStatistics::RecordBuild() noexcept { cache_builds.fetch_add(1, std::memory_order_relaxed); }
+void PipelineStatistics::RecordDroppedDraw() noexcept { dropped_draws.fetch_add(1, std::memory_order_relaxed); }
+
+void PipelineStatistics::ReportCache() const {
+    LOG_INFO(Render_Vulkan, "[PipelineCache] hits={} misses={} builds={} dropped_draws={}",
+             cache_hits.load(std::memory_order_relaxed), cache_misses.load(std::memory_order_relaxed),
+             cache_builds.load(std::memory_order_relaxed), dropped_draws.load(std::memory_order_relaxed));
+}
+
 void PipelineStatistics::Collect(const Device& device, VkPipeline pipeline) {
     const std::vector properties{device.GetLogical().GetPipelineExecutablePropertiesKHR(pipeline)};
     const u32 num_executables{static_cast<u32>(properties.size())};

@@ -507,6 +507,14 @@ std::pair<s32, Errno> BSD::SocketImpl(Domain domain, Type type, Protocol protoco
     UNIMPLEMENTED_IF_MSG(unk_flag, "Unknown flag in type");
     type = static_cast<Type>(static_cast<u32>(type) & ~0x20000000);
 
+    // Reject blocked stream sockets before allocating a guest descriptor or
+    // opening a host socket. Otherwise repeated attempts while airplane mode
+    // is enabled consume both resources even though no descriptor is returned.
+    if (Settings::values.airplane_mode.GetValue() && IsConnectionBased(type)) {
+        LOG_ERROR(Service, "Airplane mode is enabled, cannot create socket");
+        return {-1, Errno::NOTCONN};
+    }
+
     const s32 fd = FindFreeFileDescriptorHandle();
     if (fd < 0) {
         LOG_ERROR(Service, "No more file descriptors available");
@@ -528,11 +536,6 @@ std::pair<s32, Errno> BSD::SocketImpl(Domain domain, Type type, Protocol protoco
 
     descriptor.socket->Initialize(Translate(domain), Translate(type), Translate(protocol));
     descriptor.is_connection_based = IsConnectionBased(type);
-
-    if (Settings::values.airplane_mode.GetValue() && descriptor.is_connection_based) {
-        LOG_ERROR(Service, "Airplane mode is enabled, cannot create socket");
-        return {-1, Errno::NOTCONN};
-    }
 
     return {fd, Errno::SUCCESS};
 }

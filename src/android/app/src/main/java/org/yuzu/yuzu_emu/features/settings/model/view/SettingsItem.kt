@@ -1155,6 +1155,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.UI_SOUND_FEEDBACK,
+                    titleId = R.string.ui_sound_feedback,
+                    descriptionId = R.string.ui_sound_feedback_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.UI_ENTRANCE_ANIMATION,
                     titleId = R.string.ui_entrance_animation,
                     descriptionId = R.string.ui_entrance_animation_description,

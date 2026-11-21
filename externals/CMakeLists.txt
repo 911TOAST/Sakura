@@ -442,6 +442,35 @@ if (ANDROID)
     add_library(oboe::oboe ALIAS oboe)
 endif()
 
+if (ANDROID)
+    AddJsonPackage(NAME arm-asr DOWNLOAD_ONLY)
+    set(asr_r ${ArmASR_SOURCE_DIR})
+    add_library(arm_asr STATIC
+        ${asr_r}/src/shared/ffxm_assert.cpp
+        ${asr_r}/src/shared/ffxm_object_management.cpp
+        ${asr_r}/src/components/fsr2/ffxm_fsr2.cpp
+        ${asr_r}/src/backends/vk/ffxm_vk.cpp
+        ${asr_r}/src/backends/vk/ffxm_hash.cpp
+        ${asr_r}/src/backends/shared/ffxm_shader_blobs.cpp
+        ${asr_r}/src/backends/shared/blob_accessors/ffxm_fsr2_shaderblobs.cpp
+        arm-asr/asr_vk.cpp)
+    target_include_directories(arm_asr SYSTEM PUBLIC
+        ${asr_r}/include
+        ${asr_r}/include/host
+        ${CMAKE_CURRENT_SOURCE_DIR}/arm-asr)
+    target_include_directories(arm_asr PRIVATE
+        ${asr_r}
+        ${asr_r}/include/gpu
+        ${asr_r}/src/components
+        ${asr_r}/src/components/fsr2
+        ${asr_r}/src/backends/shared
+        ${asr_r}/src/backends/shared/blob_accessors/prebuilt_shaders
+        ${asr_r}/src/backends/vk)
+    target_compile_definitions(arm_asr PRIVATE VK_NO_PROTOTYPES FFXM_FSR)
+    target_compile_options(arm_asr PRIVATE -w "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/arm-asr/asr_vk.h")
+    target_link_libraries(arm_asr PUBLIC Vulkan::Headers)
+endif()
+
 if (APPLE)
     add_subdirectory(metal-cpp)
 

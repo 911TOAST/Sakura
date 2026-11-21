@@ -4,14 +4,10 @@
 package org.yuzu.yuzu_emu.utils
 
 import android.content.Context
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
+import android.graphics.Bitmap
 import android.view.View
 import android.widget.ImageView
 import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
@@ -25,7 +21,8 @@ import org.yuzu.yuzu_emu.utils.background.WallpaperPalette
 import org.yuzu.yuzu_emu.utils.background.WallpaperRenderer
 import org.yuzu.yuzu_emu.utils.background.WallpaperSelection
 import org.yuzu.yuzu_emu.utils.background.WallpaperSettings
-import org.yuzu.yuzu_emu.views.AuroraVeilView
+import org.yuzu.yuzu_emu.utils.background.WallpaperTuning
+import java.util.WeakHashMap
 
 /**
  * Paints the library's optional custom background.
@@ -36,8 +33,10 @@ import org.yuzu.yuzu_emu.views.AuroraVeilView
  * Two sources are supported: a user-picked document URI, and the online gallery, whose picture is
  * stored encrypted and decrypted into memory only for this view.
  *
- * The same decoded picture also feeds the atmosphere: the aurora veil takes the wallpaper's own
- * palette, and the Chameleon theme publishes it to Compose surfaces unless a cover owns the slot.
+ * The decoded picture is kept for the lifetime of the selection instead of being re-decoded on
+ * every resume. A 2560-edge wallpaper is up to ~26 MB of ARGB_8888, and the library resumes every
+ * time the user comes back from a game, so the old code churned that allocation (and the decode
+ * itself) on each visit. [trimMemory] gives it back when the system asks for memory.
  */
 object LibraryBackgroundApplier {
 
@@ -45,50 +44,33 @@ object LibraryBackgroundApplier {
     private const val LOAD_ATTEMPTS = 3
     private const val LOAD_RETRY_DELAY_MS = 200L
 
-    private class Binding(val renderer: WallpaperRenderer, val aurora: AuroraVeilView?) {
+    private class Binding(val root: View, val renderer: WallpaperRenderer) {
         var job: Job? = null
         var generation = 0L
         var uri: String? = null
-        var sensorRegistered = false
-
-        /** Low-passed gravity keeps the veil's lean smooth instead of jittery. */
-        val tiltListener = object : SensorEventListener {
-            private val gravity = FloatArray(3)
-            override fun onSensorChanged(event: SensorEvent) {
-                if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
-                gravity[0] = 0.8f * gravity[0] + 0.2f * event.values[0]
-                gravity[1] = 0.8f * gravity[1] + 0.2f * event.values[1]
-                aurora?.setTilt(-gravity[0] / 9.81f, gravity[1] / 9.81f)
-            }
-
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-        }
+        var bitmap: Bitmap? = null
+        var tuning = WallpaperTuning()
     }
+
+    /** Root view -> binding, so [trimMemory] can reach pictures that are off screen. */
+    private val bindings = WeakHashMap<View, Binding>()
 
     fun applyTo(root: View, owner: LifecycleOwner) {
         val background = root.findViewById<ImageView>(R.id.library_background) ?: return
         val scrim = root.findViewById<View>(R.id.library_background_scrim) ?: return
-        val aurora = root.findViewById<AuroraVeilView>(R.id.library_aurora)
         val binding = root.getTag(R.id.wallpaper_binding) as? Binding ?: Binding(
-            WallpaperRenderer(background, scrim), aurora
+            root, WallpaperRenderer(background, scrim)
         ).also { created ->
             root.setTag(R.id.wallpaper_binding, created)
+            synchronized(bindings) { bindings[root] = created }
             owner.lifecycle.addObserver(object : DefaultLifecycleObserver {
-                override fun onStart(owner: LifecycleOwner) {
-                    syncParallax(created, owner)
-                }
-
-                override fun onStop(owner: LifecycleOwner) {
-                    syncParallax(created, owner)
-                }
-
                 override fun onDestroy(owner: LifecycleOwner) {
                     created.generation++
                     created.job?.cancel()
-                    syncParallax(created, owner)
+                    release(created)
                     created.renderer.close()
-                    created.aurora?.setPalette(null)
                     root.setTag(R.id.wallpaper_binding, null)
+                    synchronized(bindings) { bindings.remove(root) }
                     owner.lifecycle.removeObserver(this)
                 }
             })
@@ -97,35 +79,83 @@ object LibraryBackgroundApplier {
         val generation = ++binding.generation
         val settings = WallpaperSettings.read()
         val selectionChanged = binding.uri != settings.uri
+        val alreadyDecoded = binding.bitmap?.isRecycled == false
         if (selectionChanged) {
             binding.uri = settings.uri
-            // Keep the previous picture on screen while the new one decodes; only the atmosphere
-            // steps down right away. Rendering null here used to blank the library on every switch.
-            binding.aurora?.setPalette(null)
+            // Keep the previous picture on screen while the new one decodes. Rendering null here
+            // used to blank the library on every switch.
+            WallpaperPalette.clear()
+        } else if (!alreadyDecoded) {
+            // The picture was released under memory pressure; the decode below brings it back.
             WallpaperPalette.clear()
         } else {
-            // A tuning change alone keeps the already decoded picture on screen.
+            // Same picture, new tuning: no decode, no allocation, and no palette resample. The
+            // seed was published when this picture was decoded.
+            binding.tuning = settings.tuning
             binding.renderer.update(settings.tuning)
+            return
         }
-        syncParallax(binding, owner)
         binding.job = owner.lifecycleScope.launch {
             val loaded = loadWithRetry(root.context.applicationContext, WallpaperSelection(settings.uri))
             if (generation != binding.generation) {
+                loaded?.bitmap?.recycle()
                 return@launch
             }
             val bitmap = loaded?.bitmap?.takeIf { !it.isRecycled }
             if (bitmap != null) {
+                val previous = binding.bitmap
+                binding.bitmap = bitmap
+                binding.tuning = settings.tuning
                 binding.renderer.render(bitmap, settings.tuning)
-                updateAtmosphere(binding, bitmap, generation, owner)
+                // Only this binding owned `previous`; the ImageView already points at the new one.
+                if (previous !== bitmap && previous?.isRecycled == false) {
+                    previous.recycle()
+                }
+                publishPalette(binding, generation, owner)
             } else if (selectionChanged) {
                 // The new selection has nothing showable; clear rather than keep the old picture.
+                release(binding)
                 binding.renderer.render(null, settings.tuning)
-                binding.aurora?.setPalette(null)
                 WallpaperPalette.clear()
             } else {
                 // Transient failure on the same selection: keep the picture already on screen
                 // instead of wiping a wallpaper that was displaying fine a moment ago.
                 binding.renderer.update(settings.tuning)
+            }
+        }
+    }
+
+    /**
+     * Drops decoded pictures the user cannot currently see. Called from `onTrimMemory`; the
+     * library reloads on its next resume, which is cheaper than being killed mid-game.
+     */
+    fun trimMemory() {
+        val snapshot = synchronized(bindings) { bindings.values.toList() }
+        snapshot.forEach { binding ->
+            if (!binding.root.isAttachedToWindow || binding.root.visibility != View.VISIBLE) {
+                binding.job?.cancel()
+                binding.generation++
+                release(binding)
+                binding.renderer.render(null, binding.tuning)
+            }
+        }
+    }
+
+    private fun release(binding: Binding) {
+        binding.bitmap?.let { if (!it.isRecycled) it.recycle() }
+        binding.bitmap = null
+    }
+
+    private fun publishPalette(binding: Binding, generation: Long, owner: LifecycleOwner) {
+        val bitmap = binding.bitmap?.takeIf { !it.isRecycled } ?: return
+        owner.lifecycleScope.launch {
+            // A quick selection change or a trim can recycle the picture between the check and the
+            // sample; the palette is cosmetic, so a miss is not worth a crash.
+            runCatching {
+                if (generation == binding.generation && !bitmap.isRecycled) {
+                    // Publishes the wallpaper's own seed for the Chameleon theme.
+                    WallpaperPalette.applyFromWallpaper(bitmap)
+                }
             }
         }
     }
@@ -158,39 +188,5 @@ object LibraryBackgroundApplier {
         }
         Log.warning("[Wallpaper] Load failed after $LOAD_ATTEMPTS attempts: ${lastError?.message}")
         return null
-    }
-
-    /** One decode, two payoffs: the veil follows the picture, the theme follows the seed slot. */
-    private suspend fun updateAtmosphere(
-        binding: Binding, bitmap: android.graphics.Bitmap?, generation: Long, owner: LifecycleOwner
-    ) {
-        val enabled = WallpaperSettings.appearance().aurora
-        if (enabled && bitmap != null) {
-            val seed = WallpaperPalette.applyFromWallpaper(bitmap)
-            if (generation == binding.generation) binding.aurora?.setPalette(seed)
-        } else {
-            // Off (or no picture): both the veil and the wallpaper theme seed step down.
-            WallpaperPalette.clear()
-            binding.aurora?.setPalette(null)
-        }
-        binding.aurora?.post { syncParallax(binding, owner) }
-    }
-
-    /** The sensor only runs while the library is started, the veil is visible, and the user opted in. */
-    private fun syncParallax(binding: Binding, owner: LifecycleOwner) {
-        val context = binding.aurora?.context ?: return
-        val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return
-        val wanted = WallpaperSettings.appearance().parallax &&
-            binding.aurora.visibility == View.VISIBLE &&
-            owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-        if (wanted && !binding.sensorRegistered) {
-            manager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensor ->
-                manager.registerListener(binding.tiltListener, sensor, SensorManager.SENSOR_DELAY_UI)
-                binding.sensorRegistered = true
-            }
-        } else if (!wanted && binding.sensorRegistered) {
-            manager.unregisterListener(binding.tiltListener)
-            binding.sensorRegistered = false
-        }
     }
 }

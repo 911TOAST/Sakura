@@ -24,8 +24,13 @@ RomFSFactory::RomFSFactory(Loader::AppLoader& app_loader, ContentProvider& provi
                            Service::FileSystem::FileSystemController& controller)
     : content_provider{provider}, filesystem_controller{controller} {
     // Load the RomFS from the app
-    if (app_loader.ReadRomFS(file) != Loader::ResultStatus::Success) {
-        LOG_WARNING(Service_FS, "Unable to read base RomFS");
+    const auto romfs_result = app_loader.ReadRomFS(file);
+    if (romfs_result == Loader::ResultStatus::ErrorNoRomFS) {
+        // Normal for homebrew and titles with no base RomFS; updates/DLC layer onto a null base.
+        LOG_DEBUG(Service_FS, "No base RomFS present; continuing without one");
+    } else if (romfs_result != Loader::ResultStatus::Success) {
+        LOG_WARNING(Service_FS, "Unable to read base RomFS: {}",
+                    Loader::GetResultStatusString(romfs_result));
     }
 
     updatable = app_loader.IsRomFSUpdatable();

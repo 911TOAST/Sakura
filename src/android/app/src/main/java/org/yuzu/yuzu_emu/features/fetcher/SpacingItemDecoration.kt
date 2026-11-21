@@ -8,28 +8,49 @@ import android.view.View
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
-class SpacingItemDecoration(private val spacing: Int) : RecyclerView.ItemDecoration() {
+/**
+ * Even gaps for a grid that does not use a ItemDecoration elsewhere.
+ *
+ * The previous version only set a bottom offset, so on a multi-column grid the cards in a row
+ * touched each other and the last row kept a trailing gap. Both axes are handled here, and the
+ * caller drops the layout's own margin so the spacing has exactly one owner.
+ */
+class SpacingItemDecoration(
+    private val spacing: Int,
+    /** Also inset the leading/trailing edges. Off for full-bleed lists that own their padding. */
+    private val includeEdges: Boolean = true
+) : RecyclerView.ItemDecoration() {
+
     override fun getItemOffsets(
         outRect: Rect,
         view: View,
         parent: RecyclerView,
         state: RecyclerView.State
     ) {
-        outRect.bottom = spacing
-
         val position = parent.getChildAdapterPosition(view)
         if (position == RecyclerView.NO_POSITION) return
 
-        if (position == 0) {
-            outRect.top = spacing
+        val columns = (parent.layoutManager as? GridLayoutManager)?.spanCount ?: 1
+        if (columns <= 1) {
+            // Single column: no side gaps, and a row of its own still needs air above it.
+            outRect.bottom = spacing
+            if (position == 0) outRect.top = spacing
             return
         }
 
-        // If the item is in the first row, but NOT in first column add top spacing as well
-        val layoutManager = parent.layoutManager
-        if (layoutManager is GridLayoutManager && layoutManager.spanSizeLookup.getSpanGroupIndex(position, layoutManager.spanCount) == 0) {
-            outRect.top = spacing
-            return
+        val column = position % columns
+        val row = position / columns
+
+        outRect.left = spacing / 2
+        outRect.right = spacing / 2
+        outRect.bottom = spacing
+        outRect.top = if (row == 0) spacing / 2 else 0
+
+        if (includeEdges && column == 0) {
+            outRect.left = spacing
+        }
+        if (includeEdges && column == columns - 1) {
+            outRect.right = spacing
         }
     }
 }

@@ -54,6 +54,15 @@ using Maxwell = Tegra::Engines::Maxwell3D::Regs;
 using VideoCommon::ImageViewId;
 using VideoCommon::ImageViewType;
 
+namespace {
+/// Whether the current state can write stencil values: the test must be enabled and at least one
+/// face must have a non-zero write mask.
+bool WritesStencil(const Maxwell& regs) {
+    return regs.stencil_enable != 0 &&
+           (regs.stencil_front_mask != 0 || regs.stencil_back_mask != 0);
+}
+} // Anonymous namespace
+
 static std::atomic<uint64_t> skp_rb{0};
 static std::atomic<uint64_t> skp_qry{0};
 
@@ -305,6 +314,56 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func) {
 }
 
 void RasterizerVulkan::Draw(bool is_indexed, u32 instance_count) {
+    const auto& draw_state = maxwell3d->draw_manager.draw_state;
+    const u32 vertex_count = is_indexed ? draw_state.index_buffer.count : draw_state.vertex_buffer.count;
+    if (instance_count == 0 || vertex_count == 0) {
+        return;
+    }
+
+    if (Settings::values.skip_micro_draws.GetValue()) {
+        if (draw_state.topology == Maxwell::PrimitiveTopology::Triangles && vertex_count < 3) {
+            return;
+        }
+        if (draw_state.topology == Maxwell::PrimitiveTopology::Lines && vertex_count < 2) {
+            return;
+        }
+    }
+
+    const auto& regs = maxwell3d->regs;
+    if (Settings::values.skip_depth_only_draws.GetValue()) {
+        bool writes_color = false;
+        for (size_t i = 0; i < Maxwell::NumRenderTargets; ++i) {
+            if (regs.rt[i].format != Tegra::RenderTargetFormat::NONE) {
+                const auto& m = regs.color_mask[regs.color_mask_common ? 0 : i];
+                if (m.R || m.G || m.B || m.A) {
+                    writes_color = true;
+                    break;
+                }
+            }
+        }
+        if (!writes_color) {
+            // Neither color, depth, nor stencil written -> empty draw, always safe to skip
+            if (!regs.zeta_enable || (!regs.depth_write_enabled && !WritesStencil(regs))) {
+                return;
+            }
+            // If writing depth: preserve the main camera / scene depth pre-pass so geometry doesn't vanish.
+            // Only skip offscreen / square shadow map passes.
+            const u32 zw = regs.zeta_size.width;
+            const u32 zh = regs.zeta_size.height;
+            const bool is_widescreen_scene = (zw > 0 && zh > 0) &&
+                (zw * 9 >= zh * 15 && zw * 9 <= zh * 17);
+            const bool matches_color_rt = (regs.rt[0].format != Tegra::RenderTargetFormat::NONE) &&
+                (regs.rt[0].width == zw && regs.rt[0].height == zh);
+            if (!is_widescreen_scene && !matches_color_rt) {
+                return;
+            }
+        }
+    }
+
+    if (regs.zeta_enable && (regs.depth_write_enabled || WritesStencil(regs))) {
+        depth_buffer_dirty = true;
+    }
+
     PrepareDraw(is_indexed, [this, is_indexed, instance_count] {
         const auto& draw_state = maxwell3d->draw_manager.draw_state;
         const u32 num_instances{instance_count};
@@ -338,6 +397,38 @@ void RasterizerVulkan::Draw(bool is_indexed, u32 instance_count) {
 }
 
 void RasterizerVulkan::DrawIndirect() {
+    const auto& regs = maxwell3d->regs;
+    if (Settings::values.skip_depth_only_draws.GetValue()) {
+        bool writes_color = false;
+        for (size_t i = 0; i < Maxwell::NumRenderTargets; ++i) {
+            if (regs.rt[i].format != Tegra::RenderTargetFormat::NONE) {
+                const auto& m = regs.color_mask[regs.color_mask_common ? 0 : i];
+                if (m.R || m.G || m.B || m.A) {
+                    writes_color = true;
+                    break;
+                }
+            }
+        }
+        if (!writes_color) {
+            if (!regs.zeta_enable || (!regs.depth_write_enabled && !WritesStencil(regs))) {
+                return;
+            }
+            const u32 zw = regs.zeta_size.width;
+            const u32 zh = regs.zeta_size.height;
+            const bool is_widescreen_scene = (zw > 0 && zh > 0) &&
+                (zw * 9 >= zh * 15 && zw * 9 <= zh * 17);
+            const bool matches_color_rt = (regs.rt[0].format != Tegra::RenderTargetFormat::NONE) &&
+                (regs.rt[0].width == zw && regs.rt[0].height == zh);
+            if (!is_widescreen_scene && !matches_color_rt) {
+                return;
+            }
+        }
+    }
+
+    if (regs.zeta_enable && (regs.depth_write_enabled || WritesStencil(regs))) {
+        depth_buffer_dirty = true;
+    }
+
     const auto& params = maxwell3d->draw_manager.indirect_state;
     buffer_cache.SetDrawIndirect(&params);
     PrepareDraw(params.is_indexed, [this, &params] {
@@ -461,6 +552,22 @@ void RasterizerVulkan::Clear(u32 layer_count) {
     const bool use_stencil = regs.clear_surface.S;
     if (!use_color && !use_depth && !use_stencil) {
         return;
+    }
+    if (Settings::values.skip_depth_clears.GetValue() && !use_color) {
+        if (!depth_buffer_dirty) {
+            return;
+        }
+        if (Settings::values.skip_depth_only_draws.GetValue()) {
+            const u32 zw = regs.zeta_size.width;
+            const u32 zh = regs.zeta_size.height;
+            const bool is_widescreen_scene = (zw > 0 && zh > 0) &&
+                (zw * 9 >= zh * 15 && zw * 9 <= zh * 17);
+            const bool matches_color_rt = (regs.rt[0].format != Tegra::RenderTargetFormat::NONE) &&
+                (regs.rt[0].width == zw && regs.rt[0].height == zh);
+            if (!is_widescreen_scene && !matches_color_rt) {
+                return;
+            }
+        }
     }
 
     std::scoped_lock lock{texture_cache.mutex};
@@ -667,9 +774,18 @@ void RasterizerVulkan::Clear(u32 layer_count) {
             cmdbuf.ClearAttachments(attachment, clear_rect);
         });
     }
+    if (use_depth || use_stencil) {
+        depth_buffer_dirty = false;
+    }
 }
 
 void RasterizerVulkan::DispatchCompute() {
+    if (Settings::values.skip_compute_shaders.GetValue()) {
+        const auto indirect_address = kepler_compute->GetIndirectComputeAddress();
+        if (!indirect_address) {
+            return;
+        }
+    }
     FlushWork();
     gpu_memory->FlushCaching();
     // A compute pipeline replaces whatever graphics pipeline was bound.
@@ -771,6 +887,9 @@ void RasterizerVulkan::FlushRegion(DAddr addr, u64 size, VideoCommon::CacheType 
 }
 
 bool RasterizerVulkan::MustFlushRegion(DAddr addr, u64 size, VideoCommon::CacheType which) {
+    if (Settings::values.skip_cpu_readback.GetValue()) {
+        return false;
+    }
     if ((True(which & VideoCommon::CacheType::BufferCache))) {
         std::scoped_lock lock{buffer_cache.mutex};
         if (buffer_cache.IsRegionGpuModified(addr, size)) {
@@ -981,6 +1100,7 @@ void RasterizerVulkan::FlushCommands() {
 
 void RasterizerVulkan::TickFrame() {
     draw_counter = 0;
+    depth_buffer_dirty = true;
     guest_descriptor_queue.TickFrame();
     compute_pass_descriptor_queue.TickFrame();
     fence_manager.TickFrame();

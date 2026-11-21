@@ -203,6 +203,8 @@ object NativeLibrary {
      */
     external fun getPerfStats(): DoubleArray
 
+    external fun getAsrStats(): FloatArray
+
     external fun getSkipStats(): LongArray
 
     /**

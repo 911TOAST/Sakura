@@ -421,7 +421,15 @@ bool LemonFgChain::IsSupported(const Device& device_, VkFormat format) {
     return device_.IsSubgroupFeatureSupported(VK_SUBGROUP_FEATURE_BASIC_BIT) &&
            device_.IsSubgroupFeatureSupported(VK_SUBGROUP_FEATURE_ARITHMETIC_BIT) &&
            (device_.GetSubgroupSupportedStages() & VK_SHADER_STAGE_COMPUTE_BIT) != 0 &&
-           format == VK_FORMAT_R8G8B8A8_UNORM;
+           format == VK_FORMAT_R8G8B8A8_UNORM &&
+           device_.IsFormatSupported(
+               format,
+               VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,
+               FormatType::Optimal) &&
+           device_.IsFormatSupported(
+               WORK_FORMAT,
+               VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,
+               FormatType::Optimal);
 }
 
 LemonFgChain::Pass LemonFgChain::CreatePass(const Device& device_, std::span<const u32> code,

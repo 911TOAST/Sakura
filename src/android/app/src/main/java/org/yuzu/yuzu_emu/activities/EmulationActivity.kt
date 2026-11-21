@@ -63,6 +63,7 @@ import org.yuzu.yuzu_emu.network.DiscordPresence
 import org.yuzu.yuzu_emu.network.NetPlayManager
 import org.yuzu.yuzu_emu.utils.InputHandler
 import org.yuzu.yuzu_emu.utils.Log
+import org.yuzu.yuzu_emu.utils.MemoryPressure
 import org.yuzu.yuzu_emu.utils.MemoryUtil
 import org.yuzu.yuzu_emu.utils.NativeConfig
 import org.yuzu.yuzu_emu.utils.NfcReader
@@ -109,6 +110,8 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
     // Playtime segments use the monotonic clock so wall-clock changes never inflate stats.
     private var playtimeGameKey: String? = null
     private var playtimeSegmentStart = 0L
+    private var playtimePendingMillis = 0L
+    private var playtimeSessionStarted = false
 
     private fun onRomSwapStopTimeout() {
         if (!isWaitingForRomSwapStop) {
@@ -135,7 +138,8 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
         super.onCreate(savedInstanceState)
 
         playtimeGameKey = resolvePlaytimeKey(intent)
-        playtimeGameKey?.let { key -> runCatching { PlaytimeStore.record(key, 0, newSession = true) } }
+        playtimeSessionStarted = playtimeGameKey != null &&
+            processPlaytimeGameKey == playtimeGameKey
 
         NativeConfig.reloadGlobalConfig()
 
@@ -261,7 +265,9 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
 
     override fun onResume() {
         super.onResume()
-        playtimeSegmentStart = SystemClock.elapsedRealtime()
+        if (playtimeSessionStarted && NativeLibrary.isRunning() && !NativeLibrary.isPaused()) {
+            startPlaytimeSegment()
+        }
         nfcReader.startScanning()
         startMotionSensorListener()
         InputHandler.updateControllerData()
@@ -277,8 +283,18 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
         super.onPause()
     }
 
+    /**
+     * The library and its caches are still alive in this process while a game runs. Hand back
+     * anything soft when Android asks, so the reclaim does not land in the middle of a frame.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        MemoryPressure.trim(level)
+    }
+
     override fun onDestroy() {
         mainHandler.removeCallbacks(romSwapStopTimeoutRunnable)
+        flushPlaytimeSegment()
         super.onDestroy()
         inputManager.unregisterInputDeviceListener(this)
         stopForegroundService(this)
@@ -303,8 +319,9 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
             resolvePlaytimeKey(intent)?.takeIf { it != playtimeGameKey }?.let { key ->
                 flushPlaytimeSegment()
                 playtimeGameKey = key
-                runCatching { PlaytimeStore.record(key, 0, newSession = true) }
-                playtimeSegmentStart = SystemClock.elapsedRealtime()
+                playtimePendingMillis = 0L
+                playtimeSessionStarted = false
+                processPlaytimeGameKey = null
             }
         }
         handleSwapIntent(intent)
@@ -320,9 +337,32 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
         val key = playtimeGameKey ?: return
         if (playtimeSegmentStart == 0L) return
         val now = SystemClock.elapsedRealtime()
-        val seconds = (now - playtimeSegmentStart) / 1000
-        playtimeSegmentStart = now
-        if (seconds > 0) runCatching { PlaytimeStore.record(key, seconds) }
+        playtimePendingMillis += (now - playtimeSegmentStart).coerceAtLeast(0L)
+        playtimeSegmentStart = 0L
+        val seconds = playtimePendingMillis / 1000
+        playtimePendingMillis %= 1000
+        if (seconds > 0) {
+            recordPlaytime(key, seconds)
+        }
+    }
+
+    private fun recordPlaytime(key: String, seconds: Long, newSession: Boolean = false) {
+        runCatching { PlaytimeStore.record(key, seconds, newSession) }
+            .onFailure { Log.error("[Playtime] Failed to save session time: ${it.message}") }
+    }
+
+    private fun startPlaytimeSegment() {
+        if (playtimeGameKey == null || playtimeSegmentStart != 0L ||
+            !NativeLibrary.isRunning() || NativeLibrary.isPaused()) return
+        playtimeSegmentStart = SystemClock.elapsedRealtime()
+    }
+
+    fun onEmulationPaused() {
+        flushPlaytimeSegment()
+    }
+
+    fun onEmulationResumed() {
+        if (playtimeSessionStarted) startPlaytimeSegment()
     }
 
     private fun isSwapIntent(intent: Intent): Boolean {
@@ -727,9 +767,17 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
     private var pictureInPictureReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent) {
             if (intent.action == actionPlay) {
-                if (NativeLibrary.isPaused()) NativeLibrary.unpauseEmulation()
+                if (NativeLibrary.isPaused()) {
+                    NativeLibrary.unpauseEmulation()
+                    NativeLibrary.playTimeManagerStart()
+                    onEmulationResumed()
+                }
             } else if (intent.action == actionPause) {
-                if (!NativeLibrary.isPaused()) NativeLibrary.pauseEmulation()
+                if (!NativeLibrary.isPaused()) {
+                    NativeLibrary.pauseEmulation()
+                    NativeLibrary.playTimeManagerStop()
+                    onEmulationPaused()
+                }
             }
             if (intent.action == actionUnmute) {
                 if (BooleanSetting.AUDIO_MUTED.getBoolean()) {
@@ -820,6 +868,14 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
         emulationViewModel.setIsEmulationStopping(false)
         emulationViewModel.setEmulationStopped(false)
         NativeLibrary.playTimeManagerStart()
+        playtimeGameKey?.let { key ->
+            if (!playtimeSessionStarted) {
+                recordPlaytime(key, 0, newSession = true)
+                playtimeSessionStarted = true
+                processPlaytimeGameKey = key
+            }
+            startPlaytimeSegment()
+        }
 
     }
 
@@ -830,6 +886,10 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
         }
         hasEmulationSession = false
         processHasEmulationSession = false
+        flushPlaytimeSegment()
+        playtimeSessionStarted = false
+        playtimePendingMillis = 0L
+        processPlaytimeGameKey = null
         if (isWaitingForRomSwapStop) {
             romSwapNativeStopped = true
             Log.info("[EmulationActivity] ROM swap native stop acknowledged")
@@ -862,8 +922,14 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
         val sensorManager = this.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_GAME)
-        sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_GAME)
+        // Low-spec devices and emulators often lack a gyro/accel: a null Sensor passed to
+        // registerListener aborts the resume (Unable to resume activity).
+        if (gyroSensor != null) {
+            sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_GAME)
+        }
+        if (accelSensor != null) {
+            sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_GAME)
+        }
     }
 
     private fun stopMotionSensorListener() {
@@ -883,6 +949,8 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
         private var processHasEmulationSession = false
         @Volatile
         private var processSessionGame: Game? = null
+        @Volatile
+        private var processPlaytimeGameKey: String? = null
 
         fun stopForegroundService(activity: Activity) {
             val startIntent = Intent(activity, ForegroundService::class.java)

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <mutex>
+#include <atomic>
 #include <vector>
 
 #include "common/common_types.h"
@@ -21,6 +22,11 @@ public:
     explicit PipelineStatistics(const Device& device_);
     void Collect(const Device& device, VkPipeline pipeline);
     void Report() const;
+    void RecordCacheHit() noexcept;
+    void RecordCacheMiss() noexcept;
+    void RecordBuild() noexcept;
+    void RecordDroppedDraw() noexcept;
+    void ReportCache() const;
 
 private:
     struct Stats {
@@ -33,6 +39,10 @@ private:
     };
     mutable std::mutex mutex;
     std::vector<Stats> collected_stats;
+    std::atomic<u64> cache_hits{};
+    std::atomic<u64> cache_misses{};
+    std::atomic<u64> cache_builds{};
+    std::atomic<u64> dropped_draws{};
 };
 
 } // namespace Vulkan

@@ -487,6 +487,10 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
              PAIR(ResolutionSetup, Res6X, tr("6X (4320p/6480p)")),
              PAIR(ResolutionSetup, Res7X, tr("7X (5040p/7560p)")),
              PAIR(ResolutionSetup, Res8X, tr("8X (5760p/8640p)")),
+             PAIR(ResolutionSetup, ResTarget540p, tr("540p (Auto)")),
+             PAIR(ResolutionSetup, ResTarget720p, tr("720p (Auto)")),
+             PAIR(ResolutionSetup, ResTarget900p, tr("900p (Auto)")),
+             PAIR(ResolutionSetup, ResTarget1080p, tr("1080p (Auto)")),
          }});
     translations->insert({Settings::EnumMetadata<Settings::ScalingFilter>::Index(),
                           {

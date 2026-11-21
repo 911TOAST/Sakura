@@ -54,7 +54,7 @@ serialization version. Two different drivers (for example stock vs. a custom
 adrenotools driver) therefore never share a cache file, which keeps the blob
 inside the vendor/device constraints of `VkPipelineCache`.
 
-The global file is capped at 128 MiB. If the merged cache grows past that, the
+The global file is capped at 64 MiB on Android. If the merged cache grows past that, the
 global file is left untouched (not truncated) and a warning is logged; the
 per-title file is still written normally.
 

@@ -14,6 +14,10 @@
             android:icon="@drawable/ic_m3_view_agenda"
             android:title="@string/view_list" />
         <item
+            android:id="@+id/view_cinema"
+            android:icon="@drawable/ic_m3_view_agenda"
+            android:title="@string/view_cinema" />
+        <item
             android:id="@+id/view_carousel"
             android:icon="@drawable/ic_m3_view_carousel"
             android:title="@string/view_carousel" />

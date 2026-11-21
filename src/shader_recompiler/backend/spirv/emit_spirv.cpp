@@ -4,9 +4,11 @@
 // SPDX-FileCopyrightText: Copyright 2021 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cmath>
 #include <span>
 #include <tuple>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -500,6 +502,121 @@ void PatchPhiNodes(IR::Program& program, EmitContext& ctx) {
                 return { ctx.Def(phi->Arg(phi_arg)), parent };
             });
         }
+
+// Arithmetic whose FP16 error stays proportional to its inputs. Division, roots, trig, exp/log
+// and rounding stay FP32: they amplify error or are used for coordinates and depth.
+bool IsRelaxableOp(IR::Opcode opcode) {
+    switch (opcode) {
+    case IR::Opcode::FPAbs32:
+    case IR::Opcode::FPAdd32:
+    case IR::Opcode::FPClamp32:
+    case IR::Opcode::FPFma32:
+    case IR::Opcode::FPMax32:
+    case IR::Opcode::FPMin32:
+    case IR::Opcode::FPMul32:
+    case IR::Opcode::FPNeg32:
+    case IR::Opcode::FPSaturate32:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Clamps bound their result, so they may take any input, including FP32 position math.
+bool IsBoundingOp(IR::Opcode opcode) {
+    return opcode == IR::Opcode::FPClamp32 || opcode == IR::Opcode::FPSaturate32;
+}
+
+bool IsTextureColor(const IR::Inst& inst) {
+    switch (inst.GetOpcode()) {
+    case IR::Opcode::ImageFetch:
+    case IR::Opcode::ImageGather:
+    case IR::Opcode::ImageSampleExplicitLod:
+    case IR::Opcode::ImageSampleImplicitLod:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Colour-like inputs: FP16-representable constants, uniforms, texel colours and FP16 data.
+// Interpolants and gl_FragCoord carry positions and coordinates, so math on them stays FP32.
+bool IsColorSource(const IR::Value& value, const std::unordered_set<IR::Inst*>& relaxed) {
+    if (value.IsImmediate()) {
+        if (value.Type() != IR::Type::F32) {
+            return false;
+        }
+        const f32 magnitude{std::abs(value.F32())};
+        return magnitude == 0.0f || (magnitude >= 0x1p-14f && magnitude <= 0x1p14f);
+    }
+    IR::Inst* const inst{value.InstRecursive()};
+    switch (inst->GetOpcode()) {
+    case IR::Opcode::ConvertF32F16:
+    case IR::Opcode::GetCbufF32:
+        return true;
+    case IR::Opcode::CompositeExtractF32x4:
+        return !inst->Arg(0).IsImmediate() && IsTextureColor(*inst->Arg(0).InstRecursive());
+    default:
+        return relaxed.contains(inst);
+    }
+}
+
+// An op is relaxed only when its inputs are colour-like and every consumer is another relaxed op
+// or a colour output. Anything feeding texture coordinates, depth, comparisons, conversions,
+// stores or phis keeps FP32, along with everything upstream of it.
+std::unordered_set<IR::Inst*> CollectRelaxedInsts(IR::Program& program) {
+    std::unordered_set<IR::Inst*> relaxed;
+    for (IR::Block* const block : program.blocks) {
+        for (IR::Inst& inst : block->Instructions()) {
+            if (IsRelaxableOp(inst.GetOpcode())) {
+                relaxed.insert(&inst);
+            }
+        }
+    }
+    bool changed{true};
+    while (changed) {
+        changed = false;
+        for (IR::Block* const block : program.blocks) {
+            for (IR::Inst& inst : block->Instructions()) {
+                const size_t num_args{inst.NumArgs()};
+                if (relaxed.contains(&inst) && !IsBoundingOp(inst.GetOpcode())) {
+                    for (size_t arg = 0; arg < num_args; ++arg) {
+                        if (!IsColorSource(inst.Arg(arg), relaxed)) {
+                            relaxed.erase(&inst);
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+                const bool is_color_output{inst.GetOpcode() == IR::Opcode::SetFragColor};
+                const bool keeps_relaxed_inputs{relaxed.contains(&inst)};
+                for (size_t arg = 0; arg < num_args; ++arg) {
+                    const IR::Value value{inst.Arg(arg)};
+                    if (value.IsImmediate() || keeps_relaxed_inputs ||
+                        (is_color_output && arg == 2)) {
+                        continue;
+                    }
+                    if (relaxed.erase(value.InstRecursive()) != 0) {
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+    return relaxed;
+}
+
+void DecorateRelaxedPrecision(IR::Program& program, EmitContext& ctx) {
+    const std::unordered_set<IR::Inst*> relaxed{CollectRelaxedInsts(program)};
+    // Program order keeps the SPIR-V byte-identical across runs, so pipeline caches still hit.
+    for (IR::Block* const block : program.blocks) {
+        for (IR::Inst& inst : block->Instructions()) {
+            if (relaxed.contains(&inst)) {
+                ctx.Decorate(inst.Definition<Id>(), spv::Decoration::RelaxedPrecision);
+            }
+        }
+    }
+}
 } // Anonymous namespace
 
 std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info, IR::Program& program, Bindings& bindings) {
@@ -509,6 +626,9 @@ std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_in
     }
     EmitContext ctx{effective, runtime_info, program, bindings};
     const Id main{DefineMain(ctx, program)};
+    if (ctx.CanRelaxF32()) {
+        DecorateRelaxedPrecision(program, ctx);
+    }
     DefineEntryPoint(program, ctx, main);
     if (profile.support_float_controls) {
         ctx.AddExtension("SPV_KHR_float_controls");

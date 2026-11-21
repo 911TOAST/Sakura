@@ -12,6 +12,8 @@ add_library(yuzu-android SHARED
     native_config.cpp
     native_freedreno.cpp
     android_settings.cpp
+    recomp_loader.cpp
+    recomp_loader.h
     game_metadata.cpp
     native_log.cpp
     android_config.cpp

@@ -59,6 +59,7 @@ import kotlinx.coroutines.launch
 import org.yuzu.yuzu_emu.utils.ArtworkColors
 import org.yuzu.yuzu_emu.utils.BrandAnimation
 import org.yuzu.yuzu_emu.utils.LibraryBackgroundApplier
+import org.yuzu.yuzu_emu.utils.UiLayout
 
 class GamesFragment : Fragment() {
     private var _binding: FragmentGamesBinding? = null
@@ -81,6 +82,9 @@ class GamesFragment : Fragment() {
 
     /** Tracks the last title-visibility state so returning from settings only rebinds on change. */
     private var appliedHideTitles: Boolean = false
+
+    /** Tracks the layout preset so a change made in Settings rebuilds the list on return. */
+    private var appliedUiLayoutId: Int = -1
 
     private val updateViewModel: UpdateViewModel by activityViewModels()
     private var lastKnownUpdate: NativeLibrary.UpdateResult? = null
@@ -108,8 +112,38 @@ class GamesFragment : Fragment() {
     private fun getCurrentViewType(): Int {
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val key = if (isLandscape) CarouselRecyclerView.CAROUSEL_VIEW_TYPE_LANDSCAPE else CarouselRecyclerView.CAROUSEL_VIEW_TYPE_PORTRAIT
-        val fallback = if (isLandscape) GameAdapter.VIEW_TYPE_CAROUSEL else GameAdapter.VIEW_TYPE_GRID
+        val layout = UiLayout.current(requireContext())
+        // Sakura keeps the historical default: carousel in landscape, grid in portrait.
+        val fallback = if (isLandscape && layout == UiLayout.SAKURA) {
+            GameAdapter.VIEW_TYPE_CAROUSEL
+        } else {
+            viewTypeFor(layout.libraryStyle)
+        }
         return preferences.getInt(key, fallback)
+    }
+
+    private fun viewTypeFor(style: UiLayout.LibraryStyle): Int = when (style) {
+        UiLayout.LibraryStyle.GRID -> GameAdapter.VIEW_TYPE_GRID
+        UiLayout.LibraryStyle.COMPACT_GRID -> GameAdapter.VIEW_TYPE_GRID_COMPACT
+        UiLayout.LibraryStyle.LIST -> GameAdapter.VIEW_TYPE_LIST
+        UiLayout.LibraryStyle.CAROUSEL -> GameAdapter.VIEW_TYPE_CAROUSEL
+        UiLayout.LibraryStyle.CINEMA -> GameAdapter.VIEW_TYPE_CINEMA
+    }
+
+    /** A layout preset can request more or fewer columns than the density default. */
+    private fun columnsFor(layout: UiLayout, defaultRes: Int, viewType: Int): Int {
+        val requested = if (layout.libraryColumns > 0) {
+            layout.libraryColumns
+        } else {
+            resources.getInteger(defaultRes)
+        }
+        if (resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE) {
+            return requested
+        }
+        val minimumCellWidthDp = if (viewType == GameAdapter.VIEW_TYPE_GRID_COMPACT) 205 else 230
+        val widthDp = resources.configuration.screenWidthDp
+        val widthBasedMaximum = if (widthDp > 0) (widthDp / minimumCellWidthDp).coerceAtLeast(1) else requested
+        return minOf(requested, widthBasedMaximum)
     }
 
     private fun setCurrentViewType(type: Int) {
@@ -149,6 +183,7 @@ class GamesFragment : Fragment() {
         )
 
         applyGridGamesBinding()
+        appliedUiLayoutId = UiLayout.current(requireContext()).id
 
         binding.swipeRefresh.apply {
             (binding.swipeRefresh as? SwipeRefreshLayout)?.setOnRefreshListener {
@@ -360,23 +395,43 @@ class GamesFragment : Fragment() {
 
         // Ambient brand motion once the entrance settles: a light sweep across the wordmark,
         // width-only breathing, and a slow rock on the mark. Transforms and paint only.
-        binding.root.postDelayed({
-            if (_binding == null || !ValueAnimator.areAnimatorsEnabled() ||
-                !SuyuMotion.animationsEnabled()
-            ) {
-                return@postDelayed
-            }
-            BrandAnimation.startShimmer(binding.brandWordmarkText, 3000L)
-            brandAnimators += BrandAnimation.breathe(binding.brandWordmarkText, 1.025f)
-            brandAnimators += BrandAnimation.sway(binding.brandMark, 3f, 4200L)
-        }, 900L)
+        startBrandMotion()
+    }
+
+    /** Starts the decorative wordmark/mark motion. Cheap: transforms and paint only. */
+    private fun startBrandMotion() {
+        if (_binding == null) return
+        if (!ValueAnimator.areAnimatorsEnabled() || !SuyuMotion.entrancesEnabled()) return
+        brandAnimators.clear()
+        BrandAnimation.startShimmer(binding.brandWordmarkText, 3000L)
+        brandAnimators += BrandAnimation.breathe(binding.brandWordmarkText, 1.025f)
+        brandAnimators += BrandAnimation.sway(binding.brandMark, 3f, 4200L)
+    }
+
+    /**
+     * Stops the decorative wordmark/mark motion. Called on every pause: three infinite animators
+     * repainting a hidden screen is wasted GPU work on Mali.
+     */
+    private fun pauseBrandAnimation() {
+        brandAnimators.forEach { it.cancel() }
+        brandAnimators.clear()
+        if (_binding != null) {
+            BrandAnimation.stopShimmer(binding.brandWordmarkText)
+        }
     }
 
     val applyGridGamesBinding = {
         (binding.gridGames as? RecyclerView)?.apply {
             val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+            val layout = UiLayout.current(requireContext())
             val currentViewType = getCurrentViewType()
-            val savedViewType = if (isLandscape || currentViewType != GameAdapter.VIEW_TYPE_CAROUSEL) currentViewType else GameAdapter.VIEW_TYPE_GRID
+            // The carousel preset is the one that may run in portrait; every other preset follows
+            // the historical rule of falling back to a grid there.
+            val carouselAllowed =
+                isLandscape || layout.libraryStyle == UiLayout.LibraryStyle.CAROUSEL
+            val savedViewType =
+                if (carouselAllowed || currentViewType != GameAdapter.VIEW_TYPE_CAROUSEL) currentViewType
+                else GameAdapter.VIEW_TYPE_GRID
 
             //This prevents Grid/List views from reusing scaled or otherwise modified ViewHolders left over from the carousel.
             adapter = null
@@ -389,6 +444,7 @@ class GamesFragment : Fragment() {
                     GameAdapter.VIEW_TYPE_GRID_COMPACT -> R.drawable.ic_m3_view_module
                     GameAdapter.VIEW_TYPE_LIST -> R.drawable.ic_m3_view_agenda
                     GameAdapter.VIEW_TYPE_CAROUSEL -> R.drawable.ic_m3_view_carousel
+                    GameAdapter.VIEW_TYPE_CINEMA -> R.drawable.ic_m3_view_agenda
                     else -> R.drawable.ic_m3_grid_view
                 }
             )
@@ -409,16 +465,18 @@ class GamesFragment : Fragment() {
             // Set the correct layout manager
             layoutManager = when (savedViewType) {
                 GameAdapter.VIEW_TYPE_GRID -> {
-                    val columns = resources.getInteger(R.integer.game_columns_grid)
-                    GridLayoutManager(context, columns)
+                    GridLayoutManager(context, columnsFor(layout, R.integer.game_columns_grid, savedViewType))
                 }
                 GameAdapter.VIEW_TYPE_GRID_COMPACT -> {
-                    val columns = resources.getInteger(R.integer.game_columns_grid)
-                    GridLayoutManager(context, columns)
+                    GridLayoutManager(context, columnsFor(layout, R.integer.game_columns_grid, savedViewType))
                 }
                 GameAdapter.VIEW_TYPE_LIST -> {
-                    val columns = resources.getInteger(R.integer.game_columns_list)
-                    GridLayoutManager(context, columns)
+                    // The list always uses one column; preset column counts are for grids only.
+                    GridLayoutManager(context, resources.getInteger(R.integer.game_columns_list))
+                }
+                GameAdapter.VIEW_TYPE_CINEMA -> {
+                    // One full-width cover per row.
+                    GridLayoutManager(context, 1)
                 }
                 GameAdapter.VIEW_TYPE_CAROUSEL -> {
                     LinearLayoutManager(context, RecyclerView.HORIZONTAL, false)
@@ -461,8 +519,14 @@ class GamesFragment : Fragment() {
 
     override fun onPause() {
         super.onPause()
+        // The brand sweep and sway are infinite animators; keeping them alive while the library
+        // is behind another screen is pure per-frame work on the GPU thread.
+        pauseBrandAnimation()
+        // Every other lifecycle method guards the binding; a pause after the view is torn down
+        // would otherwise crash on the dereference below.
+        if (_binding == null) return
         if (getCurrentViewType() == GameAdapter.VIEW_TYPE_CAROUSEL) {
-            gamesViewModel.lastScrollPosition = (binding.gridGames as? CarouselRecyclerView)?.getClosestChildPosition() ?: 0
+            saveCarouselScroll()
         }
     }
 
@@ -470,10 +534,17 @@ class GamesFragment : Fragment() {
         super.onResume()
         navigatingToSettings = false
         if (_binding != null) {
+            if (hasAnimatedEntrance) startBrandMotion()
+            // A layout preset picked in Settings changes the list manager, not just colors.
+            val layoutId = UiLayout.current(requireContext()).id
+            if (layoutId != appliedUiLayoutId) {
+                appliedUiLayoutId = layoutId
+                applyGridGamesBinding()
+            }
             updateButtonsVisibility()
             updateEmptyState()
             updateUpdatePill()
-            // Appearance settings can change while this screen is in the back stack.
+            // Wallpaper settings can change while this screen is in the back stack.
             LibraryBackgroundApplier.applyTo(binding.root, viewLifecycleOwner)
             val hideTitles = BooleanSetting.HIDE_GAME_TITLES.getBoolean()
             if (hideTitles != appliedHideTitles) {
@@ -481,9 +552,24 @@ class GamesFragment : Fragment() {
                 gameAdapter.notifyDataSetChanged()
             }
         }
-        if (getCurrentViewType() == GameAdapter.VIEW_TYPE_CAROUSEL) {
-            (binding.gridGames as? CarouselRecyclerView)?.setupCarousel(true)
-            (binding.gridGames as? CarouselRecyclerView)?.restoreScrollState(gamesViewModel.lastScrollPosition)
+        restoreCarouselScroll()
+    }
+
+    /** Remembers where the carousel was, so a mode change or a pause can put it back. */
+    private fun saveCarouselScroll() {
+        (binding.gridGames as? CarouselRecyclerView)?.let {
+            gamesViewModel.lastScrollPosition = it.getClosestChildPosition()
+                .takeIf { position -> position != RecyclerView.NO_POSITION }
+                ?: gamesViewModel.lastScrollPosition
+        }
+    }
+
+    /** Re-applies the remembered carousel position; a no-op in every non-carousel mode. */
+    private fun restoreCarouselScroll() {
+        if (getCurrentViewType() != GameAdapter.VIEW_TYPE_CAROUSEL) return
+        (binding.gridGames as? CarouselRecyclerView)?.let { carousel ->
+            carousel.setupCarousel(true)
+            carousel.restoreScrollState(gamesViewModel.lastScrollPosition)
         }
     }
 
@@ -619,12 +705,17 @@ class GamesFragment : Fragment() {
             GameAdapter.VIEW_TYPE_GRID_COMPACT -> popup.menu.findItem(R.id.view_grid_compact).isChecked = true
             GameAdapter.VIEW_TYPE_GRID -> popup.menu.findItem(R.id.view_grid).isChecked = true
             GameAdapter.VIEW_TYPE_CAROUSEL -> popup.menu.findItem(R.id.view_carousel).isChecked = true
+            GameAdapter.VIEW_TYPE_CINEMA -> popup.menu.findItem(R.id.view_cinema).isChecked = true
         }
 
         popup.setOnMenuItemClickListener { item ->
+            // Save the position before the adapter is rebound; the old code called onPause() by
+            // hand for the same reason, which re-ran every real onPause side effect.
+            if (getCurrentViewType() == GameAdapter.VIEW_TYPE_CAROUSEL) {
+                saveCarouselScroll()
+            }
             when (item.itemId) {
                 R.id.view_grid -> {
-                    if (getCurrentViewType() == GameAdapter.VIEW_TYPE_CAROUSEL) onPause()
                     setCurrentViewType(GameAdapter.VIEW_TYPE_GRID)
                     applyGridGamesBinding()
                     item.isChecked = true
@@ -632,7 +723,6 @@ class GamesFragment : Fragment() {
                 }
 
                 R.id.view_grid_compact -> {
-                    if (getCurrentViewType() == GameAdapter.VIEW_TYPE_CAROUSEL) onPause()
                     setCurrentViewType(GameAdapter.VIEW_TYPE_GRID_COMPACT)
                     applyGridGamesBinding()
                     item.isChecked = true
@@ -640,8 +730,14 @@ class GamesFragment : Fragment() {
                 }
 
                 R.id.view_list -> {
-                    if (getCurrentViewType() == GameAdapter.VIEW_TYPE_CAROUSEL) onPause()
                     setCurrentViewType(GameAdapter.VIEW_TYPE_LIST)
+                    applyGridGamesBinding()
+                    item.isChecked = true
+                    true
+                }
+
+                R.id.view_cinema -> {
+                    setCurrentViewType(GameAdapter.VIEW_TYPE_CINEMA)
                     applyGridGamesBinding()
                     item.isChecked = true
                     true
@@ -652,7 +748,7 @@ class GamesFragment : Fragment() {
                         setCurrentViewType(GameAdapter.VIEW_TYPE_CAROUSEL)
                         applyGridGamesBinding()
                         item.isChecked = true
-                        onResume()
+                        restoreCarouselScroll()
                     }
                     true
                 }
@@ -729,6 +825,10 @@ class GamesFragment : Fragment() {
         gamesViewModel.setFilteredGames(games)
         displayedGameCount = games.size
         updateEmptyState()
+        // The entrance budget belongs to the pass that just finished. Without this it carried
+        // over into later binds, so tiles that appeared on a filter change faded in from zero.
+        ((binding.gridGames as? RecyclerView)?.adapter as? GameAdapter)
+            ?.clearEntranceAnimation()
     }
 
     private fun updateLibraryCount() {
@@ -814,6 +914,7 @@ class GamesFragment : Fragment() {
         hasAnimatedEntrance = false
         brandAnimators.forEach { it.cancel() }
         brandAnimators.clear()
+        _binding?.let { BrandAnimation.stopShimmer(it.brandWordmarkText) }
         _binding = null
     }
 

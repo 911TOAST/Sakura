@@ -17,8 +17,15 @@
 #include <span>
 #include <system_error>
 #include <thread>
+#include <string>
+#include <utility>
 #include <vector>
 #include <numeric>
+#ifdef __ANDROID__
+#include <cstdio>
+#include <unistd.h>
+#endif
+#include "common/memory_budget.h"
 #include "common/cityhash.h"
 #include "common/fs/fs.h"
 #include "common/fs/path_util.h"
@@ -82,7 +89,7 @@ constexpr size_t MAX_CACHED_PAYLOAD_SIZE = 64 * 1024 * 1024;
 // Upper bound for the device-wide (cross-title) driver pipeline cache. It is shared by every
 // game booted on this device/driver, so it is allowed to grow much larger than a per-title
 // cache, but it must not grow without bound: it is read in full on every boot.
-constexpr size_t MAX_GLOBAL_PIPELINE_CACHE_SIZE = 128 * 1024 * 1024;
+constexpr size_t MAX_GLOBAL_PIPELINE_CACHE_SIZE = 64 * 1024 * 1024;
 constexpr u32 CHECKPOINT_PIPELINE_THRESHOLD = 16;
 
 struct CachedStage {
@@ -441,24 +448,87 @@ Shader::RuntimeInfo MakeRuntimeInfo(std::span<const Shader::IR::Program> program
     return info;
 }
 
-size_t GetTotalPipelineWorkers() {
-    const size_t max_core_threads =
-        std::max<size_t>(static_cast<size_t>(std::thread::hardware_concurrency()), 2ULL) - 1ULL;
 #ifdef __ANDROID__
+size_t GetAndroidPipelineWorkerLimit() {
+    const size_t fallback_worker_limit =
+        std::max<size_t>(static_cast<size_t>(std::thread::hardware_concurrency()), 2) - 1;
+    const long configured_cpu_count = sysconf(_SC_NPROCESSORS_CONF);
+    if (configured_cpu_count <= 0) {
+        return fallback_worker_limit;
+    }
+    const size_t cpu_count = static_cast<size_t>(configured_cpu_count);
+
+    std::vector<std::pair<size_t, size_t>> cores;
+    cores.reserve(cpu_count);
+    for (size_t cpu = 0; cpu < cpu_count; ++cpu) {
+        const std::string base = "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/";
+        size_t capacity = 0;
+        for (const char* file : {"cpu_capacity", "cpufreq/cpuinfo_max_freq"}) {
+            const std::string path = base + file;
+            std::FILE* handle = std::fopen(path.c_str(), "r");
+            if (!handle) {
+                continue;
+            }
+            unsigned long value = 0;
+            const int scanned = std::fscanf(handle, "%lu", &value);
+            std::fclose(handle);
+            if (scanned == 1 && value != 0) {
+                capacity = static_cast<size_t>(value);
+                break;
+            }
+        }
+        if (capacity == 0) {
+            return fallback_worker_limit;
+        }
+        cores.emplace_back(capacity, cpu);
+    }
+
+    std::sort(cores.begin(), cores.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.first > rhs.first;
+    });
+    const size_t limit = std::min<size_t>(4, cores.size());
+    size_t fast_cores = 1;
+    while (fast_cores < limit && cores[fast_cores].first == cores.front().first) {
+        ++fast_cores;
+    }
+    if (fast_cores == 1 && cores.size() > 1) {
+        while (fast_cores < limit && cores[fast_cores].first == cores[1].first) {
+            ++fast_cores;
+        }
+    }
+
+    // Keep one fast core available for the emulation/render threads.
+    return std::max<size_t>(fast_cores - 1, 1);
+}
+#endif
+
+size_t GetTotalPipelineWorkers() {
+#ifdef __ANDROID__
+    const size_t max_core_threads = GetAndroidPipelineWorkerLimit();
     const int configured = AndroidSettings::values.pipeline_worker_count.GetValue();
-    const int clamped = std::clamp(configured, 4, 8);
+    const int clamped = std::clamp(configured, 2, 8);
     const size_t desired = static_cast<size_t>(clamped);
     if (desired == 0) {
         return 1ULL;
     }
     return std::min(max_core_threads, desired);
 #else
+    const size_t max_core_threads =
+        std::max<size_t>(static_cast<size_t>(std::thread::hardware_concurrency()), 2ULL) - 1ULL;
     return max_core_threads;
 #endif
 }
 
 size_t GetBootPipelineWorkers() {
+#ifdef __ANDROID__
+    // The boot pool compiles the whole cache before the first frame; every worker holds a
+    // full compile working set, so cap the spike inside the memory budget instead of using
+    // every core on a phone that has none to spare.
+    return std::min<size_t>(GetAndroidPipelineWorkerLimit(),
+                            Common::MemoryBudget::BootPipelineWorkerCount());
+#else
     return std::max<size_t>(static_cast<size_t>(std::thread::hardware_concurrency()), 2ULL);
+#endif
 }
 
 } // Anonymous namespace
@@ -496,6 +566,7 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
       workers(device.HasBrokenParallelShaderCompiling() ? 1ULL : GetBootPipelineWorkers(),
               "VkPipelineBuilder"),
       serialization_thread(1, "VkPipelineSerialization") {
+    runtime_statistics = std::make_unique<PipelineStatistics>(device);
     play_workers = device.HasBrokenParallelShaderCompiling() ? 1ULL : GetTotalPipelineWorkers();
     const auto& float_control{device.FloatControlProperties()};
     const VkDriverId driver_id{device.GetDriverID()};
@@ -592,11 +663,15 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
     // written by a different build is accepted and its fields are reinterpreted as the new layout.
     // The relaxed precision switch changes the emitted SPIR-V itself, so it belongs in the salt
     // too: without it, shaders cached before the switch was flipped keep coming back from disk.
+    // The multiplier is the relaxation revision; bump it whenever the selection rules change.
+    constexpr u64 relaxed_precision_revision = 2;
     shader_cache_salt = Common::CityHash64(model_name.data(), model_name.size()) ^
                         (static_cast<u64>(device.GetDriverVersion()) << 32) ^
                         static_cast<u64>(device.ApiVersion()) ^
                         (static_cast<u64>(sizeof(Shader::Info)) << 16) ^
-                        (static_cast<u64>(profile.relax_fp32_precision) << 56) ^
+                        ((static_cast<u64>(profile.relax_fp32_precision) *
+                          relaxed_precision_revision)
+                         << 56) ^
                         static_cast<u64>(Shader::Serialize::InfoSerializationVersion);
 
     host_info = Shader::HostTranslateInfo{
@@ -695,14 +770,15 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
 }
 
 PipelineCache::~PipelineCache() {
-    if (!use_vulkan_pipeline_cache) {
+    runtime_statistics->ReportCache();
+    if (!use_vulkan_pipeline_cache && !force_gpu_recompile) {
         return;
     }
     if (!vulkan_pipeline_cache_filename.empty()) {
         SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
                                      CACHE_VERSION);
     }
-    if (!global_vulkan_pipeline_cache_filename.empty()) {
+    if (!force_gpu_recompile && !global_vulkan_pipeline_cache_filename.empty()) {
         SerializeVulkanPipelineCache(global_vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
                                      CACHE_VERSION, MAX_GLOBAL_PIPELINE_CACHE_SIZE);
     }
@@ -731,6 +807,7 @@ GraphicsPipeline* PipelineCache::CurrentGraphicsPipeline() {
         !maxwell3d->dirty.flags[Dirty::VertexInput] &&
         pipeline_engine_state == static_cast<u32>(maxwell3d->engine_state)) {
         if (GraphicsPipeline* const built{BuiltPipeline(current_pipeline)}; built != nullptr) {
+            runtime_statistics->RecordCacheHit();
             return built;
         }
     }
@@ -745,6 +822,7 @@ GraphicsPipeline* PipelineCache::CurrentGraphicsPipeline() {
             pipeline_engine_state = static_cast<u32>(maxwell3d->engine_state);
             pipeline_epoch_engine = maxwell3d;
             pipeline_state_epoch_valid = true;
+            runtime_statistics->RecordCacheHit();
             return BuiltPipeline(current_pipeline);
         }
     }
@@ -816,8 +894,10 @@ ComputePipeline* PipelineCache::CurrentComputePipeline() {
     const auto [pair, is_new]{compute_cache.try_emplace(key)};
     auto& pipeline{pair->second};
     if (!is_new) {
+        runtime_statistics->RecordCacheHit();
         return pipeline.get();
     }
+    runtime_statistics->RecordCacheMiss();
     pipeline = CreateComputePipeline(key, shader);
     return pipeline.get();
 }
@@ -838,8 +918,25 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
     }
     pipeline_cache_filename = base_dir / "vulkan.bin";
 
-    if (use_vulkan_pipeline_cache) {
-        vulkan_pipeline_cache_filename = base_dir / "vulkan_pipelines.bin";
+    const auto recompile_marker{base_dir / "force_gpu_recompile.once"};
+    force_gpu_recompile = Common::FS::Exists(recompile_marker);
+    const auto rebuilt_pipeline_cache_filename{base_dir / "vulkan_pipelines_rebuild.bin"};
+    const auto title_pipeline_cache_filename{base_dir / "vulkan_pipelines.bin"};
+    // The rebuilt guest shader cache is written here first and only replaces vulkan.bin once the
+    // whole pass has succeeded. A rebuild is not just a driver-pipeline refresh: the saved guest
+    // code is translated to SPIR-V again, and that new SPIR-V has to survive the next boot or the
+    // old payload would be loaded and the rebuild would have been a one-boot placebo.
+    const auto rebuilt_guest_cache_filename{base_dir / "vulkan.bin.rebuild"};
+    if (force_gpu_recompile) {
+        // Never append to a partial file left by an interrupted rebuild.
+        Common::FS::RemoveFile(rebuilt_guest_cache_filename);
+        LOG_INFO(Render_Vulkan,
+                 "[ShaderWarmup] Rebuilding cached GPU pipelines for title {:016x}", title_id);
+    }
+
+    if (use_vulkan_pipeline_cache || force_gpu_recompile) {
+        vulkan_pipeline_cache_filename =
+            force_gpu_recompile ? rebuilt_pipeline_cache_filename : title_pipeline_cache_filename;
 
         // The driver pipeline cache is device-wide, not title-wide. Use a cache shared by every
         // title on this exact device/driver as the base, so a pipeline compiled while playing one
@@ -848,15 +945,25 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
         // only permits reusing pipeline cache data on the device/driver that produced it.
         global_vulkan_pipeline_cache_filename =
             shader_dir / fmt::format("vulkan_pipelines_global_{:016x}.bin", shader_cache_salt);
-        vulkan_pipeline_cache =
-            LoadVulkanPipelineCache(global_vulkan_pipeline_cache_filename, CACHE_VERSION);
+        if (force_gpu_recompile) {
+            // Rebuild this title's driver pipelines from its saved guest SPIR-V, bypassing both
+            // driver caches for this pass. Keep the shared cache intact for all other titles.
+            // Keep the active cache intact until the rebuild finishes successfully. An
+            // interrupted warmup can then be retried without throwing away the previous cache.
+            Common::FS::RemoveFile(vulkan_pipeline_cache_filename);
+            vulkan_pipeline_cache =
+                LoadVulkanPipelineCache(vulkan_pipeline_cache_filename, CACHE_VERSION);
+        } else {
+            vulkan_pipeline_cache =
+                LoadVulkanPipelineCache(global_vulkan_pipeline_cache_filename, CACHE_VERSION);
 
-        // Merge this title's cache into the device-wide cache. Merging is cheap compared to the
-        // shader compilation the entries save, and it keeps one warm cache for the whole device.
-        const vk::PipelineCache title_pipeline_cache{
-            LoadVulkanPipelineCache(vulkan_pipeline_cache_filename, CACHE_VERSION)};
-        if (title_pipeline_cache) {
-            vulkan_pipeline_cache.MergeFrom(title_pipeline_cache);
+            // Merge this title's cache into the device-wide cache. Merging is cheap compared to
+            // the shader compilation the entries save, and keeps one warm cache for the device.
+            const vk::PipelineCache title_pipeline_cache{
+                LoadVulkanPipelineCache(vulkan_pipeline_cache_filename, CACHE_VERSION)};
+            if (title_pipeline_cache) {
+                vulkan_pipeline_cache.MergeFrom(title_pipeline_cache);
+            }
         }
     }
 
@@ -868,6 +975,9 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
         size_t compiled{};
         size_t failed{};
         bool has_loaded{};
+        // Set when writing the rebuilt guest shader cache fails. The pass must not replace the
+        // active cache with a partial file in that case.
+        bool rebuild_write_failed{};
         // A cache file is append-only, so an entry may be present more than once (for example if
         // a build was interrupted between the SPIR-V and driver cache write, or after a cache
         // version bump). Building the same pipeline twice at boot is pure wasted driver time.
@@ -889,10 +999,13 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
         }
 
         workers.QueueWork([this, key, env_ = std::move(env), payload = std::move(payload),
-                           &state, &callback]() mutable {
+                           &state, &callback, &rebuilt_guest_cache_filename]() mutable {
             std::unique_ptr<ComputePipeline> pipeline;
             bool from_disk{false};
-            if (!payload.empty()) {
+            std::vector<u8> rebuilt_payload;
+            // A requested rebuild must translate the saved Maxwell guest shader again. Reusing
+            // this payload would only recreate the driver pipeline from cached SPIR-V.
+            if (!force_gpu_recompile && !payload.empty()) {
                 try {
                     pipeline =
                         CreateComputePipelineFromCache(key, payload, state.statistics.get(), false);
@@ -905,7 +1018,8 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
             }
             if (!pipeline) {
                 ShaderPools pools;
-                pipeline = CreateComputePipeline(pools, key, env_, state.statistics.get(), false);
+                pipeline = CreateComputePipeline(pools, key, env_, state.statistics.get(), false,
+                                                 force_gpu_recompile ? &rebuilt_payload : nullptr);
             }
             std::scoped_lock lock{state.mutex};
             const bool built_ok{pipeline != nullptr};
@@ -918,6 +1032,20 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
                 ++state.compiled;
             } else {
                 ++state.failed;
+            }
+            if (force_gpu_recompile && !state.rebuild_write_failed) {
+                // Keep the freshly translated SPIR-V. If translation failed, write the old
+                // payload back so the entry is not silently dropped from the cache.
+                const std::span<const u8> rebuilt{
+                    rebuilt_payload.empty() ? std::span<const u8>{payload}
+                                            : std::span<const u8>{rebuilt_payload}};
+                if (!rebuilt.empty()) {
+                    SerializePipeline(key, std::array<const FileEnvironment*, 1>{&env_},
+                                      rebuilt_guest_cache_filename, CACHE_VERSION, rebuilt);
+                    if (!Common::FS::Exists(rebuilt_guest_cache_filename)) {
+                        state.rebuild_write_failed = true;
+                    }
+                }
             }
             ++state.built;
             if (state.has_loaded) {
@@ -964,10 +1092,13 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
         }
 
         workers.QueueWork([this, key, envs_ = std::move(envs), payload = std::move(payload),
-                           &state, &callback]() mutable {
+                           &state, &callback, &rebuilt_guest_cache_filename]() mutable {
             std::unique_ptr<GraphicsPipeline> pipeline;
             bool from_disk{false};
-            if (!payload.empty()) {
+            std::vector<u8> rebuilt_payload;
+            // Bypass cached SPIR-V during an explicit rebuild so both shader translation and
+            // the Vulkan driver pipeline compilation run again from the saved guest code.
+            if (!force_gpu_recompile && !payload.empty()) {
                 try {
                     pipeline = CreateGraphicsPipelineFromCache(key, payload,
                                                                state.statistics.get(), false);
@@ -984,7 +1115,8 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
                     env_ptrs.push_back(&env);
                 }
                 pipeline = CreateGraphicsPipeline(pools, key, MakeSpan(env_ptrs),
-                                                 state.statistics.get(), false);
+                                                 state.statistics.get(), false,
+                                                 force_gpu_recompile ? &rebuilt_payload : nullptr);
             }
 
             std::scoped_lock lock{state.mutex};
@@ -998,6 +1130,26 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
                 ++state.compiled;
             } else {
                 ++state.failed;
+            }
+            if (force_gpu_recompile && !state.rebuild_write_failed) {
+                // Persist the new SPIR-V, or the previous payload when translation failed, so a
+                // rebuild does not quietly delete entries the game can still use.
+                const std::span<const u8> rebuilt{
+                    rebuilt_payload.empty() ? std::span<const u8>{payload}
+                                            : std::span<const u8>{rebuilt_payload}};
+                if (!rebuilt.empty()) {
+                    boost::container::static_vector<const FileEnvironment*,
+                                                    Maxwell::MaxShaderProgram>
+                        env_ptrs;
+                    for (auto& env : envs_) {
+                        env_ptrs.push_back(&env);
+                    }
+                    SerializePipeline(key, env_ptrs, rebuilt_guest_cache_filename, CACHE_VERSION,
+                                      rebuilt);
+                    if (!Common::FS::Exists(rebuilt_guest_cache_filename)) {
+                        state.rebuild_write_failed = true;
+                    }
+                }
             }
             ++state.built;
             if (state.has_loaded) {
@@ -1032,11 +1184,80 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
         LOG_INFO(Render_Vulkan, "[ShaderWarmup] Cold start: no cached pipelines for this title");
     }
 
-    if (use_vulkan_pipeline_cache) {
+    if (use_vulkan_pipeline_cache || force_gpu_recompile) {
         SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
                                      CACHE_VERSION);
-        SerializeVulkanPipelineCache(global_vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
-                                     CACHE_VERSION, MAX_GLOBAL_PIPELINE_CACHE_SIZE);
+        if (!force_gpu_recompile) {
+            SerializeVulkanPipelineCache(global_vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
+                                         CACHE_VERSION, MAX_GLOBAL_PIPELINE_CACHE_SIZE);
+        } else {
+            // The guest shader cache is the source of truth for the next boot. Commit the
+            // retranslated SPIR-V before clearing the request; otherwise the next boot would load
+            // the previous payload and the rebuild would only have affected one session.
+            bool rebuild_committed{state.built == state.total && state.failed == 0 &&
+                                   !state.rebuild_write_failed && !stop_loading.stop_requested()};
+            if (state.failed != 0) {
+                LOG_ERROR(Render_Vulkan,
+                          "[ShaderWarmup] Keeping the rebuild request: {} of {} pipelines failed",
+                          state.failed, state.total);
+            }
+            if (rebuild_committed && state.total != 0) {
+                if (!Common::FS::Exists(rebuilt_guest_cache_filename)) {
+                    LOG_ERROR(Common_Filesystem,
+                              "Rebuilt GPU shader cache was not written; keeping the request");
+                    rebuild_committed = false;
+                } else {
+                    std::error_code ec;
+                    std::filesystem::rename(rebuilt_guest_cache_filename, pipeline_cache_filename,
+                                            ec);
+                    if (ec) {
+                        std::filesystem::remove(pipeline_cache_filename, ec);
+                        ec.clear();
+                        std::filesystem::rename(rebuilt_guest_cache_filename,
+                                                pipeline_cache_filename, ec);
+                    }
+                    if (ec) {
+                        LOG_ERROR(Common_Filesystem,
+                                  "Failed to activate rebuilt GPU shader cache: {}", ec.message());
+                        rebuild_committed = false;
+                    }
+                }
+            }
+            if (rebuild_committed) {
+                std::error_code ec;
+                std::filesystem::rename(rebuilt_pipeline_cache_filename,
+                                        title_pipeline_cache_filename, ec);
+                if (ec) {
+                    std::filesystem::remove(title_pipeline_cache_filename, ec);
+                    ec.clear();
+                    std::filesystem::rename(rebuilt_pipeline_cache_filename,
+                                            title_pipeline_cache_filename, ec);
+                }
+                if (ec) {
+                    LOG_ERROR(Common_Filesystem, "Failed to activate rebuilt GPU pipeline cache: {}",
+                              ec.message());
+                } else if (!Common::FS::RemoveFile(recompile_marker)) {
+                    LOG_ERROR(Common_Filesystem, "Rebuilt GPU cache, but failed to clear its request");
+                } else {
+                    force_gpu_recompile = false;
+                    vulkan_pipeline_cache_filename = title_pipeline_cache_filename;
+                    // This pass created an empty driver cache and filled it with this title's
+                    // rebuilt pipelines only. Writing it back as the device-wide cache would drop
+                    // every other title's entries, so leave the global file untouched; the next
+                    // normal boot merges this title's cache into it.
+                    global_vulkan_pipeline_cache_filename.clear();
+                    if (state.total == 0) {
+                        LOG_INFO(Render_Vulkan,
+                                 "[ShaderWarmup] No cached guest shaders to rebuild for this title");
+                    } else {
+                        LOG_INFO(Render_Vulkan,
+                                 "[ShaderWarmup] GPU pipeline rebuild completed: {} compiled, {} "
+                                 "failed",
+                                 state.compiled, state.failed);
+                    }
+                }
+            }
+        }
     }
 
     if (state.statistics) {
@@ -1048,7 +1269,10 @@ GraphicsPipeline* PipelineCache::CurrentGraphicsPipelineSlowPath() {
     const auto [pair, is_new]{graphics_cache.try_emplace(graphics_key)};
     auto& pipeline{pair->second};
     if (is_new) {
+        runtime_statistics->RecordCacheMiss();
         pipeline = CreateGraphicsPipeline();
+    } else {
+        runtime_statistics->RecordCacheHit();
     }
     if (!pipeline) {
         return nullptr;
@@ -1078,6 +1302,7 @@ GraphicsPipeline* PipelineCache::BuiltPipeline(GraphicsPipeline* pipeline) const
     if (draw_state.index_buffer.count <= 6 || draw_state.vertex_buffer.count <= 6) {
         return pipeline;
     }
+    runtime_statistics->RecordDroppedDraw();
     return nullptr;
 }
 
@@ -1228,6 +1453,9 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
     }
     LOG_ERROR(Render_Vulkan, "{}", exception.what());
     return nullptr;
+} catch (const vk::Exception& exception) {
+    LOG_ERROR(Render_Vulkan, "Graphics pipeline creation failed: {}", exception.what());
+    return nullptr;
 }
 
 std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipelineFromCache(
@@ -1265,6 +1493,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipelineFromCache
 }
 
 std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
+    runtime_statistics->RecordBuild();
     GraphicsEnvironments environments;
     GetGraphicsEnvironments(environments, graphics_key.unique_hashes);
 
@@ -1294,6 +1523,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
 
 std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
     const ComputePipelineCacheKey& key, const ShaderInfo* shader) {
+    runtime_statistics->RecordBuild();
     const GPUVAddr program_base{kepler_compute->regs.code_loc.Address()};
     const auto& qmd{kepler_compute->launch_description};
     ComputeEnvironment env{*kepler_compute, *gpu_memory, program_base, qmd.program_start};
@@ -1340,8 +1570,7 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
     auto program{TranslateProgram(pools.inst, pools.block, env, cfg, host_info)};
     const VkDriverIdKHR driver_id = device.GetDriverID();
     const bool needs_shared_mem_clamp =
-        driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY ||
-        driver_id == VK_DRIVER_ID_ARM_PROPRIETARY;
+        driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY || device.IsMali();
     const u32 max_shared_memory = device.GetMaxComputeSharedMemorySize();
     if (needs_shared_mem_clamp && program.shared_memory_size > max_shared_memory) {
         LOG_WARNING(Render_Vulkan,
@@ -1474,7 +1703,7 @@ void PipelineCache::SerializeVulkanPipelineCache(const std::filesystem::path& fi
 }
 
 void PipelineCache::RequestCheckpoint() {
-    if (!use_vulkan_pipeline_cache ||
+    if ((!use_vulkan_pipeline_cache && !force_gpu_recompile) ||
         !Settings::values.vulkan_pipeline_cache_checkpoint.GetValue()) {
         return;
     }
@@ -1503,7 +1732,7 @@ void PipelineCache::CheckpointVulkanPipelineCache() {
     }
     SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
                                  CACHE_VERSION);
-    if (!global_vulkan_pipeline_cache_filename.empty()) {
+    if (!force_gpu_recompile && !global_vulkan_pipeline_cache_filename.empty()) {
         SerializeVulkanPipelineCache(global_vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
                                      CACHE_VERSION, MAX_GLOBAL_PIPELINE_CACHE_SIZE);
     }

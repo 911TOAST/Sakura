@@ -940,6 +940,13 @@ FN_MAX_LIMIT_LIST
         return properties.properties.limits.maxClipDistances;
     }
 
+    /// Returns whether the physical device passed GetSuitability. MTK Vulkan drivers (e.g.
+    /// the Dimensity 9500G1 on the Find X9 Pro) report the emulator features as missing
+    /// while still running, so callers prefer a suitable device over the selected one.
+    bool IsSuitable() const noexcept {
+        return is_suitable;
+    }
+
     bool SupportsConditionalBarriers() const {
         return supports_conditional_barriers;
     }
@@ -1168,6 +1175,7 @@ private:
     bool is_blit_depth24_stencil8_supported{}; ///< Support for blitting from and to D24S8.
     bool is_blit_depth32_stencil8_supported{}; ///< Support for blitting from and to D32S8.
     bool is_warp_potentially_bigger{};         ///< Host warp size can be bigger than guest.
+    bool is_suitable{};                       ///< Device passed GetSuitability.
     bool is_integrated{};                      ///< Is GPU an iGPU.
     bool is_virtual{};                         ///< Is GPU a virtual GPU.
     bool is_non_gpu{};                         ///< Is SoftwareRasterizer, FPGA, non-GPU device.

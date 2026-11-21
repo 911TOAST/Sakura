@@ -193,7 +193,7 @@ class AutoTuneEngine {
     private suspend fun runSession(target: TuneTarget) {
         val snap = snapshot ?: return
         val baselineConfig = TuneConfig(snap.resolution, snap.accuracy, snap.clock)
-        val totalRuns = estimateRunCount(baselineConfig)
+        val totalRuns = estimateRunCount()
         _state.update {
             it.copy(
                 phase = AutoTunePhase.RUNNING,
@@ -210,7 +210,7 @@ class AutoTuneEngine {
         var runIndex = 0
 
         suspend fun run(config: TuneConfig, label: String): BenchmarkResult {
-            runIndex++
+            runIndex = (runIndex + 1).coerceAtMost(_state.value.totalRuns)
             _state.update {
                 it.copy(runIndex = runIndex, runLabel = label, settling = true, windowProgress = 0f)
             }
@@ -417,13 +417,8 @@ class AutoTuneEngine {
     }
 
     /** Upper bound on runs, used only to drive the overall progress bar. */
-    private fun estimateRunCount(base: TuneConfig): Int {
-        var count = 2 // baseline + confirmation
-        count += RESOLUTION_LADDER.count { it != base.resolution }
-        count += ACCURACY_LADDER.count { it != base.accuracy }
-        count += CLOCK_LADDER.count { it != base.clock }
-        return count
-    }
+    private fun estimateRunCount(): Int =
+        2 + RESOLUTION_LADDER.size + ACCURACY_LADDER.size + CLOCK_LADDER.size
 
     private fun ensureEmulationAlive() {
         if (!NativeLibrary.isRunning()) {

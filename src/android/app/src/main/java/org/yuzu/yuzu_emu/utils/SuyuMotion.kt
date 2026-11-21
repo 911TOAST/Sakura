@@ -10,6 +10,7 @@ import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.SoundEffectConstants
 import android.view.animation.OvershootInterpolator
 import androidx.core.view.animation.PathInterpolatorCompat
 import androidx.dynamicanimation.animation.DynamicAnimation
@@ -56,6 +57,10 @@ object SuyuMotion {
     fun hapticFeedbackEnabled(): Boolean = runCatching {
         BooleanSetting.UI_HAPTIC_FEEDBACK.getBoolean()
     }.getOrDefault(true)
+
+    fun soundFeedbackEnabled(): Boolean = runCatching {
+        BooleanSetting.UI_SOUND_FEEDBACK.getBoolean()
+    }.getOrDefault(false)
 
     fun entrancesEnabled(): Boolean = animationsEnabled() && runCatching {
         BooleanSetting.UI_ENTRANCE_ANIMATION.getBoolean()
@@ -210,7 +215,9 @@ object SuyuMotion {
      * listener so the view's own click and long-click handlers still run untouched.
      */
     fun installPressFeedback(view: View, haptic: Boolean = false) {
-        if (!pressFeedbackEnabled() || isInstant()) {
+        if ((!pressFeedbackEnabled() || isInstant()) && !hapticFeedbackEnabled() &&
+            !soundFeedbackEnabled()
+        ) {
             view.scaleX = 1f
             view.scaleY = 1f
             return
@@ -222,7 +229,15 @@ object SuyuMotion {
                     performHaptic(touched, haptic)
                     pressDown(touched)
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> pressUp(touched)
+                MotionEvent.ACTION_UP -> {
+                    val releasedInside = event.x >= 0 && event.x < touched.width &&
+                        event.y >= 0 && event.y < touched.height
+                    if (releasedInside && soundFeedbackEnabled()) {
+                        touched.playSoundEffect(SoundEffectConstants.CLICK)
+                    }
+                    pressUp(touched)
+                }
+                MotionEvent.ACTION_CANCEL -> pressUp(touched)
             }
             false
         }

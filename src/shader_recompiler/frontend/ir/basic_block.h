@@ -52,6 +52,10 @@ public:
     /// Adds a new branch to this basic block.
     void AddBranch(Block* block);
 
+    /// Replaces a successor edge `from` with `to`, maintaining predecessor
+    /// bookkeeping. A no-op when `from` is not a successor of this block.
+    void ReplaceSuccessor(Block* from, Block* to);
+
     /// Gets a mutable reference to the instruction list for this basic block.
     [[nodiscard]] InstructionList& Instructions() noexcept {
         return instructions;

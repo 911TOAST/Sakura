@@ -15,7 +15,12 @@ namespace Shader::Optimization {
 void CollectShaderInfoPass(Environment& env, IR::Program& program);
 void ConditionalBarrierPass(IR::Program& program);
 void ConstantPropagationPass(Environment& env, IR::Program& program);
+void AlgebraicSimplificationPass(IR::Program& program);
+void CopyPropagationPass(IR::Program& program);
+void ControlFlowSimplificationPass(IR::Program& program);
+void CsePass(IR::Program& program);
 void DeadCodeEliminationPass(IR::Program& program);
+void GvnPass(IR::Program& program);
 void GlobalMemoryToStorageBufferPass(IR::Program& program, const HostTranslateInfo& host_info);
 void IdentityRemovalPass(IR::Program& program);
 void LowerFp64ToFp32(IR::Program& program);

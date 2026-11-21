@@ -390,11 +390,10 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
     // According to Vulkan spec, when using VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR,
     // the base format (imageFormat) MUST be included in pViewFormats
     const std::array view_formats{
-        swapchain_ci.imageFormat,  // Base format MUST be first
-        VK_FORMAT_B8G8R8A8_UNORM,
-        VK_FORMAT_B8G8R8A8_SRGB,
+        swapchain_ci.imageFormat, // Base format MUST be first
+        VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB,
 #ifdef __ANDROID__
-        VK_FORMAT_R8G8B8A8_UNORM,  // Android may use RGBA
+        VK_FORMAT_R8G8B8A8_UNORM, // Android may use RGBA
         VK_FORMAT_R8G8B8A8_SRGB,
 #endif
     };

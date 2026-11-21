@@ -38,7 +38,7 @@ class DriverViewModel : ViewModel() {
             _isDeletingDrivers
         ) { loading, ready, deleting ->
             !loading && ready && !deleting
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), initialValue = false)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), initialValue = true)
 
     var driverData = GpuDriverHelper.getDrivers()
 
@@ -76,6 +76,8 @@ class DriverViewModel : ViewModel() {
             .toMutableList()
         updateDriverList()
         _areDriversLoading.value = false
+        // A driver installed from the fetcher screen changes DRIVER_PATH behind this list.
+        updateName()
     }
 
     fun updateDriverList() {
@@ -111,10 +113,13 @@ class DriverViewModel : ViewModel() {
     }
 
     fun onDriverSelected(position: Int, skipShaderWipe: Boolean = false) {
-        val newDriverPath = if (position == 0) {
+        // A recycled row can be clicked after its position was invalidated. Falling back to the
+        // system entry is safer than indexing past the end of the list.
+        val safePosition = position.coerceIn(0, driverData.size)
+        val newDriverPath = if (safePosition == 0) {
             ""
         } else {
-            driverData[position - 1].first
+            driverData[safePosition - 1].first
         }
 
         if (!skipShaderWipe && newDriverPath != previousDriverPath) {
@@ -127,12 +132,23 @@ class DriverViewModel : ViewModel() {
             }
         }
 
-        if (position == 0) {
+        if (safePosition == 0) {
             StringSetting.DRIVER_PATH.setString("")
         } else {
-            StringSetting.DRIVER_PATH.setString(driverData[position - 1].first)
+            StringSetting.DRIVER_PATH.setString(driverData[safePosition - 1].first)
         }
         previousDriverPath = newDriverPath
+        // Header card: the name/version flow is the one the next launch will actually load.
+        updateName()
+    }
+
+    /**
+     * Drops the per-game driver override and keeps the header in sync with the global driver.
+     */
+    fun onUseGlobalDriver() {
+        StringSetting.DRIVER_PATH.global = true
+        updateDriverList()
+        updateName()
     }
 
     fun onDriverShaderDialogDismissed(dontShowAgain: Boolean) {

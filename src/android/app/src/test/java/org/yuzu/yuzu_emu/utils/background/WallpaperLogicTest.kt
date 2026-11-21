@@ -89,14 +89,9 @@ class WallpaperLogicTest {
     }
 
     @Test
-    fun atmosphereDefaultsOnAndSurvivesSerializationRoundTrip() {
-        val appearance = WallpaperAppearance()
-        assertTrue(appearance.aurora)
-        assertTrue(appearance.parallax)
-        val encoded = kotlinx.serialization.json.Json.encodeToString(WallpaperAppearance.serializer(), appearance)
-        assertEquals(appearance, kotlinx.serialization.json.Json.decodeFromString(WallpaperAppearance.serializer(), encoded))
-        // Older saved state without the new keys must keep the atmosphere on.
-        assertEquals(appearance, kotlinx.serialization.json.Json.decodeFromString(WallpaperAppearance.serializer(), "{}"))
+    fun atmosphereSectionIsGone() {
+        // The aurora veil and its parallax/tilt atmosphere were removed: the library now shows
+        // only the user's picture, so there is no appearance state left to serialise or default on.
     }
 
     @Test

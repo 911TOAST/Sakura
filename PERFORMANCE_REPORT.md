@@ -1,6 +1,58 @@
 # Sakura optimized build — performance reports
 
-Date: 2026-10-24 (CPU pass), updated 2026-11-12 (Mali layout experiments + BCn→ASTC)
+Date: 2026-10-24 (CPU pass), updated 2026-11-14 (memory budget pass), updated 2026-11-12 (Mali layout experiments + BCn→ASTC)
+
+## 2026-11-14 pass — 6 GiB process budget, deep memory pass
+
+Branch: `perf/relaxed-precision-and-core-pinning`. Files:
+`src/common/memory_budget.{h,cpp}`, `src/common/CMakeLists.txt`,
+`src/core/hle/kernel/board/nintendo/nx/k_system_control.cpp`,
+`src/core/arm/dynarmic/arm_dynarmic_64.cpp`, `arm_dynarmic_32.cpp`,
+`src/video_core/vulkan_common/vulkan_device.cpp`,
+`src/video_core/renderer_vulkan/vk_pipeline_cache.cpp`,
+`src/android/app/src/main/jni/android_settings.h`,
+`src/android/app/src/main/java/org/yuzu/yuzu_emu/features/settings/model/view/SettingsItem.kt`,
+`src/android/app/src/main/java/org/yuzu/yuzu_emu/utils/MemoryUtil.kt`,
+`src/android/app/src/main/res/values/strings.xml`.
+
+### What changed
+
+The pass targets one number: the process working set on an 8 GiB phone, which previously had no
+ceiling anywhere in the tree. `Common::MemoryBudget` (new) is the single place every subsystem
+reads its ceiling from:
+
+- **Emulated DRAM layout clamp** (`k_system_control.cpp`): the 8/10/12 GiB layouts reserved more
+  guest DRAM than the device can hold, which by itself accounted for the "8 GB" working set.
+  `GetMemorySizeForInit`/`GetMemoryArrangeForInit` now clamp the selected layout to 6 GiB on
+  Android (4 GiB on devices that cannot hold even that). The default 4 GiB layout is unchanged.
+- **Process budget** (`memory_budget.cpp`): 6 GiB ceiling on 8 GiB-class devices (RAM minus 2 GiB
+  for Android/SurfaceFlinger, capped at 6 GiB). Devices above 8 GiB keep their previous sizing.
+- **Cache ceiling** (`vulkan_device.cpp`): the Mali `device_access_memory` estimate now starts
+  from `CacheBudgetBytes()` (~1 GiB on an 8 GiB device) instead of `system_ram / 5` capped at
+  the 2.5 GiB hardcoded value, so the texture cache, the buffer cache and the staging pools share
+  one ceiling that fits inside the process budget. The user slider still wins when it is lower,
+  and its floor moved from 1024 to 512 MiB.
+- **JIT code cache** (`arm_dynarmic_64.cpp`, `arm_dynarmic_32.cpp`): 128 MiB → 64 MiB per backend
+  on Android. The code cache is an LRU over compiled blocks; a smaller one costs recompiles, not
+  correctness.
+- **Pipeline workers** (`vk_pipeline_cache.cpp`): the boot-time compile pool is capped at 4 and the
+  play-time pool slider now goes down to 2 (was 4). Every worker holds a full
+  `vkCreateGraphicsPipelines` working set, so the transient compile spike scales with this.
+- **Device-wide pipeline cache** (`vk_pipeline_cache.cpp`): `MAX_GLOBAL_PIPELINE_CACHE_SIZE`
+  128 MiB → 64 MiB. The blob is read in full on every boot, so this halves the transient boot
+  allocation.
+- **Stream buffer default** (`android_settings.h`): `mali_stream_buffer_mib` 64 → 32. The upload
+  ring is committed up front on Mali, and the default was larger than most frames need.
+- **Requirement warning** (`MemoryUtil.kt`): `REQUIRED_MEMORY` 8 → 6, so the "device RAM" toast
+  matches the budget the emulator actually targets.
+
+### Verification
+
+Static only. No build and no device were used, so there is no RSS, FPS, frametime, LMK or
+thermal measurement to report; every claim above is arithmetic on the allocations the code used
+to make (guest layout clamp, cache ceiling, JIT cache, worker pools, stream buffer), not a
+benchmark result. The measurement hook is the existing `Process RAM` overlay entry
+(`show_app_ram_usage`) and `adb shell dumpsys meminfo` on an 8 GiB device before/after this pass.
 
 ## 2026-11-13 pass 2 — RelaxedPrecision chain hardening, core-3 pinning policy, audit correction
 

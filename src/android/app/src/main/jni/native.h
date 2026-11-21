@@ -83,6 +83,7 @@ private:
     Core::PerfStatsResults m_perf_stats{};
     int m_shaders_building{0};
     std::shared_ptr<FileSys::VfsFilesystem> m_vfs;
+    std::string m_filepath;
     Core::SystemResultStatus m_load_result{Core::SystemResultStatus::ErrorNotInitialized};
     std::atomic<bool> m_is_running = false;
     std::atomic<bool> m_is_paused = false;

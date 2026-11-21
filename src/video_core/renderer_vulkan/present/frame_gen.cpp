@@ -5,6 +5,7 @@
 
 #include <algorithm>
 
+#include "common/logging/log.h"
 #include "common/settings.h"
 #include "video_core/renderer_vulkan/present/frame_gen.h"
 #include "video_core/renderer_vulkan/vk_present_manager.h"
@@ -97,6 +98,9 @@ void FrameGen::Process(const Device& device, Frame* frame, VkFormat format) {
     if (!built || built_extent.width != extent.width || built_extent.height != extent.height ||
         built_format != format) {
         Rebuild(device, extent, format);
+        if (unavailable || !chain) {
+            return;
+        }
     }
 
     const u64 count = frame_count++;
@@ -143,7 +147,18 @@ void FrameGen::Rebuild(const Device& device, VkExtent2D extent, VkFormat format)
     scheduler.Finish();
     chain.reset();
 
-    chain.emplace(device, memory_allocator, extent, format);
+    try {
+        chain.emplace(device, memory_allocator, extent, format);
+    } catch (const vk::Exception& exception) {
+        if (exception.GetResult() != VK_ERROR_OUT_OF_DEVICE_MEMORY &&
+            exception.GetResult() != VK_ERROR_OUT_OF_HOST_MEMORY) {
+            throw;
+        }
+        LOG_WARNING(Render_Vulkan, "Lemon frame generation disabled after allocation failure: {}",
+                    exception.what());
+        unavailable = true;
+        return;
+    }
     built_extent = extent;
     built_format = format;
     built = true;

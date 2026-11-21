@@ -499,6 +499,7 @@ void TextureCache<P>::UpdateRenderTargets(bool is_clear) {
         }
         const ImageViewId depth_buffer_id = render_targets.depth_buffer_id;
         PrepareImageView(depth_buffer_id, true, is_clear && IsFullClear(depth_buffer_id));
+        NoteSceneDepth();
         return;
     }
 
@@ -553,6 +554,41 @@ void TextureCache<P>::UpdateRenderTargets(bool is_clear) {
     }
 
     flags[Dirty::DepthBiasGlobal] = true;
+    NoteSceneDepth();
+}
+
+template <class P>
+void TextureCache<P>::NoteSceneDepth() {
+    const ImageViewId dv = render_targets.depth_buffer_id;
+    if (!dv || (rt_active_mask & 0xFFu) == 0) {
+        return;
+    }
+    using Cmp = Tegra::Engines::Maxwell3D::Regs::ComparisonOp;
+    const auto& rg = maxwell3d->regs;
+    const Cmp fn = rg.depth_test_func;
+    const bool on = rg.depth_test_enable != 0;
+    const bool gt = on && (fn == Cmp::Greater_D3D || fn == Cmp::GreaterEqual_D3D ||
+                           fn == Cmp::Greater_GL || fn == Cmp::GreaterEqual_GL);
+    const bool lt = on && (fn == Cmp::Less_D3D || fn == Cmp::LessEqual_D3D ||
+                           fn == Cmp::Less_GL || fn == Cmp::LessEqual_GL);
+    Sd* hit = nullptr;
+    Sd* low = &sd[0];
+    for (Sd& e : sd) {
+        if (e.v == dv) {
+            hit = &e;
+            break;
+        }
+        if (e.n < low->n) {
+            low = &e;
+        }
+    }
+    if (!hit) {
+        *low = Sd{dv, 0, 0, 0};
+        hit = low;
+    }
+    ++hit->n;
+    hit->gt += gt ? 1 : 0;
+    hit->lt += lt ? 1 : 0;
 }
 
 template <class P>
@@ -881,6 +917,32 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
     }
 
     return {};
+}
+
+template <class P>
+typename P::ImageView* TextureCache<P>::TakeSceneDepth(u32 w, u32 h, bool& inv) {
+    ImageView* best = nullptr;
+    u32 bn = 0;
+    for (const Sd& e : sd) {
+        if (!e.v) {
+            continue;
+        }
+        ImageView& iv = slot_image_views[e.v];
+        const u64 dw = iv.size.width;
+        const u64 dh = iv.size.height;
+        const u64 xa = dw * h;
+        const u64 xb = dh * w;
+        const u64 df = xa > xb ? xa - xb : xb - xa;
+        const bool fit = iv.type == ImageViewType::e2D && dw * 2 >= w && df * 50 <= xb &&
+                         slot_images[iv.image_id].info.num_samples == 1;
+        if (fit && e.n > bn) {
+            best = &iv;
+            bn = e.n;
+            inv = e.gt > e.lt;
+        }
+    }
+    sd = {};
+    return best;
 }
 
 template <class P>
@@ -1336,6 +1398,11 @@ void TextureCache<P>::InvalidateScale(Image& image) {
         std::ranges::replace(render_targets.color_buffer_ids, image_view_id, ImageViewId{});
         if (render_targets.depth_buffer_id == image_view_id) {
             render_targets.depth_buffer_id = ImageViewId{};
+        }
+        for (Sd& e : sd) {
+            if (e.v == image_view_id) {
+                e = {};
+            }
         }
     }
     RemoveImageViewReferences(image_view_ids);
@@ -2439,6 +2506,11 @@ void TextureCache<P>::DeleteImage(ImageId image_id, bool immediate_delete) {
         std::ranges::replace(render_targets.color_buffer_ids, image_view_id, ImageViewId{});
         if (render_targets.depth_buffer_id == image_view_id) {
             render_targets.depth_buffer_id = ImageViewId{};
+        }
+        for (Sd& e : sd) {
+            if (e.v == image_view_id) {
+                e = {};
+            }
         }
     }
     RemoveImageViewReferences(image_view_ids);

@@ -4,6 +4,7 @@
 // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cmath>
 #include <variant>
 #include "video_core/present.h"
 #include "video_core/renderer_vulkan/present/anti_alias_pass.h"
@@ -13,6 +14,7 @@
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 
 #include "common/settings.h"
+#include "video_core/asr_state.h"
 #include "video_core/framebuffer_config.h"
 #include "video_core/renderer_vulkan/present/fsr.h"
 #include "video_core/renderer_vulkan/present/sgsr.h"
@@ -65,13 +67,29 @@ Layer::Layer(const Device& device, MemoryAllocator& memory_allocator_, Scheduler
 {
     CreateDescriptorPool(device);
     CreateDescriptorSets(device, layout);
-    if (filters.get_scaling_filter() == Settings::ScalingFilter::Fsr) {
+    const auto sf = filters.get_scaling_filter();
+    if (sf == Settings::ScalingFilter::AsrQuality || sf == Settings::ScalingFilter::AsrBalanced ||
+        sf == Settings::ScalingFilter::AsrPerformance) {
+#ifdef SAKURA_ASR
+        const u32 q = sf == Settings::ScalingFilter::AsrQuality    ? 1u
+                      : sf == Settings::ScalingFilter::AsrBalanced ? 2u
+                                                                   : 3u;
+        sr_filter.emplace<ASR>(device, memory_allocator, scheduler, image_count, output_size, q);
+#else
         sr_filter.emplace<FSR>(device, memory_allocator, image_count, output_size);
-    } else if (filters.get_scaling_filter() == Settings::ScalingFilter::Sgsr) {
+#endif
+    } else if (sf == Settings::ScalingFilter::Fsr) {
+        sr_filter.emplace<FSR>(device, memory_allocator, image_count, output_size);
+    } else if (sf == Settings::ScalingFilter::Sgsr) {
         sr_filter.emplace<SGSR>(device, memory_allocator, image_count, output_size, false);
-    } else if (filters.get_scaling_filter() == Settings::ScalingFilter::SgsrEdge) {
+    } else if (sf == Settings::ScalingFilter::SgsrEdge) {
         sr_filter.emplace<SGSR>(device, memory_allocator, image_count, output_size, true);
     }
+#ifdef SAKURA_ASR
+    if (!std::holds_alternative<std::monostate>(sr_filter)) {
+        tq.Init(device, image_count, 2);
+    }
+#endif
 }
 
 Layer::~Layer() {
@@ -121,13 +139,63 @@ void Layer::ConfigureDraw(const Device& device, PresentPushConstants* out_push_c
         .height = scaled_height,
     };
 
-    if (auto* fsr = std::get_if<FSR>(&sr_filter)) {
+#ifdef SAKURA_ASR
+    const bool tm = tq.On();
+    if (tm) {
+        std::array<u64, 4> t{};
+        if (tq.Read(device, image_index, t)) {
+            VideoCore::asr_st.up_us.store(tq.Us(t[0], t[1]), std::memory_order_relaxed);
+        }
+        tq.Arm(image_index);
+        scheduler.Record([this, image_index](vk::CommandBuffer cb) {
+            tq.Begin(cb, image_index);
+            tq.Mark(cb, image_index, 0);
+        });
+    }
+#endif
+    if (std::holds_alternative<std::monostate>(sr_filter)) {
+        VideoCore::asr_st.mode.store(0, std::memory_order_relaxed);
+    } else if (auto* fsr = std::get_if<FSR>(&sr_filter)) {
         source_image_view = fsr->Draw(device, scheduler, image_index, source_image, source_image_view, render_extent, crop_rect);
         crop_rect = {0, 0, 1, 1};
+        VideoCore::asr_st.mode.store(1, std::memory_order_relaxed);
     } else if (auto* sgsr = std::get_if<SGSR>(&sr_filter)) {
         source_image_view = sgsr->Draw(device, scheduler, image_index, source_image, source_image_view, render_extent, crop_rect);
         crop_rect = {0, 0, 1, 1};
+        VideoCore::asr_st.mode.store(1, std::memory_order_relaxed);
     }
+#ifdef SAKURA_ASR
+    else if (auto* asr = std::get_if<ASR>(&sr_filter)) {
+        const f32 cw = std::abs(crop_rect.right - crop_rect.left);
+        const f32 ch = std::abs(crop_rect.bottom - crop_rect.top);
+        AsrIn in{};
+        in.rs = {static_cast<u32>(std::lround(cw * static_cast<f32>(scaled_width))),
+                 static_cast<u32>(std::lround(ch * static_cast<f32>(scaled_height)))};
+        in.ns = {static_cast<u32>(std::lround(cw * static_cast<f32>(texture_width))),
+                 static_cast<u32>(std::lround(ch * static_cast<f32>(texture_height)))};
+        in.cr = crop_rect;
+        if (use_accelerated) {
+            if (const auto dp = rasterizer.TakeDepth(texture_width, texture_height)) {
+                const bool fh = crop_rect.left > crop_rect.right;
+                const bool fv = crop_rect.top > crop_rect.bottom;
+                in.dv = dp->v;
+                in.inv = dp->inv;
+                in.dr = dp->w == texture_width && dp->h == texture_height
+                            ? crop_rect
+                            : Common::Rectangle<f32>{fh ? 1.0f : 0.0f, fv ? 1.0f : 0.0f,
+                                                     fh ? 0.0f : 1.0f, fv ? 0.0f : 1.0f};
+            }
+        }
+        source_image_view = asr->Draw(device, image_index, source_image, source_image_view, in,
+                                      render_extent, crop_rect);
+        crop_rect = {0, 0, 1, 1};
+    }
+    if (tm) {
+        scheduler.Record([this, image_index](vk::CommandBuffer cb) {
+            tq.Mark(cb, image_index, 1);
+        });
+    }
+#endif
 
     SetMatrixData(device, *out_push_constants, layout);
     SetVertexData(device, *out_push_constants, layout, crop_rect);

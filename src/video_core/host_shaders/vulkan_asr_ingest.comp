@@ -1,0 +1,62 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform writeonly image2D o_c;
+layout(set = 0, binding = 1) uniform writeonly image2D o_d;
+layout(set = 0, binding = 2) uniform writeonly mediump image2D o_l;
+layout(set = 0, binding = 3) uniform mediump sampler2D p_l;
+layout(set = 0, binding = 4, std430) buffer Cut {
+    uint cut;
+};
+layout(set = 1, binding = 0) uniform mediump sampler2D s_c;
+layout(set = 1, binding = 1) uniform highp sampler2D s_d;
+
+layout(push_constant) uniform Pc {
+    vec4 cr;
+    vec4 dr;
+    vec2 jt;
+    ivec2 sz;
+    uint inv;
+    uint rst;
+} pc;
+
+shared uint acc;
+
+void main() {
+    if (gl_LocalInvocationIndex == 0u) {
+        acc = 0u;
+    }
+    barrier();
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 hs = (pc.sz + 1) >> 1;
+    if (all(lessThan(q, hs))) {
+        vec2 iv = 1.0 / vec2(pc.sz);
+        bool jon = pc.jt != vec2(0.0);
+        mediump float l = 0.0;
+        for (int i = 0; i < 4; ++i) {
+            ivec2 p = q * 2 + ivec2(i & 1, i >> 1);
+            ivec2 pp = min(p, pc.sz - 1);
+            vec2 t = (vec2(pp) + 0.5) * iv;
+            mediump vec4 c = textureLod(s_c, pc.cr.xy + t * pc.cr.zw, 0.0);
+            mediump vec3 u = c.rgb;
+            if (jon) {
+                u = textureLod(s_c, pc.cr.xy + (t + pc.jt * iv) * pc.cr.zw, 0.0).rgb;
+            }
+            float d = textureLod(s_d, pc.dr.xy + t * pc.dr.zw, 0.0).r;
+            if (p == pp) {
+                imageStore(o_c, p, c);
+                imageStore(o_d, p, vec4(pc.inv != 0u ? d : 1.0 - d));
+            }
+            l += dot(u, vec3(0.2126, 0.7152, 0.0722));
+        }
+        l *= 0.25;
+        imageStore(o_l, q, vec4(l));
+        mediump float pl = texelFetch(p_l, q, 0).r;
+        atomicAdd(acc, uint(clamp(abs(l - pl), 0.0, 1.0) * 255.0 + 0.5));
+    }
+    barrier();
+    if (gl_LocalInvocationIndex == 0u && pc.rst == 0u) {
+        atomicAdd(cut, acc);
+    }
+}

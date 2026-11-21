@@ -1,62 +1,267 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/coordinator_licenses"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/coordinator_drivers"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="?attr/colorSurface">
 
-    <androidx.coordinatorlayout.widget.CoordinatorLayout
-        android:id="@+id/coordinatorLayout"
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appbar_drivers"
+        style="@style/Widget.suyu.TransparentTopAppBarLayout"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="wrap_content"
+        android:fitsSystemWindows="true"
+        android:touchscreenBlocksFocus="false">
 
-        <com.google.android.material.appbar.AppBarLayout
-            android:id="@+id/appbar_drivers"
-            style="@style/Widget.suyu.TransparentTopAppBarLayout"
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar_drivers"
+            style="@style/Widget.suyu.TransparentTopToolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:touchscreenBlocksFocus="false"
+            app:navigationIcon="@drawable/ic_back"
+            app:title="@string/gpu_driver_manager" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <LinearLayout
+        android:id="@+id/content_drivers"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <!-- Active driver: the single source of truth for what the next launch loads. -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_active_driver"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fitsSystemWindows="true"
-            android:touchscreenBlocksFocus="false">
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="8dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeColor="?attr/colorOutlineVariant"
+            app:strokeWidth="1dp">
 
-            <com.google.android.material.appbar.MaterialToolbar
-                android:id="@+id/toolbar_drivers"
-                style="@style/Widget.suyu.TransparentTopToolbar"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="?attr/actionBarSize"
-                android:touchscreenBlocksFocus="false"
-                app:navigationIcon="@drawable/ic_back"
-                app:title="@string/gpu_driver_manager" />
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="14dp">
 
-        </com.google.android.material.appbar.AppBarLayout>
+                <FrameLayout
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/sakura_icon_tile">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/list_drivers"
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_m3_developer_board"
+                        app:tint="?attr/colorOnPrimaryContainer" />
+
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        style="@style/SynthwaveText.Accent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:letterSpacing="0.08"
+                        android:text="@string/driver_active_title"
+                        android:textAllCaps="true" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/text_active_driver"
+                        style="@style/TextAppearance.Material3.TitleMedium"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textAlignment="viewStart"
+                        tools:text="@string/select_gpu_driver_default" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/text_active_version"
+                        style="@style/SynthwaveText.Secondary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textAlignment="viewStart"
+                        tools:text="Vulkan 1.3.0" />
+
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="@string/driver_selected_badge"
+                    android:src="@drawable/ic_m3_check"
+                    app:tint="?attr/colorPrimary" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <LinearLayout
+            android:id="@+id/section_drivers"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            app:layout_behavior="@string/appbar_scrolling_view_behavior" />
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+            <com.google.android.material.textview.MaterialTextView
+                style="@style/TextAppearance.Material3.LabelLarge"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:letterSpacing="0.01"
+                android:text="@string/driver_installed_title"
+                android:textColor="?attr/colorOnSurfaceVariant" />
 
-    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-        android:id="@+id/button_install"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:text="@string/install"
-        app:icon="@drawable/ic_add"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/text_driver_count"
+                style="@style/TextAppearance.Material3.LabelMedium"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_count_pill"
+                android:minWidth="28dp"
+                android:gravity="center"
+                android:paddingHorizontal="9dp"
+                android:paddingVertical="2dp"
+                android:textColor="?attr/colorOnSecondaryContainer"
+                tools:text="3" />
 
-    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-        android:id="@+id/button_fetch"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:text="@string/fetch"
-        app:icon="@drawable/ic_import"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        </LinearLayout>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/list_drivers"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingTop="2dp"
+                android:paddingBottom="8dp"
+                android:scrollbars="vertical" />
+
+            <!-- Replaces the list while no custom drivers are installed. -->
+            <LinearLayout
+                android:id="@+id/empty_drivers"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginHorizontal="36dp"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <FrameLayout
+                    android:layout_width="60dp"
+                    android:layout_height="60dp"
+                    android:background="@drawable/sakura_icon_tile_circle">
+
+                    <ImageView
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_m3_developer_board"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                </FrameLayout>
+
+                <com.google.android.material.textview.MaterialTextView
+                    style="@style/TextAppearance.Material3.TitleSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:text="@string/driver_empty_title"
+                    android:textAlignment="center" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    style="@style/SynthwaveText.Secondary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center"
+                    android:maxLines="4"
+                    android:text="@string/driver_empty_message"
+                    android:textAlignment="center" />
+
+            </LinearLayout>
+
+        </FrameLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:alpha="0.4"
+            android:background="?attr/colorOutlineVariant" />
+
+        <LinearLayout
+            android:id="@+id/driver_actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_fetch"
+                style="@style/SuyuButton.Tonal"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="@string/fetch"
+                app:icon="@drawable/ic_import"
+                app:iconGravity="textStart"
+                app:iconPadding="8dp"
+                app:iconSize="18dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_install"
+                style="@style/SuyuButton.Primary"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:text="@string/install"
+                app:icon="@drawable/ic_add"
+                app:iconGravity="textStart"
+                app:iconPadding="8dp"
+                app:iconSize="18dp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

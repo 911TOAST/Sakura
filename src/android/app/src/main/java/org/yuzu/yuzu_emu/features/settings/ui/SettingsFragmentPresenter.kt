@@ -18,6 +18,7 @@ import org.yuzu.yuzu_emu.features.input.model.NativeButton
 import org.yuzu.yuzu_emu.features.input.model.NpadStyleIndex
 import org.yuzu.yuzu_emu.features.settings.model.AbstractBooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.AbstractIntSetting
+import org.yuzu.yuzu_emu.features.settings.model.AbstractStringSetting
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.ByteSetting
 import org.yuzu.yuzu_emu.features.settings.model.IntSetting
@@ -32,6 +33,7 @@ import org.yuzu.yuzu_emu.utils.InputHandler
 import org.yuzu.yuzu_emu.utils.NativeConfig
 import org.yuzu.yuzu_emu.utils.DirectoryInitialization
 import org.yuzu.yuzu_emu.utils.FullscreenHelper
+import org.yuzu.yuzu_emu.utils.FontManager
 import org.yuzu.yuzu_emu.utils.IconHelper
 import androidx.core.content.edit
 import androidx.fragment.app.FragmentActivity
@@ -41,7 +43,8 @@ class SettingsFragmentPresenter(
     private val settingsViewModel: SettingsViewModel,
     private val adapter: SettingsAdapter,
     private var menuTag: MenuTag,
-    private var activity: FragmentActivity?
+    private var activity: FragmentActivity?,
+    private val onPickFontFolder: () -> Unit = {}
 ) {
     private var settingsList = ArrayList<SettingsItem>()
 
@@ -1241,6 +1244,7 @@ class SettingsFragmentPresenter(
             add(IntSetting.UI_PRESS_SCALE.key)
             add(BooleanSetting.UI_PRESS_FEEDBACK.key)
             add(BooleanSetting.UI_HAPTIC_FEEDBACK.key)
+            add(BooleanSetting.UI_SOUND_FEEDBACK.key)
             add(BooleanSetting.UI_ENTRANCE_ANIMATION.key)
             add(BooleanSetting.UI_TRANSITION_ANIMATION.key)
 
@@ -1329,6 +1333,64 @@ class SettingsFragmentPresenter(
                     )
                 )
             }
+
+            // Fonts come from the app's own preferences rather than the native config: the list
+            // depends on files in a folder on the device and can change without a new build.
+            val fonts = FontManager.availableFonts(context)
+            val fontLabels = Array(fonts.size) { fonts[it].label }
+            val labelToId = fonts.associate { it.label to it.id }
+            val appFont: AbstractStringSetting = object : AbstractStringSetting {
+                override fun getString(needsGlobal: Boolean): String =
+                    FontManager.selectedLabel(context)
+
+                override fun setString(value: String) {
+                    FontManager.setSelectedId(
+                        context,
+                        labelToId[value] ?: FontManager.DEFAULT_FONT_ID
+                    )
+                    settingsViewModel.setShouldRecreate(true)
+                }
+
+                override val key: String = "app_font"
+                override val defaultValue: Any = FontManager.DEFAULT_FONT_ID
+                override val isRuntimeModifiable: Boolean = true
+                override val isSaveable: Boolean = true
+                override val isSwitchable: Boolean = true
+                override val pairedSettingKey: String = ""
+                override var global: Boolean = true
+
+                override fun getValueAsString(needsGlobal: Boolean): String = getString(needsGlobal)
+
+                override fun reset() {
+                    FontManager.setSelectedId(context, FontManager.DEFAULT_FONT_ID)
+                    settingsViewModel.setShouldRecreate(true)
+                }
+            }
+            add(
+                StringSingleChoiceSetting(
+                    appFont,
+                    titleId = R.string.change_app_font,
+                    choices = fontLabels,
+                    values = fontLabels
+                )
+            )
+
+            val folder = FontManager.folderUri(context)
+            val folderDescription = if (folder == null) {
+                context.getString(R.string.font_custom_folder_description)
+            } else {
+                context.getString(
+                    R.string.font_folder_selected,
+                    folder.lastPathSegment ?: folder.toString()
+                )
+            }
+            add(
+                RunnableSetting(
+                    titleId = R.string.font_custom_folder,
+                    descriptionString = folderDescription,
+                    isRunnable = true
+                ) { onPickFontFolder() }
+            )
 
             val blackBackgrounds: AbstractBooleanSetting = object : AbstractBooleanSetting {
                 override fun getBoolean(needsGlobal: Boolean): Boolean =

@@ -1,0 +1,63 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform mediump sampler2D s_f;
+layout(set = 0, binding = 1) uniform highp sampler2D s_d;
+layout(set = 0, binding = 2) uniform mediump sampler2D s_c;
+layout(set = 0, binding = 3) uniform mediump sampler2D s_p;
+layout(set = 0, binding = 4) uniform writeonly mediump image2D o_mv;
+layout(set = 0, binding = 5) uniform writeonly mediump image2D o_r;
+layout(set = 0, binding = 6, std430) readonly buffer Cut {
+    uint cut;
+};
+
+layout(push_constant) uniform Pc {
+    ivec2 sz;
+    ivec2 fz;
+    float cth;
+    uint rst;
+} pc;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(p, pc.sz))) {
+        return;
+    }
+    ivec2 hs = (pc.sz + 1) >> 1;
+    float n = float(hs.x * hs.y) * 255.0;
+    if (pc.rst != 0u || float(cut) > pc.cth * n) {
+        imageStore(o_mv, p, vec4(0.0));
+        imageStore(o_r, p, vec4(1.0));
+        return;
+    }
+    float d = texelFetch(s_d, p, 0).r;
+    vec2 fp = (vec2(p) + 0.5) * vec2(pc.fz) / vec2(pc.sz) - 0.5;
+    ivec2 b = ivec2(floor(fp));
+    vec2 f = fp - vec2(b);
+    vec2 mv = vec2(0.0);
+    float cs = 0.0;
+    float ws = 0.0;
+    for (int i = 0; i < 4; ++i) {
+        ivec2 o = ivec2(i & 1, i >> 1);
+        mediump vec4 v = texelFetch(s_f, clamp(b + o, ivec2(0), pc.fz - 1), 0);
+        float bw = mix(1.0 - f.x, f.x, float(o.x)) * mix(1.0 - f.y, f.y, float(o.y));
+        float rd = abs(d - v.w) / max(max(d, v.w), 0.000001);
+        float w = bw / (1.0 + 32.0 * rd) + 0.00001;
+        mv += v.xy * w;
+        cs += v.z * w;
+        ws += w;
+    }
+    mv /= ws;
+    cs /= ws;
+    mediump vec3 lw = vec3(0.2126, 0.7152, 0.0722);
+    mediump float lc = dot(texelFetch(s_c, p, 0).rgb, lw);
+    mediump float lp = dot(texelFetch(s_p, p, 0).rgb, lw);
+    mediump float r = smoothstep(0.03, 0.2, cs) * 0.75;
+    if (abs(lc - lp) < 0.012 && length(mv * vec2(pc.sz)) > 0.75) {
+        mv = vec2(0.0);
+        r = 0.0;
+    }
+    imageStore(o_mv, p, vec4(mv, 0.0, 0.0));
+    imageStore(o_r, p, vec4(min(r, 0.9)));
+}

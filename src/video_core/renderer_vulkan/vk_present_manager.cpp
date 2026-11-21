@@ -24,7 +24,22 @@ namespace {
 
 bool CanBlitToSwapchain(const vk::PhysicalDevice& physical_device, VkFormat format) {
     const VkFormatProperties props{physical_device.GetFormatProperties(format)};
-    return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT);
+    constexpr VkFormatFeatureFlags required_features =
+        VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT;
+    return (props.optimalTilingFeatures & required_features) == required_features;
+}
+
+VkFilter GetPresentBlitFilter(const vk::PhysicalDevice& physical_device, VkFormat format,
+                              bool is_panvk) {
+    // PanVK on Mali G615 has crashed in vkCmdBlitImage during presentation. Keep scaling on its
+    // supported nearest path; other drivers use linear only when the format advertises it.
+    if (is_panvk) {
+        return VK_FILTER_NEAREST;
+    }
+    const VkFormatProperties props{physical_device.GetFormatProperties(format)};
+    return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)
+               ? VK_FILTER_LINEAR
+               : VK_FILTER_NEAREST;
 }
 
 [[nodiscard]] VkImageSubresourceLayers MakeImageSubresourceLayers() {
@@ -99,42 +114,36 @@ bool CanBlitToSwapchain(const vk::PhysicalDevice& physical_device, VkFormat form
 } // Anonymous namespace
 
 PresentManager::PresentManager(const vk::Instance& instance_,
-                               Core::Frontend::EmuWindow& render_window_,
-                               const Device& device_,
-                               MemoryAllocator& memory_allocator_,
-                               Scheduler& scheduler_,
-                               Swapchain& swapchain_,
-                               vk::SurfaceKHR& surface_)
-    : instance{instance_}
-    , render_window{render_window_}
-    , device{device_}
-    , memory_allocator{memory_allocator_}
-    , scheduler{scheduler_}
-    , swapchain{swapchain_}
-    , surface{surface_}
-    , blit_supported{CanBlitToSwapchain(device.GetPhysical(), swapchain.GetImageViewFormat())}
-    // Zero-copy present is the Mali-specific endgame: the window composition pass writes directly
-    // into the acquired swapchain image and ends in PRESENT_SRC_KHR. It removes the intermediate
-    // full-screen image (one per swapchain buffer), the full-screen copy, two image barriers and
-    // the present semaphore round trip from every frame. The fallback path below is unchanged for
-    // every other driver.
-    , use_direct_present{device_.IsMali() && device_.IsMalikanMode() &&
+                               Core::Frontend::EmuWindow& render_window_, const Device& device_,
+                               MemoryAllocator& memory_allocator_, Scheduler& scheduler_,
+                               Swapchain& swapchain_, vk::SurfaceKHR& surface_)
+    : instance{instance_}, render_window{render_window_}, device{device_},
+      memory_allocator{memory_allocator_}, scheduler{scheduler_}, swapchain{swapchain_},
+      surface{surface_},
+      blit_supported{CanBlitToSwapchain(device.GetPhysical(), swapchain.GetImageViewFormat())},
+      blit_filter{GetPresentBlitFilter(device.GetPhysical(), swapchain.GetImageViewFormat(),
+                                       device.IsPanVk())},
+      // Zero-copy present is the Mali-specific endgame: the window composition pass writes directly
+      // into the acquired swapchain image and ends in PRESENT_SRC_KHR. It removes the intermediate
+      // full-screen image (one per swapchain buffer), the full-screen copy, two image barriers and
+      // the present semaphore round trip from every frame. The fallback path below is unchanged for
+      // every other driver.
+      use_direct_present{device_.IsMali() && device_.IsMalikanMode() &&
                          (swapchain.GetImageViewFormat() == swapchain.GetImageFormat() ||
                           device_.IsKhrSwapchainMutableFormatEnabled()) &&
-                          // Lemon FG analyses the composed frame through a copy into its chain
-                          // images; that uses the copy path, not the direct presentation.
-                          !Settings::values.frame_gen.GetValue()}
-    // Malikan always presents asynchronously. Waiting for the worker on every frame serialises
-    // command recording with presentation and costs a full frame of GPU/CPU overlap. The direct
-    // path needs no copy work, so the async win there is purely "do not drain the worker", which
-    // is done inline: the Android WSI binds the present to the thread that acquired the image and
-    // handing vkQueuePresentKHR to a second thread is what broke Mali.
-    //
-    // The copy path can still use a dedicated present thread, but only when the user asks for it:
-    // forcing it on Malikan raced swapchain recreation against the render thread, and that is the
-    // reason async presentation is off by default on Android in the first place.
-    , use_present_thread{!use_direct_present && Settings::values.async_presentation.GetValue()}
-{
+                         // Lemon FG analyses the composed frame through a copy into its chain
+                         // images; that uses the copy path, not the direct presentation.
+                         !Settings::values.frame_gen.GetValue()},
+      // Malikan always presents asynchronously. Waiting for the worker on every frame serialises
+      // command recording with presentation and costs a full frame of GPU/CPU overlap. The direct
+      // path needs no copy work, so the async win there is purely "do not drain the worker", which
+      // is done inline: the Android WSI binds the present to the thread that acquired the image and
+      // handing vkQueuePresentKHR to a second thread is what broke Mali.
+      //
+      // The copy path can still use a dedicated present thread, but only when the user asks for it:
+      // forcing it on Malikan raced swapchain recreation against the render thread, and that is the
+      // reason async presentation is off by default on Android in the first place.
+      use_present_thread{!use_direct_present && Settings::values.async_presentation.GetValue()} {
     SetImageCount();
 
     auto& dld = device.GetLogical();
@@ -357,8 +366,9 @@ Frame* PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height,
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                 (Settings::values.frame_gen.GetValue() ? VK_IMAGE_USAGE_STORAGE_BIT : 0),
+        .usage = static_cast<VkImageUsageFlags>(
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            (Settings::values.frame_gen.GetValue() ? VK_IMAGE_USAGE_STORAGE_BIT : 0)),
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -679,8 +689,8 @@ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
         },
     };
 
-    cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT, {},
-                           {}, {}, pre_barriers);
+    cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER,
+                           VK_PIPELINE_STAGE_TRANSFER_BIT, {}, {}, {}, pre_barriers);
 
     // A 1:1 present needs no resampling. Sending it through BlitImage puts the driver on its
     // filtered path for nothing; CopyImage is the straight copy and preserves the exact pixels.
@@ -689,7 +699,7 @@ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
         cmdbuf.BlitImage(*frame->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                          MakeImageBlit(frame->width, frame->height, extent.width, extent.height),
-                         VK_FILTER_LINEAR);
+                         blit_filter);
     } else {
         cmdbuf.CopyImage(*frame->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,

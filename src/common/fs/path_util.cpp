@@ -301,9 +301,17 @@ void SetSuyuPath(SuyuPath eden_path, const fs::path& new_path) {
     auto& instance = PathManagerImpl::GetInstance();
     if (FS::IsDir(new_path)) {
         instance.SetSuyuPathImpl(eden_path, new_path);
-    } else {
-        LOG_ERROR(Common_Filesystem, "Filesystem object at new_path={} is not a directory", PathToUTF8String(new_path));
+        return;
     }
+    // Create missing optional folders (e.g. TAS) on demand; an empty setting keeps the default.
+    if (new_path.empty()) {
+        return;
+    }
+    if (!FS::Exists(new_path) && FS::CreateDirs(new_path)) {
+        instance.SetSuyuPathImpl(eden_path, new_path);
+        return;
+    }
+    LOG_ERROR(Common_Filesystem, "Filesystem object at new_path={} is not a directory", PathToUTF8String(new_path));
 }
 
 void CreateSuyuPaths() {

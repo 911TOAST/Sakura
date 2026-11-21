@@ -6,6 +6,7 @@ package org.yuzu.yuzu_emu.fragments
 import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
+import android.os.Build
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.LayoutInflater
@@ -24,6 +25,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.findNavController
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -323,6 +325,13 @@ class GamePropertiesFragment : Fragment() {
                                     shareConfigFile(configFile)
                                 }
                             }
+                        ))
+
+                        add(SubMenuPropertySecondaryAction(
+                            isShown = latestConfigBackup() != null,
+                            descriptionId = R.string.restore_config_backup,
+                            iconId = R.drawable.ic_import,
+                            action = { restoreConfigBackup() }
                         ))
                     }
                 )
@@ -781,26 +790,86 @@ class GamePropertiesFragment : Fragment() {
             return@registerForActivityResult
         }
 
-        val iniResult = FileUtil.copyUriToInternalStorage(
-            sourceUri = result,
-            destinationParentPath =
-                DirectoryInitialization.userDirectory + "/config/custom/",
-            destinationFilename = args.game.settingsName + ".ini"
-        )
-        if (iniResult?.exists() == true) {
-            Toast.makeText(
-                requireContext(),
-                getString(R.string.import_success),
-                Toast.LENGTH_SHORT
-            ).show()
-            homeViewModel.reloadPropertiesList(true)
-        } else {
-            Toast.makeText(
-                requireContext(),
-                getString(R.string.import_failed),
-                Toast.LENGTH_SHORT
-            ).show()
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.community_config_import_title)
+            .setMessage(
+                getString(
+                    R.string.community_config_import_warning,
+                    "${Build.MANUFACTURER} ${Build.MODEL}",
+                    runCatching { NativeLibrary.getGpuModel() }.getOrDefault(getString(R.string.unknown)),
+                    runCatching { NativeLibrary.getVulkanDriverVersion() }.getOrDefault(getString(R.string.unknown)),
+                    args.game.version.ifBlank { getString(R.string.unknown) }
+                )
+            )
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.apply_config) { _, _ -> importConfigWithBackup(result) }
+            .show()
+    }
+
+    private fun configFile() = File(
+        DirectoryInitialization.userDirectory,
+        "config/custom/${args.game.settingsName}.ini"
+    )
+
+    private fun backupDirectory() = File(
+        DirectoryInitialization.userDirectory,
+        "config/backups/${args.game.settingsName}"
+    )
+
+    private fun latestConfigBackup(): File? = backupDirectory()
+        .listFiles { file -> file.isFile && file.extension == "ini" }
+        ?.maxByOrNull { it.lastModified() }
+
+    private fun importConfigWithBackup(sourceUri: android.net.Uri) {
+        val current = configFile()
+        val backup = if (current.exists()) {
+            runCatching {
+                backupDirectory().mkdirs()
+                current.copyTo(File(backupDirectory(), "${System.currentTimeMillis()}.ini"))
+            }.getOrNull()
+        } else null
+        if (current.exists() && backup == null) {
+            Toast.makeText(requireContext(), R.string.config_backup_failed, Toast.LENGTH_LONG).show()
+            return
         }
+
+        val imported = FileUtil.copyUriToInternalStorage(
+            sourceUri = sourceUri,
+            destinationParentPath = current.parentFile!!.absolutePath + "/",
+            destinationFilename = current.name
+        )
+        if (imported?.exists() != true && backup != null) {
+            runCatching { backup.copyTo(current, overwrite = true) }
+        }
+        Toast.makeText(
+            requireContext(),
+            if (imported?.exists() == true) R.string.import_success else R.string.import_failed,
+            Toast.LENGTH_SHORT
+        ).show()
+        if (imported?.exists() == true) homeViewModel.reloadPropertiesList(true)
+    }
+
+    private fun restoreConfigBackup() {
+        val backup = latestConfigBackup() ?: return
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.restore_config_backup)
+            .setMessage(R.string.restore_config_backup_warning)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.restore) { _, _ ->
+                val current = configFile()
+                runCatching {
+                    if (current.exists()) {
+                        backupDirectory().mkdirs()
+                        current.copyTo(File(backupDirectory(), "${System.currentTimeMillis()}.ini"))
+                    }
+                    backup.copyTo(current, overwrite = true)
+                    homeViewModel.reloadPropertiesList(true)
+                    Toast.makeText(requireContext(), R.string.config_backup_restored, Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(requireContext(), R.string.import_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
+            .show()
     }
 
     /**

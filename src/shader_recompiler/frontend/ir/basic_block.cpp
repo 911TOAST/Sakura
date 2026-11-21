@@ -53,6 +53,21 @@ void Block::AddBranch(Block* block) {
     block->imm_predecessors.push_back(this);
 }
 
+void Block::ReplaceSuccessor(Block* from, Block* to) {
+    const auto it{std::ranges::find(imm_successors, from)};
+    if (it == imm_successors.end()) {
+        return;
+    }
+    *it = to;
+    if (auto pred_it{std::ranges::find(from->imm_predecessors, this)};
+        pred_it != from->imm_predecessors.end()) {
+        from->imm_predecessors.erase(pred_it);
+    }
+    if (std::ranges::find(to->imm_predecessors, this) == to->imm_predecessors.end()) {
+        to->imm_predecessors.push_back(this);
+    }
+}
+
 static std::string BlockToIndex(const std::map<const Block*, size_t>& block_to_index,
                                 Block* block) {
     if (const auto it{block_to_index.find(block)}; it != block_to_index.end()) {

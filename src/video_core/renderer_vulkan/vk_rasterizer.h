@@ -257,6 +257,7 @@ private:
     u32 jit_g = 0;
     /// Guest draws since renderer creation; see TotalDraws() and renderer_static_frame_skip.
     u64 total_draws = 0;
+    bool depth_buffer_dirty = true;
 
         /// Steady-state draw cache (see renderer_draw_state_cache). Records what the last successful
         /// Configure emitted: which pipeline, from which engine and epochs, inside which render pass.

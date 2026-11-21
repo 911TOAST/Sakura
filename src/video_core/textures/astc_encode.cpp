@@ -192,6 +192,11 @@ bool LookupAstcCache(std::span<const u8> rgba8, u32 width, u32 height, u32 num_s
                      std::span<u8> output) {
     std::scoped_lock lock{g_cache_mutex};
     const auto path = CachePath(CacheKey(rgba8, width, height, num_slices, srgb));
+    // Absent entry = normal cold-cache miss; a failed check falls through so Open logs real errors.
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) && !ec) {
+        return false;
+    }
     Common::FS::IOFile file{path, Common::FS::FileAccessMode::Read};
     if (!file.IsOpen() || file.GetSize() != output.size()) {
         return false;

@@ -50,7 +50,9 @@ notes below explain where that comes from.
 ## what you get
 
 The library has grid and list views, adjustable accent colours, Sakura boot
-animations, and a settings search that finds the setting you typed.
+animations, and a settings search that finds the setting you typed. The UI font can be
+swapped at runtime, including fonts you drop into a folder on your device — see
+[CUSTOM_FONTS.md](CUSTOM_FONTS.md).
 
 Wallpapers can come from your phone or from an online gallery. Downloaded ones
 are stored AES-GCM encrypted with a key held in the Android Keystore, so only

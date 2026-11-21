@@ -4,6 +4,7 @@
 // SPDX-FileCopyrightText: Copyright 2018 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "common/memory_budget.h"
 #include "common/settings.h"
 #include "core/arm/dynarmic/arm_dynarmic.h"
 #include "core/arm/dynarmic/arm_dynarmic_64.h"
@@ -259,8 +260,11 @@ void ArmDynarmic64::MakeJit(Common::PageTable* page_table, std::size_t address_s
         !Settings::values.sync_core_speed.GetValue();
 
     // Code cache size
+    // The desktop default is 128 MiB per backend, which is affordable on a workstation but not
+    // inside a 6 GiB process budget on a phone. The central memory budget scales it down; the
+    // cache is an LRU over compiled blocks, so a smaller cache costs recompiles, not correctness.
 #if defined(ARCHITECTURE_arm64) || defined(__sun__) || defined(__NetBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
-    config.code_cache_size = std::uint32_t(128_MiB);
+    config.code_cache_size = std::uint32_t(Common::MemoryBudget::JitCodeCacheBytes());
 #else
     config.code_cache_size = std::uint32_t(512_MiB);
 #endif

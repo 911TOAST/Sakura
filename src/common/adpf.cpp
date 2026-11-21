@@ -40,6 +40,7 @@ void Adpf::Reset() {
     setThr = nullptr;
     cls  = nullptr;
     mgr  = nullptr;
+    last_tgt = 0;
 }
 
 bool Adpf::Init(const int32_t* tids, size_t n, int64_t tgt) {
@@ -103,8 +104,9 @@ void Adpf::Report(int64_t act, int64_t tgt) {
     if (rep) {
         rep(sess, act);
     }
-    if (tgt > 0 && upd) {
+    if (tgt > 0 && upd && tgt != last_tgt) {
         upd(sess, tgt);
+        last_tgt = tgt;
     }
     adpf_reports.fetch_add(1, std::memory_order_relaxed);
 }
@@ -129,14 +131,13 @@ void AdpfRegisterThread(int32_t tid) {
     }
     if (cur < MAX_TIDS) {
         g_tids[cur] = tid;
-        g_ntids.store(cur + 1, std::memory_order_relaxed);
+        cur++;
+        g_ntids.store(cur, std::memory_order_relaxed);
+    }
+    if (g_adpf.Active()) {
+        g_adpf.SetThr(g_tids, cur);
     }
     g_tid_lock.clear(std::memory_order_release);
-
-    if (g_adpf.Active()) {
-        size_t n = g_ntids.load(std::memory_order_relaxed);
-        g_adpf.SetThr(g_tids, n);
-    }
 }
 
 void AdpfReset() {
@@ -154,16 +155,17 @@ void AdpfPurge() {
 }
 
 void AdpfFrameTick(int64_t act_ns, int64_t tgt_ns) {
+    while (g_tid_lock.test_and_set(std::memory_order_acquire)) {}
     if (!g_adpf.Active()) {
         size_t n = g_ntids.load(std::memory_order_relaxed);
         if (n > 0) {
-            if (g_adpf.Init(g_tids, std::min(n, MAX_TIDS), tgt_ns) && n > std::min(n, MAX_TIDS)) {
-                g_adpf.SetThr(g_tids, std::min(n, MAX_TIDS));
-            }
+            g_adpf.Init(g_tids, std::min(n, MAX_TIDS), tgt_ns);
         }
-        return;
     }
-    g_adpf.Report(act_ns, tgt_ns);
+    if (g_adpf.Active()) {
+        g_adpf.Report(act_ns, tgt_ns);
+    }
+    g_tid_lock.clear(std::memory_order_release);
 }
 
 }

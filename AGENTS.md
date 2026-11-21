@@ -5,7 +5,7 @@ AI assistant, read this before touching anything, then follow it literally.
 
 ## What this repo is
 
-- **`911TOAST/sakura-suyu-mtk`** — Sakura, a fork of
+- **`911TOAST/Sakura`** — Sakura, a fork of
   [suyu](https://github.com/suyu-emu/suyu-v0.0.4) (GPL-3.0-or-later).
 - Android-only emulator (Android is the only supported target) with a
   Kotlin/Jetpack UI and a C++ core tuned for Mali/MediaTek.

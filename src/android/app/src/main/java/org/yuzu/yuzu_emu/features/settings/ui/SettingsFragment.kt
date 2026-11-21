@@ -63,6 +63,24 @@ class SettingsFragment : Fragment() {
         }
     }
 
+    private val pickFontFolderLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        val persisted = runCatching {
+            requireContext().contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }.isSuccess
+        if (!persisted) {
+            Toast.makeText(requireContext(), R.string.font_folder_error, Toast.LENGTH_LONG).show()
+            return@registerForActivityResult
+        }
+        FontManager.setFolderUri(requireContext(), uri)
+        presenter.loadSettingsList(notifyDataSetChanged = true)
+        Toast.makeText(requireContext(), R.string.font_folder_updated, Toast.LENGTH_SHORT).show()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val playerIndex = getPlayerIndex()
@@ -89,7 +107,8 @@ class SettingsFragment : Fragment() {
             settingsViewModel,
             settingsAdapter!!,
             args.menuTag,
-            activity
+            activity,
+            { pickFontFolderLauncher.launch(null) }
         )
 
         val toolbarTitle = resolveToolbarTitle()

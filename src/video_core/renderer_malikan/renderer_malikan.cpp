@@ -19,7 +19,7 @@ RendererMalikan::RendererMalikan(Core::Frontend::EmuWindow& emu_window,
     // settings: it re-enabled inner-invalidation skipping, shader-loop-check removal and the
     // racy present thread, all of which the profile deliberately leaves off.
 
-    if (GetDevice().IsMali()) {
+    if (GetDevice().IsMalikanMode()) {
         LOG_INFO(Render_Vulkan,
                  "[Malikan] Turbo profile engaged: {} driver {} (native ASTC: {}, ASTC decode "
                  "mode: {}, AFRC: {}, mailbox present, async GPU/present, EDS2 + dynamic "
@@ -27,6 +27,10 @@ RendererMalikan::RendererMalikan(Core::Frontend::EmuWindow& emu_window,
                  GetDevice().GetModelName(), GetDevice().GetDriverVersion(),
                  GetDevice().IsOptimalAstcSupported(),
                  GetDevice().IsAstcDecodeModeSupported(), GetDevice().HasImageCompressionControl());
+    } else if (GetDevice().IsPanVk()) {
+        LOG_INFO(Render_Vulkan,
+                 "[Malikan] PanVK detected on {}; vendor Mali performance shortcuts are disabled.",
+                 GetDevice().GetModelName());
     } else {
         LOG_INFO(Render_Vulkan,
                  "[Malikan] Renderer created on {} (profile applied from settings).",

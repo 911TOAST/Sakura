@@ -41,6 +41,12 @@ object NativeInput {
     external fun isHandheldOnly(): Boolean
 
     /**
+     * Switches between docked and handheld mode and tells a running game, so it re-reads the
+     * operation mode immediately instead of after a restart.
+     */
+    external fun setDockedMode(docked: Boolean)
+
+    /**
      * Handles button press events for a gamepad.
      * @param guid 32 character hexadecimal string consisting of the controller's PID+VID.
      * @param port Port determined by controller connection order.

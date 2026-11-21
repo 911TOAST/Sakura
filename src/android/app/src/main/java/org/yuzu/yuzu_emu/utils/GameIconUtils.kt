@@ -21,6 +21,8 @@ import coil.key.Keyer
 import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import coil.request.Options
+import coil.size.isOriginal
+import coil.size.pxOrElse
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.YuzuApplication
 import org.yuzu.yuzu_emu.model.Game
@@ -30,21 +32,59 @@ class GameIconFetcher(
     private val options: Options
 ) : Fetcher {
     override suspend fun fetch(): FetchResult {
+        val decoded = decodeGameIcon(game.path, options)
         return DrawableResult(
-            drawable = decodeGameIcon(game.path)!!.toDrawable(options.context.resources),
-            isSampled = false,
+            drawable = decoded.bitmap.toDrawable(options.context.resources),
+            // Only claim sampling when the decoder actually shrank the image. Coil uses this flag
+            // to validate memory-cache hits, so overstating it makes every bind a cache miss.
+            isSampled = decoded.sampled,
             dataSource = DataSource.DISK
         )
     }
 
-    private fun decodeGameIcon(uri: String): Bitmap? {
+    private class Decoded(val bitmap: Bitmap, val sampled: Boolean)
+
+    private fun decodeGameIcon(uri: String, options: Options): Decoded {
         val data = GameMetadata.getIcon(uri)
-        return BitmapFactory.decodeByteArray(
-            data,
-            0,
-            data.size,
-            BitmapFactory.Options()
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
+
+        val sampleSize = calculateInSampleSize(
+            bounds.outWidth,
+            bounds.outHeight,
+            options
         )
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            // The bytes have no density information; never let the framework rescale them.
+            inScaled = false
+        }
+        val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size, decodeOptions)
+            ?: throw IllegalStateException("Could not decode icon for $uri")
+        return Decoded(bitmap, sampleSize > 1)
+    }
+
+    /**
+     * Largest power-of-two reduction that still leaves the icon at or above the view size.
+     * Switch covers are 256-512 px, so this mostly helps tablets rendering a dense icon grid.
+     */
+    private fun calculateInSampleSize(width: Int, height: Int, options: Options): Int {
+        val size = options.size
+        if (size.isOriginal || width <= 0 || height <= 0) {
+            return 1
+        }
+        val targetWidth = size.width.pxOrElse { 0 }
+        val targetHeight = size.height.pxOrElse { 0 }
+        if (targetWidth <= 0 || targetHeight <= 0) {
+            return 1
+        }
+        var sampleSize = 1
+        while (width / (sampleSize * 2) >= targetWidth &&
+            height / (sampleSize * 2) >= targetHeight
+        ) {
+            sampleSize *= 2
+        }
+        return sampleSize
     }
 
     class Factory : Fetcher.Factory<Game> {
@@ -58,6 +98,13 @@ class GameIconKeyer : Keyer<Game> {
 }
 
 object GameIconUtils {
+    /**
+     * Fixed ceiling for decoded covers. Coil's default is a quarter of the app heap, which on a
+     * 512 MB heap means ~128 MB of icons. Icons are small and re-decodable, so a flat cap bounds
+     * the cache without changing how the library looks.
+     */
+    private const val ICON_CACHE_BYTES = 32 * 1024 * 1024
+
     val imageLoader = ImageLoader.Builder(YuzuApplication.appContext)
         .components {
             add(GameIconKeyer())
@@ -65,10 +112,15 @@ object GameIconUtils {
         }
         .memoryCache {
             MemoryCache.Builder(YuzuApplication.appContext)
-                .maxSizePercent(0.25)
+                .maxSizeBytes(ICON_CACHE_BYTES)
                 .build()
         }
         .build()
+
+    /** Drops every decoded cover. Coil re-reads them from disk on the next bind. */
+    fun trimMemory() {
+        imageLoader.memoryCache?.clear()
+    }
 
     fun loadGameIcon(game: Game, imageView: ImageView) {
         val request = ImageRequest.Builder(YuzuApplication.appContext)

@@ -89,7 +89,7 @@ object GpuDriverHelper {
 
         // Validate driver
         val metadata = getMetadataFromZip(copiedFile)
-        if (metadata.name == null) {
+        if (metadata.name == null || metadata.libraryName.isNullOrBlank()) {
             copiedFile.delete()
             return false
         }
@@ -118,7 +118,7 @@ object GpuDriverHelper {
 
         // Validate driver
         val metadata = getMetadataFromZip(copiedFile)
-        if (metadata.name == null) {
+        if (metadata.name == null || metadata.libraryName.isNullOrBlank()) {
             copiedFile.delete()
             return false
         }
@@ -134,7 +134,13 @@ object GpuDriverHelper {
                 copiedFile.path,
                 File(driverInstallationPath!!)
             )
-        } catch (e: SecurityException) {
+        } catch (e: Exception) {
+            installDefaultDriver()
+            return false
+        }
+
+        if (!runCatching { normalizeAndValidateDriverInstallation() }.getOrDefault(false)) {
+            installDefaultDriver()
             return false
         }
 
@@ -156,7 +162,9 @@ object GpuDriverHelper {
 
         // Validate driver
         val metadata = getMetadataFromZip(driver)
-        if (metadata.name == null) {
+        if (metadata.name == null || metadata.libraryName.isNullOrBlank() ||
+            metadata.minApi > Build.VERSION.SDK_INT
+        ) {
             driver.delete()
             return false
         }
@@ -167,7 +175,14 @@ object GpuDriverHelper {
                 driver.path,
                 File(driverInstallationPath!!)
             )
-        } catch (e: SecurityException) {
+        } catch (e: Exception) {
+            installDefaultDriver()
+            return false
+        }
+
+        if (!runCatching { normalizeAndValidateDriverInstallation() }.getOrDefault(false)) {
+            installDefaultDriver()
+            driver.delete()
             return false
         }
 
@@ -175,6 +190,37 @@ object GpuDriverHelper {
         initializeDriverParameters()
 
         return true
+    }
+
+    private fun normalizeAndValidateDriverInstallation(): Boolean {
+        val root = File(driverInstallationPath ?: return false).canonicalFile
+        val metadataFile = root.walkTopDown().firstOrNull {
+            it.isFile && it.name.equals(META_JSON_FILENAME, ignoreCase = true)
+        } ?: return false
+        val metadata = GpuDriverMetadata(metadataFile)
+        val libraryName = metadata.libraryName?.takeIf {
+            it.isNotBlank() && it == File(it).name && it != "." && it != ".."
+        } ?: return false
+        val library = root.walkTopDown().firstOrNull { it.isFile && it.name == libraryName }
+            ?: return false
+
+        if (metadataFile.parentFile != root &&
+            !metadataFile.copyTo(File(root, META_JSON_FILENAME), true).exists()
+        ) {
+            return false
+        }
+        if (library.parentFile != root) {
+            library.parentFile?.listFiles()
+                ?.filter { it.isFile && it.extension == "so" }
+                ?.forEach { file ->
+                    if (file.parentFile != root &&
+                        !file.copyTo(File(root, file.name), true).exists()
+                    ) {
+                        return false
+                    }
+                }
+        }
+        return File(root, META_JSON_FILENAME).isFile && File(root, libraryName).isFile
     }
 
     /**
@@ -193,7 +239,9 @@ object GpuDriverHelper {
                 val entries = zf.entries()
                 while (entries.hasMoreElements()) {
                     val entry = entries.nextElement()
-                    if (!entry.isDirectory && entry.name.lowercase().contains(".json")) {
+                    if (!entry.isDirectory && entry.name.substringAfterLast('/')
+                            .equals(META_JSON_FILENAME, ignoreCase = true)
+                    ) {
                         zf.getInputStream(entry).use {
                             return GpuDriverMetadata(it, entry.size)
                         }
@@ -244,12 +292,26 @@ object GpuDriverHelper {
 
     /** The PanVK package sitting in driver storage, if the user imported one. */
     fun findPanVkZip(): File? =
-        File(driverStoragePath).listFiles()?.firstOrNull {
-            it.name.startsWith("PanVK", ignoreCase = true) && it.name.endsWith(".zip")
-        }
+        File(driverStoragePath).listFiles()
+            ?.asSequence()
+            ?.filter {
+                it.isFile && it.name.startsWith("PanVK", ignoreCase = true) &&
+                    it.extension.equals("zip", ignoreCase = true)
+            }
+            ?.filter { candidate ->
+                val metadata = getMetadataFromZip(candidate)
+                metadata.name?.contains("PanVK", ignoreCase = true) == true &&
+                    !metadata.libraryName.isNullOrBlank() &&
+                    metadata.minApi <= Build.VERSION.SDK_INT
+            }
+            ?.maxWithOrNull(compareBy<File> { it.lastModified() }.thenBy { it.name })
 
-    fun isPanVkInstalled(): Boolean =
-        installedCustomDriverData.name?.contains("PanVK", ignoreCase = true) == true
+    fun isPanVkInstalled(): Boolean {
+        val installationRoot = driverInstallationPath ?: return false
+        val metadata = installedCustomDriverData
+        return metadata.name?.contains("PanVK", ignoreCase = true) == true &&
+            metadata.libraryName?.let { File(installationRoot, it).isFile } == true
+    }
 
     /**
      * Installs (or removes) the PanVK ICD as the active custom driver. Copies to a temp file
@@ -265,8 +327,11 @@ object GpuDriverHelper {
         }
         val stored = findPanVkZip() ?: return false
         val staging = File(YuzuApplication.appContext.cacheDir, stored.name)
-        stored.copyTo(staging, overwrite = true)
+        runCatching { stored.copyTo(staging, overwrite = true) }.getOrNull() ?: return false
         if (!installCustomDriver(staging)) {
+            installDefaultDriver()
+            StringSetting.DRIVER_PATH.setString("")
+            NativeConfig.saveGlobalConfig()
             return false
         }
         StringSetting.DRIVER_PATH.setString(stored.path)

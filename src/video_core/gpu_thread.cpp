@@ -4,6 +4,7 @@
 // SPDX-FileCopyrightText: Copyright 2019 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "common/adpf.h"
 #include "common/assert.h"
 #include "common/scope_exit.h"
 #include "common/settings.h"
@@ -30,6 +31,9 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer, Core::Fronten
     thread = std::jthread([&](std::stop_token stop_token) {
         Common::SetCurrentThreadName("GPU");
         Common::SetCurrentThreadPriority(Common::ThreadPriority::Critical);
+#if defined(__unix__) || defined(__ANDROID__)
+        Common::AdpfRegisterThread(static_cast<int32_t>(gettid()));
+#endif
         // This thread records every draw. On big.LITTLE, letting the scheduler park it on a little
         // core costs more than any per-draw micro-optimisation, so keep it on the fast cores.
         if (Settings::values.renderer_core_pinning.GetValue() &&

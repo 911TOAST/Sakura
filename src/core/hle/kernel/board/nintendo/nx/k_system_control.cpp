@@ -7,6 +7,7 @@
 #include <random>
 
 #include "common/literals.h"
+#include "common/memory_budget.h"
 #include "common/random.h"
 #include "common/settings.h"
 
@@ -44,8 +45,23 @@ namespace {
 
 using namespace Common::Literals;
 
+/// The 8/10/12 GiB layouts exist for debugging applets and mods. On a phone they reserve more
+/// guest DRAM than the device can hold, so the layout is clamped to what the memory budget
+/// allows. The default 4 GiB layout is never changed.
+Settings::MemoryLayout ClampLayoutForDevice(Settings::MemoryLayout layout) {
+    const u64 cap = Common::MemoryBudget::MaxEmulatedDramBytes();
+    if (cap == 0 || cap >= 8_GiB) {
+        return layout;
+    }
+    if (cap >= 6_GiB) {
+        return layout > Settings::MemoryLayout::Memory_6Gb ? Settings::MemoryLayout::Memory_6Gb
+                                                           : layout;
+    }
+    return Settings::MemoryLayout::Memory_4Gb;
+}
+
 u32 GetMemorySizeForInit() {
-    switch (Settings::values.memory_layout_mode.GetValue()) {
+    switch (ClampLayoutForDevice(Settings::values.memory_layout_mode.GetValue())) {
     case Settings::MemoryLayout::Memory_4Gb:
         return Smc::MemorySize_4GB;
     case Settings::MemoryLayout::Memory_6Gb:
@@ -61,7 +77,7 @@ u32 GetMemorySizeForInit() {
 }
 
 Smc::MemoryArrangement GetMemoryArrangeForInit() {
-    switch (Settings::values.memory_layout_mode.GetValue()) {
+    switch (ClampLayoutForDevice(Settings::values.memory_layout_mode.GetValue())) {
     case Settings::MemoryLayout::Memory_4Gb:
         return Smc::MemoryArrangement_4GB;
     case Settings::MemoryLayout::Memory_6Gb:

@@ -37,3 +37,14 @@ fun Activity.finishWithPanelMotion() {
     applyPanelCloseMotion()
     finish()
 }
+
+/** Rebuilds theme-backed views with the same short fade used by the rest of the interface. */
+@Suppress("DEPRECATION")
+fun Activity.recreateWithThemeMotion() {
+    recreate()
+    if (SuyuMotion.transitionsEnabled()) {
+        overridePendingTransition(R.anim.sakura_fade_through_in, R.anim.sakura_fade_through_out)
+    } else {
+        overridePendingTransition(R.anim.sakura_no_animation, R.anim.sakura_no_animation)
+    }
+}

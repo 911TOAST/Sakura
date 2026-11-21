@@ -177,13 +177,14 @@ class WallpaperViewModel(application: Application, private val saved: SavedState
 
     /** Provider-aware random discovery; replaces the grid instead of appending a page. */
     fun surpriseMe() {
+        val spec = _search.value.spec
         searchJob?.cancel()
         val generation = searchGeneration.next()
         searchScroll = null
         _search.value = _search.value.copy(loading = true, started = true, error = null)
         searchJob = viewModelScope.launch {
             try {
-                val result = repository.surprise()
+                val result = repository.surprise(spec)
                 if (searchGeneration.accepts(generation)) _search.value = _search.value.copy(
                     items = result.items, page = 1, lastPage = 1, loading = false
                 )

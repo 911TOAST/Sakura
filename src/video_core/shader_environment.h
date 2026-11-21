@@ -170,6 +170,12 @@ public:
 
     void Deserialize(std::ifstream& file);
 
+    void Serialize(std::ofstream& file) const;
+
+    [[nodiscard]] bool CanBeSerialized() const noexcept {
+        return true;
+    }
+
     [[nodiscard]] u64 ReadInstruction(u32 address) override;
 
     [[nodiscard]] u32 ReadCbufValue(u32 cbuf_index, u32 cbuf_offset) override;
@@ -201,6 +207,7 @@ public:
 
 private:
     std::vector<u64> code;
+    u64 code_bytes{};
     ankerl::unordered_dense::map<u32, Shader::TextureType> texture_types;
     ankerl::unordered_dense::map<u32, Shader::TexturePixelFormat> texture_pixel_formats;
     ankerl::unordered_dense::map<u64, u32> cbuf_values;
@@ -218,6 +225,10 @@ private:
 inline constexpr u32 PIPELINE_EXTRA_DATA_MAGIC = 0x43565053; // "SPVC"
 
 void SerializePipeline(std::span<const char> key, std::span<const GenericEnvironment* const> envs,
+                       const std::filesystem::path& filename, u32 cache_version,
+                       std::span<const u8> extra_data = {});
+
+void SerializePipeline(std::span<const char> key, std::span<const FileEnvironment* const> envs,
                        const std::filesystem::path& filename, u32 cache_version,
                        std::span<const u8> extra_data = {});
 

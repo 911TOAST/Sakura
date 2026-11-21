@@ -2,84 +2,142 @@
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    style="@style/SuyuCard"
+    android:id="@+id/driver_card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="16dp"
-    android:layout_marginVertical="8dp"
+    android:layout_marginVertical="4dp"
     android:clickable="true"
     android:focusable="true"
+    android:checkable="true"
+    app:cardBackgroundColor="?attr/colorSurfaceContainer"
+    app:checkedIcon="@null"
     app:cardCornerRadius="20dp"
-    app:cardBackgroundColor="?attr/colorSurface"
     app:cardElevation="0dp"
     app:strokeColor="?attr/colorOutlineVariant"
-    app:strokeWidth="0dp">
+    app:strokeWidth="1dp">
 
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_gravity="center"
-        android:padding="16dp">
+        android:paddingStart="14dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="12dp">
 
-        <RadioButton
-            android:id="@+id/radio_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
-            android:focusable="false"
-            android:clickable="false"
-            android:checked="false" />
+        <FrameLayout
+            android:id="@+id/icon_tile"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/sakura_icon_tile"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:layout_gravity="center_vertical">
+            <ImageView
+                android:id="@+id/driver_icon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_m3_settings"
+                app:tint="?attr/colorOnPrimaryContainer" />
 
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/title"
-                style="@style/TextAppearance.Material3.TitleMedium"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:requiresFadingEdge="horizontal"
-                android:textAlignment="viewStart"
-                tools:text="@string/select_gpu_driver_default" />
+        </FrameLayout>
 
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/version"
-                style="@style/TextAppearance.Material3.BodyMedium"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:requiresFadingEdge="horizontal"
-                android:textAlignment="viewStart"
-                tools:text="@string/install_gpu_driver_description" />
-
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/description"
-                style="@style/TextAppearance.Material3.BodyMedium"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:requiresFadingEdge="horizontal"
-                android:textAlignment="viewStart"
-                tools:text="@string/install_gpu_driver_description" />
-
-        </LinearLayout>
-
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/button_delete"
             style="@style/Widget.Material3.Button.IconButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
             android:contentDescription="@string/delete"
             android:tooltipText="@string/delete"
             app:icon="@drawable/ic_delete"
-            app:iconTint="?attr/colorControlNormal" />
+            app:iconTint="?attr/colorControlNormal"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
-    </LinearLayout>
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:orientation="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/button_delete"
+            app:layout_constraintStart_toEndOf="@id/icon_tile"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/title"
+                    style="@style/TextAppearance.Material3.TitleMedium"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAlignment="viewStart"
+                    tools:text="@string/select_gpu_driver_default" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/text_badge"
+                    style="@style/TextAppearance.Material3.LabelSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/driver_active_badge"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="2dp"
+                    android:text="@string/driver_selected_badge"
+                    android:textColor="?attr/colorOnPrimaryContainer"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+            </LinearLayout>
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/version"
+                style="@style/SynthwaveText.Secondary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textAlignment="viewStart"
+                tools:text="Mesa 25.1" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/description"
+                style="@style/SynthwaveText.Secondary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textAlignment="viewStart"
+                tools:text="Adreno 7xx, Vulkan 1.3" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/meta"
+                style="@style/SynthwaveText.Secondary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textAlignment="viewStart"
+                android:visibility="gone"
+                tools:text="Turnip • API 29"
+                tools:visibility="visible" />
+
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </com.google.android.material.card.MaterialCardView>

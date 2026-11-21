@@ -21,6 +21,8 @@ include(GenerateSCMRev)
 
 add_library(
     common STATIC
+    adpf.cpp
+    adpf.h
     address_space.cpp
     address_space.h
     algorithm.h
@@ -84,6 +86,8 @@ add_library(
     math_util.h
     memory_detect.cpp
     memory_detect.h
+    memory_budget.cpp
+    memory_budget.h
     multi_level_page_table.cpp
     multi_level_page_table.h
     overflow.h

@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shape language for the App layout presets (Settings > Interface look).
+
+     Applied on top of the selected theme in ThemeHelper.setTheme(), so dialogs, sheets, menus and
+     any card that reads its corner from the theme follow the same preset as the library. Cards that
+     hardcode a radius are handled in code (see UiLayout.applyToCard).
+
+     Every step of the M3 shape scale is overridden: Material's alert dialog and bottom sheet take
+     their container shape from ?attr/shapeAppearanceCornerExtraLarge, while buttons and chips use
+     the small steps. Overriding only Medium/Large left dialogs looking untouched. -->
+<resources>
+
+    <style name="ShapeAppearance.Sakura.Layout.Compact.ExtraSmall" parent="ShapeAppearance.Material3.Corner.ExtraSmall">
+        <item name="cornerSize">4dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Compact.Small" parent="ShapeAppearance.Material3.Corner.Small">
+        <item name="cornerSize">6dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Compact.Medium" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">10dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Compact.Large" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSize">14dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Compact.ExtraLarge" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
+        <item name="cornerSize">20dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Sakura.Layout.Cinema.ExtraSmall" parent="ShapeAppearance.Material3.Corner.ExtraSmall">
+        <item name="cornerSize">6dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Cinema.Small" parent="ShapeAppearance.Material3.Corner.Small">
+        <item name="cornerSize">10dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Cinema.Medium" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">22dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Cinema.Large" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSize">30dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Cinema.ExtraLarge" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
+        <item name="cornerSize">40dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Sakura.Layout.List.ExtraSmall" parent="ShapeAppearance.Material3.Corner.ExtraSmall">
+        <item name="cornerSize">6dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.List.Small" parent="ShapeAppearance.Material3.Corner.Small">
+        <item name="cornerSize">8dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.List.Medium" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">14dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.List.Large" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSize">18dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.List.ExtraLarge" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
+        <item name="cornerSize">24dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Sakura.Layout.Carousel.ExtraSmall" parent="ShapeAppearance.Material3.Corner.ExtraSmall">
+        <item name="cornerSize">6dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Carousel.Small" parent="ShapeAppearance.Material3.Corner.Small">
+        <item name="cornerSize">10dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Carousel.Medium" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">20dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Carousel.Large" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSize">26dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Carousel.ExtraLarge" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
+        <item name="cornerSize">34dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Sakura.Layout.Outline.ExtraSmall" parent="ShapeAppearance.Material3.Corner.ExtraSmall">
+        <item name="cornerSize">6dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Outline.Small" parent="ShapeAppearance.Material3.Corner.Small">
+        <item name="cornerSize">8dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Outline.Medium" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">14dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Outline.Large" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSize">18dp</item>
+    </style>
+    <style name="ShapeAppearance.Sakura.Layout.Outline.ExtraLarge" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
+        <item name="cornerSize">24dp</item>
+    </style>
+
+    <style name="ThemeOverlay.Sakura.Layout.Compact" parent="">
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Sakura.Layout.Compact.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Sakura.Layout.Compact.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Sakura.Layout.Compact.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Sakura.Layout.Compact.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Sakura.Layout.Compact.ExtraLarge</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Sakura.Layout.Compact.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Sakura.Layout.Compact.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Sakura.Layout.Compact.Large</item>
+    </style>
+
+    <style name="ThemeOverlay.Sakura.Layout.Cinema" parent="">
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Sakura.Layout.Cinema.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Sakura.Layout.Cinema.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Sakura.Layout.Cinema.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Sakura.Layout.Cinema.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Sakura.Layout.Cinema.ExtraLarge</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Sakura.Layout.Cinema.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Sakura.Layout.Cinema.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Sakura.Layout.Cinema.Large</item>
+    </style>
+
+    <style name="ThemeOverlay.Sakura.Layout.List" parent="">
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Sakura.Layout.List.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Sakura.Layout.List.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Sakura.Layout.List.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Sakura.Layout.List.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Sakura.Layout.List.ExtraLarge</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Sakura.Layout.List.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Sakura.Layout.List.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Sakura.Layout.List.Large</item>
+    </style>
+
+    <style name="ThemeOverlay.Sakura.Layout.Carousel" parent="">
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Sakura.Layout.Carousel.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Sakura.Layout.Carousel.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Sakura.Layout.Carousel.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Sakura.Layout.Carousel.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Sakura.Layout.Carousel.ExtraLarge</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Sakura.Layout.Carousel.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Sakura.Layout.Carousel.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Sakura.Layout.Carousel.Large</item>
+    </style>
+
+    <style name="ThemeOverlay.Sakura.Layout.Outline" parent="">
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Sakura.Layout.Outline.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Sakura.Layout.Outline.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Sakura.Layout.Outline.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Sakura.Layout.Outline.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Sakura.Layout.Outline.ExtraLarge</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Sakura.Layout.Outline.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Sakura.Layout.Outline.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Sakura.Layout.Outline.Large</item>
+    </style>
+
+</resources>

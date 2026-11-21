@@ -355,7 +355,7 @@ BufferCacheRuntime::BufferCacheRuntime(const Device& device_, MemoryAllocator& m
                       compute_pass_descriptor_queue) {
     const VkDriverIdKHR driver_id = device.GetDriverID();
     limit_dynamic_storage_buffers = driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY ||
-                                    driver_id == VK_DRIVER_ID_ARM_PROPRIETARY;
+                                    device.IsMali();
     if (limit_dynamic_storage_buffers) {
         max_dynamic_storage_buffers = device.GetMaxDescriptorSetStorageBuffersDynamic();
     }    

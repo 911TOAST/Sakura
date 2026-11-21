@@ -83,21 +83,23 @@ Result IUserLocalCommunicationService::GetState(Out<State> out_state) {
         *out_state = lan_discovery.GetState();
     }
 
-    LOG_INFO(Service_LDN, "called, state={}", *out_state);
+    // Games may poll this service every frame. Keep routine polling out of the
+    // default info log; it can otherwise generate thousands of lines per minute.
+    LOG_DEBUG(Service_LDN, "called, state={}", *out_state);
 
     R_SUCCEED();
 }
 
 Result IUserLocalCommunicationService::GetNetworkInfo(
     OutLargeData<NetworkInfo, BufferAttr_HipcPointer> out_network_info) {
-    LOG_INFO(Service_LDN, "called");
+    LOG_DEBUG(Service_LDN, "called");
 
     R_RETURN(lan_discovery.GetNetworkInfo(*out_network_info));
 }
 
 Result IUserLocalCommunicationService::GetIpv4Address(Out<Ipv4Address> out_current_address,
                                                       Out<Ipv4Address> out_subnet_mask) {
-    LOG_INFO(Service_LDN, "called");
+    LOG_DEBUG(Service_LDN, "called");
     const auto network_interface = Network::GetSelectedNetworkInterface();
 
     R_UNLESS(network_interface.has_value(), ResultNoIpAddress);
@@ -119,7 +121,7 @@ Result IUserLocalCommunicationService::GetIpv4Address(Out<Ipv4Address> out_curre
 
 Result IUserLocalCommunicationService::GetDisconnectReason(
     Out<DisconnectReason> out_disconnect_reason) {
-    LOG_INFO(Service_LDN, "called");
+    LOG_DEBUG(Service_LDN, "called");
 
     *out_disconnect_reason = lan_discovery.GetDisconnectReason();
     R_SUCCEED();
@@ -127,7 +129,7 @@ Result IUserLocalCommunicationService::GetDisconnectReason(
 
 Result IUserLocalCommunicationService::GetSecurityParameter(
     Out<SecurityParameter> out_security_parameter) {
-    LOG_INFO(Service_LDN, "called");
+    LOG_DEBUG(Service_LDN, "called");
 
     NetworkInfo info{};
     R_TRY(lan_discovery.GetNetworkInfo(info));
@@ -139,7 +141,7 @@ Result IUserLocalCommunicationService::GetSecurityParameter(
 }
 
 Result IUserLocalCommunicationService::GetNetworkConfig(Out<NetworkConfig> out_network_config) {
-    LOG_INFO(Service_LDN, "called");
+    LOG_DEBUG(Service_LDN, "called");
 
     NetworkInfo info{};
     R_TRY(lan_discovery.GetNetworkInfo(info));
