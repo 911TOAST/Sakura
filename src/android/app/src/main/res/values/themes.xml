@@ -17,6 +17,8 @@
     </style>
 
     <style name="Theme.Yuzu.Main" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- MaterialAlertDialogBuilder checks this marker even when the base is Material3. -->
+        <item name="isMaterialTheme">true</item>
         <item name="colorPrimary">@color/suyu_primary</item>
         <item name="colorOnPrimary">@color/suyu_onPrimary</item>
         <item name="colorPrimaryContainer">@color/suyu_primaryContainer</item>
@@ -94,6 +96,7 @@
     </style>
 
     <style name="Theme.suyu.Main" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="isMaterialTheme">true</item>
         <!-- Primary colors -->
         <item name="colorPrimary">@color/suyu_primary</item>
         <item name="colorOnPrimary">@color/suyu_onPrimary</item>

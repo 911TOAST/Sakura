@@ -366,10 +366,10 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
 #ifdef __ANDROID__
-        // On Android, do not allow surface rotation to deviate from the frontend, except on Mesa
-        // WSI which only advertises the window's current transform as supported.
-        .preTransform = device.IsPanVk() ? capabilities.currentTransform
-                                         : VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+        // Keep the swapchain in the frontend's landscape orientation. PanVK on Android can
+        // advertise only currentTransform even though applying it rotates the emulated frame
+        // inside an already-rotated landscape surface.
+        .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
 #else
         .preTransform = capabilities.currentTransform,
 #endif
@@ -413,16 +413,37 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
         format_list.pNext = std::exchange(swapchain_ci.pNext, &format_list);
         swapchain_ci.flags |= VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR;
     }
-    LOG_INFO(Render_Vulkan,
-             "[Swapchain] format={} space={} present={} count={} mutable={} extent={}x{}",
-             static_cast<u32>(surface_format.format), static_cast<u32>(surface_format.colorSpace),
-             static_cast<u32>(present_mode), requested_image_count, use_mutable_format, width,
-             height);
+    LOG_INFO(
+        Render_Vulkan, "[Swapchain] format={} space={} present={} count={} mutable={} extent={}x{}",
+        static_cast<u32>(surface_format.format), static_cast<u32>(surface_format.colorSpace),
+        static_cast<u32>(present_mode), requested_image_count, use_mutable_format, width, height);
     // Request the size again to reduce the possibility of a TOCTOU race condition.
-    const auto updated_capabilities = physical_device.GetSurfaceCapabilitiesKHR(VkSurfaceKHR(surface));
+    const auto updated_capabilities =
+        physical_device.GetSurfaceCapabilitiesKHR(VkSurfaceKHR(surface));
     swapchain_ci.imageExtent = ChooseSwapExtent(updated_capabilities, width, height);
+    if (device.IsPanVk()) {
+        LOG_INFO(Render_Vulkan,
+                 "[Swapchain] PanVK requested identity transform (current={:#x}, supported={:#x})",
+                 static_cast<u32>(updated_capabilities.currentTransform),
+                 updated_capabilities.supportedTransforms);
+    }
     // Don't add code within this and the swapchain creation.
-    swapchain = device.GetLogical().CreateSwapchainKHR(swapchain_ci);
+    try {
+        swapchain = device.GetLogical().CreateSwapchainKHR(swapchain_ci);
+    } catch (const vk::Exception&) {
+        // Some PanVK builds truly support only currentTransform. Retry that conformant value if
+        // the identity-orientation workaround was rejected by vkCreateSwapchainKHR.
+        if (!device.IsPanVk() ||
+            updated_capabilities.currentTransform == VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
+            throw;
+        }
+        LOG_WARNING(Render_Vulkan,
+                    "PanVK rejected identity swapchain transform; retrying currentTransform "
+                    "({:#x}). The game image may be rotated by this driver.",
+                    static_cast<u32>(updated_capabilities.currentTransform));
+        swapchain_ci.preTransform = updated_capabilities.currentTransform;
+        swapchain = device.GetLogical().CreateSwapchainKHR(swapchain_ci);
+    }
 
     extent = swapchain_ci.imageExtent;
 
