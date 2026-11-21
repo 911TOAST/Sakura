@@ -27,6 +27,7 @@ object DirectoryInitialization {
             NativeLibrary.initializeSystem(false)
             NativeLibrary.reloadProfiles()
             migrateSettings()
+            ThemeHelper.applyDefaultNightMode()
             areDirectoriesReady = true
         }
     }

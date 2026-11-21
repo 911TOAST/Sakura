@@ -4,7 +4,6 @@
 package org.yuzu.yuzu_emu.utils
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
@@ -20,19 +19,9 @@ import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.ui.main.ThemeProvider
-import androidx.preference.PreferenceManager
-import org.yuzu.yuzu_emu.YuzuApplication
-import org.yuzu.yuzu_emu.features.settings.model.Settings
-import java.lang.ref.WeakReference
 
 object ThemeHelper {
     const val SYSTEM_BAR_ALPHA = 0.9f
-
-    // Listener that detects if the theme keys are being changed from the setting menu and recreates the activity
-    private var listener: SharedPreferences.OnSharedPreferenceChangeListener? = null
-    private val preferences = PreferenceManager.getDefaultSharedPreferences(
-        YuzuApplication.appContext
-    )
 
     /**
      * Static Sakura palettes, in the order of res/values/arrays.xml staticThemeValues. Kept as a
@@ -53,10 +42,9 @@ object ThemeHelper {
     )
 
     fun setTheme(activity: AppCompatActivity) {
-        // The theme resource comes first: setThemeMode() touches activity.window, and the window
-        // decor is built from whichever theme is installed at that moment. Applying the theme
-        // afterwards styled the decor with the previous theme (and, with a missing resource, took
-        // the activity down instead of just looking wrong).
+        // This method is called before super.onCreate so Android inflates the activity with the
+        // selected palette. Keep night-mode changes app-wide; setting a local mode per activity
+        // creates independent recreation loops when multiple activities are alive.
         if (isMaterialYou()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 activity.setTheme(R.style.Theme_Yuzu_Main_MaterialYou)
@@ -70,16 +58,12 @@ object ThemeHelper {
             activity.setTheme(getSelectedStaticThemeColor())
         }
 
-        // Using a specific night mode check because this could apply incorrectly when using the
-        // light app mode, dark system mode, and black backgrounds. Launching the settings activity
-        // will then show light mode colors/navigation bars but with black backgrounds.
-        if (isNightMode(activity) && runCatching { BooleanSetting.BLACK_BACKGROUNDS.getBoolean() }
-                .getOrDefault(false)
+        if (isNightMode(activity) && runCatching {
+                BooleanSetting.BLACK_BACKGROUNDS.getBoolean(needsGlobal = true)
+            }.getOrDefault(false)
         ) {
             activity.setTheme(R.style.ThemeOverlay_Yuzu_Dark)
         }
-
-        setThemeMode(activity)
 
         // The layout preset only touches shape tokens, so it can be layered on top of whichever
         // palette was selected above instead of replacing the theme.
@@ -87,15 +71,53 @@ object ThemeHelper {
         if (layoutOverlay != 0) {
             activity.theme.applyStyle(layoutOverlay, true)
         }
+        setThemeMode(activity)
+        (activity as? ThemeProvider)?.themeSignature = getThemeSignature(activity)
     }
 
     private fun isMaterialYou(): Boolean =
-        runCatching { Theme.from(IntSetting.THEME.getInt()) == Theme.MaterialYou }
+        runCatching { Theme.from(IntSetting.THEME.getInt(needsGlobal = true)) == Theme.MaterialYou }
             .getOrDefault(false)
 
     private fun getSelectedStaticThemeColor(): Int {
-        val themeIndex = runCatching { IntSetting.STATIC_THEME_COLOR.getInt(false) }.getOrDefault(0)
+        val themeIndex = runCatching {
+            IntSetting.STATIC_THEME_COLOR.getInt(needsGlobal = true)
+        }.getOrDefault(0)
         return STATIC_THEMES[themeIndex.coerceIn(0, STATIC_THEMES.lastIndex)]
+    }
+
+    private fun getThemeSignature(activity: AppCompatActivity): String {
+        val materialYou = isMaterialYou() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        val staticTheme = if (materialYou) 0 else getSelectedStaticThemeColor()
+        val blackBackgrounds = runCatching {
+            BooleanSetting.BLACK_BACKGROUNDS.getBoolean(needsGlobal = true)
+        }.getOrDefault(false)
+        return "$materialYou:$staticTheme:$blackBackgrounds:${UiLayout.current(activity).themeOverlay}"
+    }
+
+    private fun readNightMode(): Int {
+        val mode = runCatching { IntSetting.THEME_MODE.getInt(needsGlobal = true) }
+            .getOrDefault(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        return when (mode) {
+            AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM,
+            AppCompatDelegate.MODE_NIGHT_NO,
+            AppCompatDelegate.MODE_NIGHT_YES -> mode
+            else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        }
+    }
+
+    /** Call once after global config loads and again when the user changes the app theme mode. */
+    fun applyDefaultNightMode() = setDefaultNightMode(readNightMode())
+
+    fun setDefaultNightMode(mode: Int) {
+        val safeMode = when (mode) {
+            AppCompatDelegate.MODE_NIGHT_NO,
+            AppCompatDelegate.MODE_NIGHT_YES -> mode
+            else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        }
+        if (AppCompatDelegate.getDefaultNightMode() != safeMode) {
+            AppCompatDelegate.setDefaultNightMode(safeMode)
+        }
     }
 
     @ColorInt
@@ -117,52 +139,27 @@ object ThemeHelper {
     fun getLauncherSurfaceColor(context: Context): Int =
         ContextCompat.getColor(context, R.color.suyu_surface)
 
-    /**
-     * Re-applies the theme on resume. Views are already inflated at that point, so a real change is
-     * only visible after a relaunch: recreate exactly once and only while the activity is still
-     * alive, which is what used to turn "pick a colour in settings" into a crash loop.
-     *
-     * Night mode is deliberately not compared here: AppCompatDelegate owns that relaunch when the
-     * theme mode value actually changes, and requesting a second recreate from onResume is exactly
-     * the double relaunch that crashed the activity.
-     */
+    /** Recreate only when a non-night-mode theme selection changed while this activity was away. */
     fun setCorrectTheme(activity: AppCompatActivity) {
         val provider = activity as? ThemeProvider
-        val previousThemeId = provider?.themeId ?: 0
-        val desiredNightMode = runCatching { IntSetting.THEME_MODE.getInt() }
-            .getOrDefault(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-        val nightModeWillRecreate = activity.delegate.localNightMode != desiredNightMode
-
-        setTheme(activity)
-
-        if (previousThemeId == (provider?.themeId ?: previousThemeId)) {
+        setThemeMode(activity)
+        if (provider == null || provider.themeSignature == getThemeSignature(activity)) {
             return
         }
         if (activity.isFinishing || activity.isDestroyed) {
             return
         }
-        // AppCompat schedules its own recreation when localNightMode changes. Requesting another
-        // one here races that transition and can destroy the activity while its views are rebinding.
-        if (!nightModeWillRecreate) {
-            activity.recreateWithThemeMotion()
-        }
+        activity.recreateWithThemeMotion()
     }
 
     fun setThemeMode(activity: AppCompatActivity) {
-        val themeMode = runCatching { IntSetting.THEME_MODE.getInt() }
-            .getOrDefault(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-        activity.delegate.localNightMode = themeMode
         val windowController = WindowCompat.getInsetsController(
             activity.window,
             activity.window.decorView
         )
-        when (themeMode) {
-            AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM -> when (isNightMode(activity)) {
-                false -> setLightModeSystemBars(windowController)
-                true -> setDarkModeSystemBars(windowController)
-            }
-            AppCompatDelegate.MODE_NIGHT_NO -> setLightModeSystemBars(windowController)
-            AppCompatDelegate.MODE_NIGHT_YES -> setDarkModeSystemBars(windowController)
+        when (activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) {
+            Configuration.UI_MODE_NIGHT_YES -> setDarkModeSystemBars(windowController)
+            else -> setLightModeSystemBars(windowController)
         }
     }
 
@@ -182,32 +179,6 @@ object ThemeHelper {
     private fun setDarkModeSystemBars(windowController: WindowInsetsControllerCompat) {
         windowController.isAppearanceLightStatusBars = false
         windowController.isAppearanceLightNavigationBars = false
-    }
-
-    fun ThemeChangeListener(activity: AppCompatActivity) {
-        // Every activity instance used to add another listener that captured it, so after a couple
-        // of theme changes the old (destroyed) activities were still being recreated from the
-        // preference callback. Drop the previous one first and keep only a weak reference.
-        listener?.let { preferences.unregisterOnSharedPreferenceChangeListener(it) }
-        val activityRef = WeakReference(activity)
-        val newListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key !in listOf(
-                    Settings.PREF_STATIC_THEME_COLOR,
-                    Settings.PREF_THEME_MODE,
-                    Settings.PREF_BLACK_BACKGROUNDS,
-                    Settings.PREF_UI_LAYOUT
-                )
-            ) {
-                return@OnSharedPreferenceChangeListener
-            }
-            val target = activityRef.get() ?: return@OnSharedPreferenceChangeListener
-            if (target.isFinishing || target.isDestroyed) {
-                return@OnSharedPreferenceChangeListener
-            }
-            target.recreateWithThemeMotion()
-        }
-        listener = newListener
-        preferences.registerOnSharedPreferenceChangeListener(newListener)
     }
 }
 

@@ -32,6 +32,7 @@ import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.InputHandler
 import org.yuzu.yuzu_emu.utils.NativeConfig
 import org.yuzu.yuzu_emu.utils.DirectoryInitialization
+import org.yuzu.yuzu_emu.utils.ThemeHelper
 import org.yuzu.yuzu_emu.utils.FullscreenHelper
 import org.yuzu.yuzu_emu.utils.FontManager
 import org.yuzu.yuzu_emu.utils.IconHelper
@@ -1254,7 +1255,7 @@ class SettingsFragmentPresenter(
                 override fun getInt(needsGlobal: Boolean): Int = IntSetting.THEME_MODE.getInt()
                 override fun setInt(value: Int) {
                     IntSetting.THEME_MODE.setInt(value)
-                    settingsViewModel.setShouldRecreate(true)
+                    ThemeHelper.setDefaultNightMode(value)
                 }
 
                 override val key: String = IntSetting.THEME_MODE.key
@@ -1267,7 +1268,7 @@ class SettingsFragmentPresenter(
                 override val defaultValue: Int = IntSetting.THEME_MODE.defaultValue
                 override fun reset() {
                     IntSetting.THEME_MODE.setInt(defaultValue)
-                    settingsViewModel.setShouldRecreate(true)
+                    ThemeHelper.setDefaultNightMode(defaultValue)
                 }
             }
 

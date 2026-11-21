@@ -260,6 +260,9 @@ void EmulationSession::InitializeGpuDriver(const std::string& hook_lib_dir,
         if (handle) {
             LOG_INFO(Frontend, "[Driver] custom driver '{}' requested from '{}'",
                      custom_driver_name, custom_driver_dir);
+            LOG_INFO(Frontend,
+                     "[Driver] Vulkan loader opened; custom ICD mapping will be verified after "
+                     "GPU initialization");
         } else {
             const char* reason = dlerror();
             LOG_ERROR(Frontend, "[Driver] custom driver '{}' did not load: {}", custom_driver_name,
@@ -285,7 +288,6 @@ void EmulationSession::InitializeGpuDriver(const std::string& hook_lib_dir,
     }
 
     m_vulkan_library = std::make_shared<Common::DynamicLibrary>(handle);
-    LogMappedVulkanDrivers();
 #endif
 }
 bool EmulationSession::IsRunning() const {

@@ -110,11 +110,11 @@ private val RoseDark = darkColorScheme(
 // Material 3 Expressive shape scale: bigger, rounder, more confident than baseline M3. The
 // extra-large corner is the one dialogs, sheets and hero cards ride on.
 private val SuyuShapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(32.dp),
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(22.dp),
+    large = RoundedCornerShape(30.dp),
+    extraLarge = RoundedCornerShape(40.dp),
 )
 
 // Google Sans (OFL-1.1), Latin subset, mirrors res/font/google_sans.xml.

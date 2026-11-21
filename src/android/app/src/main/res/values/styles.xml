@@ -18,6 +18,18 @@
         <item name="labelBehavior">gone</item>
     </style>
 
+    <!-- Shared expressive defaults; explicit per-card radii can still specialize layouts. -->
+    <style name="SuyuMaterialCard" parent="Widget.Material3.CardView.Filled">
+        <item name="shapeAppearance">?attr/shapeAppearanceCornerLarge</item>
+    </style>
+
+    <style name="ThemeOverlay.Suyu.BottomSheetDialog" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/SuyuBottomSheet</item>
+    </style>
+    <style name="SuyuBottomSheet" parent="Widget.Material3.BottomSheet.Modal">
+        <item name="shapeAppearance">?attr/shapeAppearanceCornerExtraLarge</item>
+    </style>
+
     <!-- Blue theme dialog -->
     <style name="YuzuMaterialDialog.Blue" parent="ThemeOverlay.Material3.MaterialAlertDialog">
         <item name="colorPrimary">@color/yuzu_primaryContainer_blue</item>

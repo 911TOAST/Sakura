@@ -17,7 +17,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -362,10 +365,35 @@ private fun HeroCard(frames: FrameStats) {
     } else {
         MaterialTheme.colorScheme.onSurface
     }
+    // A distinctive Sakura petal silhouette: the live state opens opposing corners while the
+    // idle card stays balanced. Spring interpolation makes the state change feel tactile without
+    // adding motion to the continuously updating FPS value itself.
+    val petalStart by animateDpAsState(
+        targetValue = if (frames.running) 44.dp else 40.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "heroPetalStart"
+    )
+    val petalEnd by animateDpAsState(
+        targetValue = if (frames.running) 22.dp else 40.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "heroPetalEnd"
+    )
+    val heroShape = RoundedCornerShape(
+        topStart = petalStart,
+        topEnd = petalEnd,
+        bottomEnd = petalStart,
+        bottomStart = petalEnd
+    )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = heroShape,
         colors = CardDefaults.cardColors(containerColor = heroContainer),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {

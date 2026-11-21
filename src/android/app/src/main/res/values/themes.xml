@@ -59,6 +59,8 @@
 
         <item name="sliderStyle">@style/YuzuSlider</item>
         <item name="materialAlertDialogTheme">@style/YuzuMaterialDialog.Sakura</item>
+        <item name="materialCardViewStyle">@style/SuyuMaterialCard</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Suyu.BottomSheetDialog</item>
 
         <!-- Material 3 expressive type + shape scale -->
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Suyu.Small</item>
@@ -147,6 +149,8 @@
         <item name="android:enforceNavigationBarContrast">false</item>
         <!-- Material dialog theme -->
         <item name="materialAlertDialogTheme">@style/SuyuMaterialDialog</item>
+        <item name="materialCardViewStyle">@style/SuyuMaterialCard</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Suyu.BottomSheetDialog</item>
         <!-- Popup menu theme -->
         <item name="popupMenuStyle">@style/SuyuPopupMenu</item>
         <item name="android:textColorPrimary">@color/suyu_onBackground</item>

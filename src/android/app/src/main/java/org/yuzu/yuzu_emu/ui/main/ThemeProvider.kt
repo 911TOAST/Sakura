@@ -4,8 +4,6 @@
 package org.yuzu.yuzu_emu.ui.main
 
 interface ThemeProvider {
-    /**
-     * Provides theme ID by overriding an activity's 'setTheme' method and returning that result
-     */
-    var themeId: Int
+    /** Theme settings already applied when this activity's views were created. */
+    var themeSignature: String
 }

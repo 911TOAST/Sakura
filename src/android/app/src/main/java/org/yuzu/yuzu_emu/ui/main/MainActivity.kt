@@ -74,7 +74,7 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
     private val driverViewModel: DriverViewModel by viewModels()
     private val updateViewModel: UpdateViewModel by viewModels()
 
-    override var themeId: Int = 0
+    override var themeSignature: String = ""
 
     private val CHECKED_DECRYPTION = "CheckedDecryption"
     private var checkedDecryption = false
@@ -90,7 +90,6 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
             !DirectoryInitialization.areDirectoriesReady
         }
 
-        ThemeHelper.ThemeChangeListener(this)
         ThemeHelper.setTheme(this)
         super.onCreate(savedInstanceState)
         NativeLibrary.initMultiplayer()
@@ -386,11 +385,6 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
 
     private fun applyFullscreenPreference() {
         FullscreenHelper.applyToActivity(this)
-    }
-
-    override fun setTheme(resId: Int) {
-        super.setTheme(resId)
-        themeId = resId
     }
 
     override fun onDestroy() {
