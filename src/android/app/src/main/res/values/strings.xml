@@ -905,6 +905,7 @@
     <string name="close">Close</string>
     <string name="copy">Copy</string>
     <string name="crash_report_title">Last crash report</string>
+    <string name="no_app_to_open_link">No app found to open this link</string>
     <string name="crash_report_message">The app crashed last time. The report below can be copied and shared to help fix it.</string>
     <string name="learn_more">Learn more</string>
     <string name="auto">Auto</string>

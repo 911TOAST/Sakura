@@ -350,8 +350,7 @@
                             android:alpha="0.85"
                             android:contentDescription="@null"
                             android:importantForAccessibility="no"
-                            android:src="@drawable/ic_m3_sports_esports"
-                            app:tint="?attr/colorPrimary" />
+                            android:src="@drawable/neotron_logo" />
 
                         <LinearLayout
                             android:layout_width="0dp"

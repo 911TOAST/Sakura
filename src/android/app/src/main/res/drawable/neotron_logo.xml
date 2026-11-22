@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder logo for the NE0TR0N credit card in About. Pixel-styled "N" on a
+     dark tile, using the app's sakura palette (plus orange on maroon). Replace this
+     file with the real game logo (PNG) whenever the asset is available; the card
+     layout only references @drawable/neotron_logo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#61162E"
+        android:pathData="M6,0 h36 a6,6 0 0 1 6,6 v36 a6,6 0 0 1 -6,6 h-36 a6,6 0 0 1 -6,-6 v-36 a6,6 0 0 1 6,-6 Z" />
+    <!-- Pixel N: left stem, right stem, diagonal steps. -->
+    <path
+        android:fillColor="#E2874F"
+        android:pathData="M12,12 h6 v24 h-6 Z M30,12 h6 v24 h-6 Z
+            M18,18 h6 v6 h-6 Z M24,24 h6 v6 h-6 Z" />
+    <path
+        android:fillColor="#F6A6BE"
+        android:pathData="M12,12 h4 v4 h-4 Z" />
+</vector>

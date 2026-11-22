@@ -31,6 +31,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.navigation.NavOptions
 import org.yuzu.yuzu_emu.fragments.EmulationFragment
+import org.yuzu.yuzu_emu.utils.CrashReporter
 import org.yuzu.yuzu_emu.utils.CustomSettingsHandler
 import android.util.Rational
 import android.view.InputDevice
@@ -142,6 +143,10 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
             processPlaytimeGameKey == playtimeGameKey
 
         NativeConfig.reloadGlobalConfig()
+
+        // If the process dies during emulation (native crash in the core), the marker lets the
+        // next launch capture the logcat tail as the crash report.
+        CrashReporter.markEmulationStart(this)
 
         InputHandler.updateControllerData()
         val players = NativeConfig.getInputSettings(true)
@@ -295,6 +300,7 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
     override fun onDestroy() {
         mainHandler.removeCallbacks(romSwapStopTimeoutRunnable)
         flushPlaytimeSegment()
+        CrashReporter.clearEmulationMarker(this)
         super.onDestroy()
         inputManager.unregisterInputDeviceListener(this)
         stopForegroundService(this)

@@ -29,11 +29,70 @@ object CrashReporter {
         val appContext = context.applicationContext
         val previous = Thread.getDefaultUncaughtExceptionHandler()
 
+        captureNativeTailIfCrashed(appContext)
+
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             runCatching { write(appContext, thread, error) }
             runCatching { Log.e(TAG, "Uncaught exception on ${thread.name}", error) }
             previous?.uncaughtException(thread, error)
         }
+    }
+
+    /**
+     * Marks that emulation started. If the process dies without the Java handler running — the
+     * usual signature of a native crash (SIGSEGV/SIGABRT) inside the emulator core — the marker
+     * survives and is picked up by [captureNativeTailIfCrashed] on the next launch.
+     */
+    fun markEmulationStart(context: Context) {
+        runCatching {
+            markerFile(context).writeText(
+                SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+            )
+        }
+    }
+
+    /** Clears the marker after a clean emulation exit. */
+    fun clearEmulationMarker(context: Context) {
+        runCatching { markerFile(context).delete() }
+    }
+
+    /**
+     * Called at startup when no Java exception was recorded but emulation was running when the
+     * app last died: writes the tail of the app's own logcat into last_crash.txt so the existing
+     * in-app report (MainActivity) shows where the native crash happened. Apps may read their
+     * own UID's logcat without any permission.
+     */
+    private fun captureNativeTailIfCrashed(context: Context) {
+        val marker = markerFile(context)
+        if (!marker.exists()) {
+            return
+        }
+        runCatching {
+            val process = ProcessBuilder("logcat", "-d", "-b", "main", "-t", "400")
+                .redirectErrorStream(true)
+                .start()
+            val tail = process.inputStream.bufferedReader().use { it.readText() }
+            if (!reportFile(context).exists()) {
+                reportFile(context).writeText(
+                    buildString {
+                        appendLine("Suyu crash report (native tail)")
+                        appendLine(
+                            "Time: " +
+                                SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+                        )
+                        appendLine("Emulation marker written at: ${marker.readText()}")
+                        appendLine(
+                            "The app died while emulating without a Java exception. " +
+                                "This is the tail of the app's own logcat, " +
+                                "most likely to contain the native crash:"
+                        )
+                        appendLine()
+                        appendLine(tail)
+                    }
+                )
+            }
+        }
+        runCatching { marker.delete() }
     }
 
     fun peek(context: Context): String? =
@@ -48,8 +107,9 @@ object CrashReporter {
         val report = peek(context) ?: return
         val lines = report.lineSequence().map { it.trim() }.toList()
         val headline = lines.firstOrNull {
-            it.contains("Exception") || it.contains("Error") || it.startsWith("Caused by")
-        } ?: "Unknown crash"
+            it.contains("Exception") || it.contains("Error") || it.startsWith("Caused by") ||
+                (it.length > 20 && it.contains(" E ") && !it.endsWith(" E "))
+        } ?: "Crash while emulating (see the full report)"
         val firstFrame = lines.firstOrNull { it.startsWith("at ") }
         val message = buildString {
             append(headline.take(160))
@@ -62,7 +122,11 @@ object CrashReporter {
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
         runCatching {
-            reportFile(context).renameTo(File(context.getPublicFilesDir(), "last_crash_shown.txt"))
+            // A native-tail capture is not renamed: the full log belongs in the in-app dialog
+            // (MainActivity) too, which clears the file when dismissed.
+            if (!report.contains("(native tail)")) {
+                reportFile(context).renameTo(File(context.getPublicFilesDir(), "last_crash_shown.txt"))
+            }
         }
     }
 
@@ -71,6 +135,9 @@ object CrashReporter {
     }
 
     private fun reportFile(context: Context): File = File(context.getPublicFilesDir(), FILE_NAME)
+
+    private fun markerFile(context: Context): File =
+        File(context.getPublicFilesDir(), "emulation_pending.txt")
 
     private fun write(context: Context, thread: Thread, error: Throwable) {
         val report = buildString {

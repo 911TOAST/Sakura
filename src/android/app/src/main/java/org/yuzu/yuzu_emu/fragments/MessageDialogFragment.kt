@@ -13,6 +13,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.ViewModelProvider
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import android.widget.Toast
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.model.MessageDialogViewModel
 import org.yuzu.yuzu_emu.utils.Log
@@ -95,6 +96,15 @@ class MessageDialogFragment : DialogFragment() {
 
     private fun openLink(link: String) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link))
+        // Devices without a browser (or with it disabled) would otherwise crash on startActivity.
+        if (intent.resolveActivity(requireContext().packageManager) == null) {
+            Toast.makeText(
+                requireContext(),
+                R.string.no_app_to_open_link,
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
         startActivity(intent)
     }
 

@@ -189,6 +189,15 @@ class AboutFragment : Fragment() {
 
     private fun openLink(link: String) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link))
+        // Devices without a browser (or with it disabled) would otherwise crash on startActivity.
+        if (intent.resolveActivity(requireContext().packageManager) == null) {
+            Toast.makeText(
+                requireContext(),
+                R.string.no_app_to_open_link,
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
         startActivity(intent)
     }
 
