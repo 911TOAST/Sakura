@@ -2355,9 +2355,12 @@ ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageViewI
     // Native GPU mode: ask the driver to decode native ASTC straight to 8-bit UNORM/SRGB. Switch
     // ASTC content is LDR, so the default FP16 decode costs bandwidth without adding precision;
     // VK_EXT_astc_decode_mode is the only way to select the cheaper fixed-point hardware path.
+    // The gate is on the RESOLVED view format, not the guest pixel format: a BCn texture that was
+    // recompressed to ASTC 4x4 for Mali carries a BCn info.format, and only the resolved format
+    // tells whether the view actually holds ASTC data that the decode mode applies to.
     const bool native_astc_view =
         (Settings::values.native_gpu_mode.GetValue() || device->IsMalikanMode()) &&
-        device->IsAstcDecodeModeSupported() && IsPixelFormatASTC(image.info.format) &&
+        device->IsAstcDecodeModeSupported() &&
         format_info.format >= VK_FORMAT_ASTC_4x4_UNORM_BLOCK &&
         format_info.format <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK;
     if (native_astc_view) {

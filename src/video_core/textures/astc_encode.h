@@ -22,8 +22,10 @@ namespace Tegra::Texture::ASTC {
 /// On-disk cache of CompressASTC4x4 results, keyed by the decoded RGBA8 texels plus dimensions and
 /// sRGB profile. Because those fully determine the ASTC output, a hit is bit-identical to a fresh
 /// encode and lets the upload skip the expensive astcenc pass entirely (the BCn decode still runs).
-/// Lookup returns true and fills \p output on a hit; both are no-ops if the cache dir is unavailable.
-/// The cache is bounded to a fixed on-disk budget and evicts the oldest entries when it is exceeded.
+/// Entries carry a versioned header with a payload hash: truncated or corrupted files fail the
+/// lookup (and are deleted) instead of being uploaded as garbage. Lookup returns true and fills
+/// \p output on a hit; both are no-ops if the cache dir is unavailable. The cache is bounded to a
+/// fixed on-disk budget; eviction is least-recently-accessed (hits refresh their timestamp).
 /// Intended for the texture decode worker, not the GPU thread.
 bool LookupAstcCache(std::span<const u8> rgba8, u32 width, u32 height, u32 num_slices, bool srgb,
                      std::span<u8> output);

@@ -4,6 +4,8 @@
 #include <astcenc.h>
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <filesystem>
 #include <mutex>
 #include <vector>
@@ -139,6 +141,18 @@ std::filesystem::path CachePath(u64 key) {
     return CacheDir() / fmt::format("{:016x}.astc", key);
 }
 
+/// Prefix stored in front of every cached payload so a truncated or corrupted file is detected at
+/// lookup instead of being uploaded as garbage texture data. The magic doubles as the format
+/// version: bump or change it and existing caches are invalidated wholesale.
+constexpr std::array<u8, 8> kCacheMagic{'S', 'U', 'A', 'S', 'T', 'C', '0', '1'};
+
+struct CacheHeader {
+    std::array<u8, 8> magic{};
+    u64 payload_hash{}; // CityHash64 of the ASTC payload
+    u64 payload_size{}; // bytes of ASTC payload behind the header
+};
+static_assert(offsetof(CacheHeader, payload_size) == 16);
+
 struct CacheEntry {
     std::filesystem::path path;
     u64 size{};
@@ -198,19 +212,80 @@ bool LookupAstcCache(std::span<const u8> rgba8, u32 width, u32 height, u32 num_s
         return false;
     }
     Common::FS::IOFile file{path, Common::FS::FileAccessMode::Read};
-    if (!file.IsOpen() || file.GetSize() != output.size()) {
+    if (!file.IsOpen()) {
         return false;
     }
-    return file.ReadSpan(output) == output.size();
+    // Every payload is wrapped in a CacheHeader: magic + format version, the payload's CityHash
+    // and its size. A truncated (crash mid-write) or bit-corrupted (disk-error) entry is detected
+    // here instead of being uploaded as garbage texture data; the stale file is deleted so the
+    // next encode succeeds and re-stores it.
+    const u64 file_size = file.GetSize();
+    if (file_size != sizeof(CacheHeader) + output.size()) {
+        return false;
+    }
+    CacheHeader header{};
+    if (file.ReadSpan(std::span<u8>(reinterpret_cast<u8*>(&header), sizeof(header))) !=
+        sizeof(header)) {
+        return false;
+    }
+    if (header.magic != kCacheMagic || header.payload_size != output.size()) {
+        return false;
+    }
+    if (file.ReadSpan(output) != output.size()) {
+        return false;
+    }
+    if (Common::CityHash64(reinterpret_cast<const char*>(output.data()), output.size()) !=
+        header.payload_hash) {
+        // Content does not match what was stored at this key: delete so a later run re-encodes.
+        std::filesystem::remove(path, ec);
+        LOG_ERROR(Common_Filesystem, "ASTC cache entry failed its integrity check: {}",
+                  path.string());
+        return false;
+    }
+    // A hit is a use: refresh the timestamp so TrimCache() (oldest-first by write time) ranks
+    // entries by access, not by when they happened to be written.
+    std::filesystem::last_write_time(path, ec);
+    return true;
 }
 
 void StoreAstcCache(std::span<const u8> rgba8, u32 width, u32 height, u32 num_slices, bool srgb,
                     std::span<const u8> astc) {
     std::scoped_lock lock{g_cache_mutex};
     const auto path = CachePath(CacheKey(rgba8, width, height, num_slices, srgb));
-    Common::FS::IOFile file{path, Common::FS::FileAccessMode::Write};
-    if (!file.IsOpen() || file.WriteSpan(astc) != astc.size()) {
-        LOG_ERROR(Common_Filesystem, "Failed to write ASTC cache entry {}", path.string());
+    // A present file was written completely and verified by a previous Lookup (corrupt entries are
+    // deleted there), and the key already determines the payload content: skip the rewrite.
+    std::error_code ec;
+    if (std::filesystem::exists(path, ec) && !ec) {
+        return;
+    }
+    // Write to a temporary name and rename into place: readers (this process or a second
+    // instance) can otherwise observe a half-written file at the final path.
+    const auto tmp_path = CacheDir() / fmt::format("{}.tmp", path.filename().string());
+    CacheHeader header{};
+    header.magic = kCacheMagic;
+    header.payload_size = astc.size();
+    header.payload_hash =
+        Common::CityHash64(reinterpret_cast<const char*>(astc.data()), astc.size());
+    {
+        Common::FS::IOFile file{tmp_path, Common::FS::FileAccessMode::Write};
+        if (!file.IsOpen() ||
+            file.WriteSpan(std::span<const u8>(reinterpret_cast<const u8*>(&header),
+                                               sizeof(header))) != sizeof(header) ||
+            file.WriteSpan(astc) != astc.size()) {
+            LOG_ERROR(Common_Filesystem, "Failed to write ASTC cache entry {}", path.string());
+            return;
+        }
+    }
+    std::filesystem::rename(tmp_path, path, ec);
+    if (ec) {
+        // POSIX rename replaces an existing file but Windows does not; remove and retry once.
+        std::filesystem::remove(path, ec);
+        ec.clear();
+        std::filesystem::rename(tmp_path, path, ec);
+        ec.clear();
+        if (std::filesystem::exists(tmp_path, ec)) {
+            std::filesystem::remove(tmp_path, ec);
+        }
         return;
     }
     if (++g_writes_since_trim >= WritesPerTrim) {
