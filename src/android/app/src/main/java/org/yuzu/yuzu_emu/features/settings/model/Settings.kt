@@ -110,6 +110,7 @@ object Settings {
 
     // Android-only UI layout preset (see UiLayout.kt). Not a core setting.
     const val PREF_UI_LAYOUT = "UiLayoutStyle"
+    const val PREF_GAME_TILE_SIZE = "GameTileSize"
 
     enum class EmulationOrientation(val int: Int) {
         Unspecified(0),

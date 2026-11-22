@@ -147,6 +147,11 @@ VkImageMemoryBarrier LemonFgBarriers::MakeBarrier(const LemonFgImage& image,
 
 LemonFgBarriers& LemonFgBarriers::Push(LemonFgImage& image, VkAccessFlags src_access,
                                         VkAccessFlags dst_access) {
+    if (image.Layout() == VK_IMAGE_LAYOUT_UNDEFINED) {
+        // First use has no prior image contents. Some mobile drivers fault on a read dependency
+        // paired with UNDEFINED, so make the transition a discard-to-write instead.
+        src_access = 0;
+    }
     barriers.push_back(MakeBarrier(image, src_access, dst_access));
     image.SetLayout(VK_IMAGE_LAYOUT_GENERAL);
     return *this;

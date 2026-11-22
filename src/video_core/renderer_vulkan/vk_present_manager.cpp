@@ -10,6 +10,7 @@
 #include "common/settings.h"
 #include "common/thread.h"
 #include "core/frontend/emu_window.h"
+#include "video_core/renderer_vulkan/present/lemon_fg.h"
 #include "video_core/renderer_vulkan/vk_present_manager.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
@@ -297,6 +298,8 @@ void PresentManager::Present(Frame* frame) {
 Frame* PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height,
                                      VkFormat image_view_format, VkRenderPass rd) {
     auto& dld = device.GetLogical();
+    const bool frame_gen_supported = Settings::values.frame_gen.GetValue() &&
+                                     LemonFgChain::IsSupported(device, swapchain.GetImageFormat());
 
     frame->width = width;
     frame->height = height;
@@ -368,7 +371,7 @@ Frame* PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = static_cast<VkImageUsageFlags>(
             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-            (Settings::values.frame_gen.GetValue() ? VK_IMAGE_USAGE_STORAGE_BIT : 0)),
+            (frame_gen_supported ? VK_IMAGE_USAGE_STORAGE_BIT : 0)),
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -413,7 +416,7 @@ Frame* PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height,
     });
 
     // Lemon FG (ported): storage view of the composed frame, the chain input.
-    if (Settings::values.frame_gen.GetValue()) {
+    if (frame_gen_supported) {
         frame->storage_view = dld.CreateImageView({
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .pNext = nullptr,

@@ -247,6 +247,12 @@
     <string name="view_grid_compact">Compact Grid</string>
     <string name="view_carousel">Carousel</string>
     <string name="view_cinema">Cinema</string>
+    <string name="view_landscape_showcase">Landscape Showcase</string>
+    <string name="game_tile_size">Game tile size</string>
+    <string name="game_tile_size_description">Choose how many game covers fit in each row. This affects grid and landscape showcase views.</string>
+    <string name="game_tile_size_small">Smaller</string>
+    <string name="game_tile_size_default">Default</string>
+    <string name="game_tile_size_large">Larger</string>
 
     <!-- App layout presets -->
     <string name="ui_layout_sakura">Sakura</string>
@@ -687,6 +693,9 @@
     <string name="mali_afrc_description">Asks Mali for the strongest fixed-rate compression (2:1, 4 bits per component) on eligible render targets. The Mali profile already applies the lighter 4:3 rate on its own; this switch selects 2:1. It cuts render-target memory traffic but can slightly change image quality. Unsupported images use the normal path.</string>
     <string name="frame_gen">Lemon FG</string>
     <string name="frame_gen_description">Inserts interpolated frames between real ones using Lemon FG, ported from Lemon-Project (Ghael-V). A frame is generated between each pair of real frames via motion search at a quarter of the resolution; HUD-like content stays in place. May be unstable on some GPUs or drivers; disable if something looks wrong.</string>
+    <string name="frame_gen_warning_title">Experimental feature</string>
+    <string name="frame_gen_warning">Frame generation is experimental and may cause crashes, graphical glitches, instability, or reduced performance on some devices and graphics drivers.</string>
+    <string name="frame_gen_enable_anyway">Enable anyway</string>
     <string name="native_gpu_mode">Native GPU mode (experimental)</string>
     <string name="native_gpu_mode_description">Overlaps Switch GPU emulation with CPU work and enables the Mali throughput profile. Vulkan uses native ASTC formats per texture, fixed-point ASTC decode when the driver supports VK_EXT_astc_decode_mode, and fixed-rate compression on eligible Mali render targets. Switch GPU commands and shaders still need translation; async overlap can cause timing issues, and compression may slightly change image quality.</string>
     <string name="no_well">No Well (experimental)</string>

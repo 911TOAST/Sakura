@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Wide, landscape-only cover card with an image-led showcase treatment. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:focusable="false"
+    android:focusableInTouchMode="false"
+    android:padding="6dp">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/card_game_landscape_showcase"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clickable="true"
+        android:clipToPadding="true"
+        android:focusable="true"
+        android:transitionName="card_game_landscape_showcase"
+        app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/image_game_landscape_showcase"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:scaleType="centerCrop"
+                android:transitionName="game_artwork"
+                app:layout_constraintDimensionRatio="16:9"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.sakura.GameArtworkTop"
+                tools:src="@drawable/default_icon" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="76dp"
+                android:background="@drawable/gradient_overlay_bottom"
+                app:layout_constraintBottom_toBottomOf="@id/image_game_landscape_showcase"
+                app:layout_constraintEnd_toEndOf="@id/image_game_landscape_showcase"
+                app:layout_constraintStart_toStartOf="@id/image_game_landscape_showcase" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/text_game_landscape_showcase_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_marginBottom="14dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/google_sans_semibold"
+                android:maxLines="2"
+                android:shadowColor="@android:color/black"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="4"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="@id/image_game_landscape_showcase"
+                app:layout_constraintStart_toStartOf="@id/image_game_landscape_showcase"
+                tools:text="Your Game Title" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </com.google.android.material.card.MaterialCardView>
+</FrameLayout>

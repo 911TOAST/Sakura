@@ -21,5 +21,9 @@
             android:id="@+id/view_carousel"
             android:icon="@drawable/ic_m3_view_carousel"
             android:title="@string/view_carousel" />
+        <item
+            android:id="@+id/view_landscape_showcase"
+            android:icon="@drawable/ic_m3_view_module"
+            android:title="@string/view_landscape_showcase" />
     </group>
 </menu>

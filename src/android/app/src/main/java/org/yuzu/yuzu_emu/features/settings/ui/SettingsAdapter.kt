@@ -17,6 +17,7 @@ import androidx.navigation.findNavController
 import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.timepicker.MaterialTimePicker
 import com.google.android.material.timepicker.TimeFormat
@@ -29,6 +30,7 @@ import org.yuzu.yuzu_emu.databinding.ListItemSettingsHeaderBinding
 import org.yuzu.yuzu_emu.features.input.NativeInput
 import org.yuzu.yuzu_emu.features.input.model.AnalogDirection
 import org.yuzu.yuzu_emu.features.settings.model.AbstractIntSetting
+import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.Settings
 import org.yuzu.yuzu_emu.features.settings.model.view.*
 import org.yuzu.yuzu_emu.features.settings.ui.viewholder.*
@@ -123,6 +125,22 @@ class SettingsAdapter(
     }
 
     fun onBooleanClick(item: SwitchSetting, checked: Boolean, position: Int) {
+        if (item.setting.key == BooleanSetting.FRAME_GEN.key && checked) {
+            // Restore the off state while the user decides; frame generation only becomes active
+            // after explicit confirmation.
+            notifyItemChanged(position)
+            MaterialAlertDialogBuilder(fragment.requireContext())
+                .setTitle(R.string.frame_gen_warning_title)
+                .setMessage(R.string.frame_gen_warning)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.frame_gen_enable_anyway) { _, _ ->
+                    item.setChecked(true)
+                    notifyItemChanged(position)
+                    settingsViewModel.setShouldReloadSettingsList(true)
+                }
+                .show()
+            return
+        }
         item.setChecked(checked)
         notifyItemChanged(position)
         settingsViewModel.setShouldReloadSettingsList(true)

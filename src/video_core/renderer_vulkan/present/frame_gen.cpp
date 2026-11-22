@@ -4,9 +4,10 @@
 // Port of Lemon-Project's FrameGen (native Lemon FG path). See frame_gen.h.
 
 #include <algorithm>
+#include <exception>
 
-#include "common/logging/log.h"
 #include "common/settings.h"
+#include "common/logging/log.h"
 #include "video_core/renderer_vulkan/present/frame_gen.h"
 #include "video_core/renderer_vulkan/vk_present_manager.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
@@ -85,11 +86,18 @@ void FrameGen::Process(const Device& device, Frame* frame, VkFormat format) {
     }
 
     if (!LemonFgChain::IsSupported(device, format)) {
+        LOG_WARNING(Render_Vulkan,
+                    "Lemon frame generation is unavailable on this device/format; continuing "
+                    "with normal presentation");
         unavailable = true;
         return;
     }
 
     if (!frame->storage_view) {
+        LOG_WARNING(Render_Vulkan,
+                    "Lemon frame generation has no storage view for the presentation frame; "
+                    "continuing with normal presentation");
+        unavailable = true;
         warm_streak = 0;
         return;
     }
@@ -149,14 +157,12 @@ void FrameGen::Rebuild(const Device& device, VkExtent2D extent, VkFormat format)
 
     try {
         chain.emplace(device, memory_allocator, extent, format);
-    } catch (const vk::Exception& exception) {
-        if (exception.GetResult() != VK_ERROR_OUT_OF_DEVICE_MEMORY &&
-            exception.GetResult() != VK_ERROR_OUT_OF_HOST_MEMORY) {
-            throw;
-        }
-        LOG_WARNING(Render_Vulkan, "Lemon frame generation disabled after allocation failure: {}",
+    } catch (const std::exception& exception) {
+        LOG_WARNING(Render_Vulkan,
+                    "Lemon frame generation disabled after Vulkan resource setup failed: {}",
                     exception.what());
         unavailable = true;
+        chain.reset();
         return;
     }
     built_extent = extent;
@@ -174,7 +180,10 @@ void FrameGen::CopyPresentedFrame(vk::CommandBuffer cmdbuf, VkImage source,
     const std::array before{
         make_barrier(source, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
                      VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
-        make_barrier(destination.Handle(), VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+        make_barrier(destination.Handle(),
+                     destination.Layout() == VK_IMAGE_LAYOUT_UNDEFINED ? 0
+                                                                       : VK_ACCESS_SHADER_READ_BIT,
+                     VK_ACCESS_TRANSFER_WRITE_BIT,
                      destination.Layout(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL),
     };
     cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |

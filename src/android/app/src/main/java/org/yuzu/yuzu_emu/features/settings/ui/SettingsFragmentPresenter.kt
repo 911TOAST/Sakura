@@ -1251,6 +1251,39 @@ class SettingsFragmentPresenter(
 
             add(HeaderSetting(R.string.interface_look))
 
+            val gameTileSize: AbstractIntSetting = object : AbstractIntSetting {
+                private val preferences = androidx.preference.PreferenceManager
+                    .getDefaultSharedPreferences(context)
+
+                override fun getInt(needsGlobal: Boolean): Int = preferences
+                    .getInt(Settings.PREF_GAME_TILE_SIZE, 0)
+
+                override fun setInt(value: Int) {
+                    preferences.edit { putInt(Settings.PREF_GAME_TILE_SIZE, value.coerceIn(-1, 1)) }
+                }
+
+                override val key: String = Settings.PREF_GAME_TILE_SIZE
+                override val isRuntimeModifiable: Boolean = true
+                override val isSwitchable: Boolean = false
+                override val isSaveable: Boolean = true
+                override val pairedSettingKey: String = ""
+                override var global: Boolean = true
+                override fun getValueAsString(needsGlobal: Boolean): String = getInt().toString()
+                override val defaultValue: Int = 0
+                override fun reset() {
+                    preferences.edit { remove(Settings.PREF_GAME_TILE_SIZE) }
+                }
+            }
+            add(
+                SingleChoiceSetting(
+                    gameTileSize,
+                    titleId = R.string.game_tile_size,
+                    descriptionId = R.string.game_tile_size_description,
+                    choicesId = R.array.gameTileSizeEntries,
+                    valuesId = R.array.gameTileSizeValues
+                )
+            )
+
             val themeMode: AbstractIntSetting = object : AbstractIntSetting {
                 override fun getInt(needsGlobal: Boolean): Int = IntSetting.THEME_MODE.getInt()
                 override fun setInt(value: Int) {

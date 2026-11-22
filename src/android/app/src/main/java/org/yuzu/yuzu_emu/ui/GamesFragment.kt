@@ -85,6 +85,7 @@ class GamesFragment : Fragment() {
 
     /** Tracks the layout preset so a change made in Settings rebuilds the list on return. */
     private var appliedUiLayoutId: Int = -1
+    private var appliedGameTileSizeStep: Int = Int.MIN_VALUE
 
     private val updateViewModel: UpdateViewModel by activityViewModels()
     private var lastKnownUpdate: NativeLibrary.UpdateResult? = null
@@ -113,9 +114,9 @@ class GamesFragment : Fragment() {
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val key = if (isLandscape) CarouselRecyclerView.CAROUSEL_VIEW_TYPE_LANDSCAPE else CarouselRecyclerView.CAROUSEL_VIEW_TYPE_PORTRAIT
         val layout = UiLayout.current(requireContext())
-        // Sakura keeps the historical default: carousel in landscape, grid in portrait.
+        // Sakura uses a wide-artwork showcase in landscape and the familiar grid in portrait.
         val fallback = if (isLandscape && layout == UiLayout.SAKURA) {
-            GameAdapter.VIEW_TYPE_CAROUSEL
+            GameAdapter.VIEW_TYPE_LANDSCAPE_SHOWCASE
         } else {
             viewTypeFor(layout.libraryStyle)
         }
@@ -132,15 +133,22 @@ class GamesFragment : Fragment() {
 
     /** A layout preset can request more or fewer columns than the density default. */
     private fun columnsFor(layout: UiLayout, defaultRes: Int, viewType: Int): Int {
-        val requested = if (layout.libraryColumns > 0) {
+        val configuredColumns = if (layout.libraryColumns > 0) {
             layout.libraryColumns
         } else {
             resources.getInteger(defaultRes)
         }
+        val tileSizeStep = UiLayout.gameTileSizeStep(requireContext())
+        val requested = (configuredColumns + tileSizeStep).coerceAtLeast(1)
         if (resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE) {
             return requested
         }
-        val minimumCellWidthDp = if (viewType == GameAdapter.VIEW_TYPE_GRID_COMPACT) 205 else 230
+        val compact = viewType == GameAdapter.VIEW_TYPE_GRID_COMPACT
+        val minimumCellWidthDp = when (tileSizeStep) {
+            -1 -> if (compact) 270 else 300
+            1 -> if (compact) 155 else 180
+            else -> if (compact) 205 else 230
+        }
         val widthDp = resources.configuration.screenWidthDp
         val widthBasedMaximum = if (widthDp > 0) (widthDp / minimumCellWidthDp).coerceAtLeast(1) else requested
         return minOf(requested, widthBasedMaximum)
@@ -184,6 +192,7 @@ class GamesFragment : Fragment() {
 
         applyGridGamesBinding()
         appliedUiLayoutId = UiLayout.current(requireContext()).id
+        appliedGameTileSizeStep = UiLayout.gameTileSizeStep(requireContext())
 
         binding.swipeRefresh.apply {
             (binding.swipeRefresh as? SwipeRefreshLayout)?.setOnRefreshListener {
@@ -429,9 +438,13 @@ class GamesFragment : Fragment() {
             // the historical rule of falling back to a grid there.
             val carouselAllowed =
                 isLandscape || layout.libraryStyle == UiLayout.LibraryStyle.CAROUSEL
-            val savedViewType =
-                if (carouselAllowed || currentViewType != GameAdapter.VIEW_TYPE_CAROUSEL) currentViewType
-                else GameAdapter.VIEW_TYPE_GRID
+            val landscapeOnlyView = currentViewType == GameAdapter.VIEW_TYPE_LANDSCAPE_SHOWCASE
+            val savedViewType = when {
+                currentViewType == GameAdapter.VIEW_TYPE_CAROUSEL && !carouselAllowed ->
+                    GameAdapter.VIEW_TYPE_GRID
+                landscapeOnlyView && !isLandscape -> GameAdapter.VIEW_TYPE_GRID
+                else -> currentViewType
+            }
 
             //This prevents Grid/List views from reusing scaled or otherwise modified ViewHolders left over from the carousel.
             adapter = null
@@ -445,6 +458,7 @@ class GamesFragment : Fragment() {
                     GameAdapter.VIEW_TYPE_LIST -> R.drawable.ic_m3_view_agenda
                     GameAdapter.VIEW_TYPE_CAROUSEL -> R.drawable.ic_m3_view_carousel
                     GameAdapter.VIEW_TYPE_CINEMA -> R.drawable.ic_m3_view_agenda
+                    GameAdapter.VIEW_TYPE_LANDSCAPE_SHOWCASE -> R.drawable.ic_m3_view_module
                     else -> R.drawable.ic_m3_grid_view
                 }
             )
@@ -477,6 +491,12 @@ class GamesFragment : Fragment() {
                 GameAdapter.VIEW_TYPE_CINEMA -> {
                     // One full-width cover per row.
                     GridLayoutManager(context, 1)
+                }
+                GameAdapter.VIEW_TYPE_LANDSCAPE_SHOWCASE -> {
+                    GridLayoutManager(
+                        context,
+                        columnsFor(layout, R.integer.game_columns_grid, savedViewType)
+                    )
                 }
                 GameAdapter.VIEW_TYPE_CAROUSEL -> {
                     LinearLayoutManager(context, RecyclerView.HORIZONTAL, false)
@@ -537,8 +557,10 @@ class GamesFragment : Fragment() {
             if (hasAnimatedEntrance) startBrandMotion()
             // A layout preset picked in Settings changes the list manager, not just colors.
             val layoutId = UiLayout.current(requireContext()).id
-            if (layoutId != appliedUiLayoutId) {
+            val tileSizeStep = UiLayout.gameTileSizeStep(requireContext())
+            if (layoutId != appliedUiLayoutId || tileSizeStep != appliedGameTileSizeStep) {
                 appliedUiLayoutId = layoutId
+                appliedGameTileSizeStep = tileSizeStep
                 applyGridGamesBinding()
             }
             updateButtonsVisibility()
@@ -697,6 +719,7 @@ class GamesFragment : Fragment() {
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         if (!isLandscape) {
             popup.menu.findItem(R.id.view_carousel)?.isVisible = false
+            popup.menu.findItem(R.id.view_landscape_showcase)?.isVisible = false
         }
 
         val currentViewType = getCurrentViewType()
@@ -706,6 +729,8 @@ class GamesFragment : Fragment() {
             GameAdapter.VIEW_TYPE_GRID -> popup.menu.findItem(R.id.view_grid).isChecked = true
             GameAdapter.VIEW_TYPE_CAROUSEL -> popup.menu.findItem(R.id.view_carousel).isChecked = true
             GameAdapter.VIEW_TYPE_CINEMA -> popup.menu.findItem(R.id.view_cinema).isChecked = true
+            GameAdapter.VIEW_TYPE_LANDSCAPE_SHOWCASE ->
+                popup.menu.findItem(R.id.view_landscape_showcase).isChecked = true
         }
 
         popup.setOnMenuItemClickListener { item ->
@@ -750,6 +775,13 @@ class GamesFragment : Fragment() {
                         item.isChecked = true
                         restoreCarouselScroll()
                     }
+                    true
+                }
+
+                R.id.view_landscape_showcase -> {
+                    setCurrentViewType(GameAdapter.VIEW_TYPE_LANDSCAPE_SHOWCASE)
+                    applyGridGamesBinding()
+                    item.isChecked = true
                     true
                 }
 

@@ -44,6 +44,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 import org.yuzu.yuzu_emu.NativeLibrary
 import org.yuzu.yuzu_emu.databinding.CardGameGridCompactBinding
+import org.yuzu.yuzu_emu.databinding.CardGameLandscapeShowcaseBinding
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.Settings
 import org.yuzu.yuzu_emu.ui.CarouselRecyclerView
@@ -58,6 +59,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
         const val VIEW_TYPE_LIST = 2
         const val VIEW_TYPE_CAROUSEL = 3
         const val VIEW_TYPE_CINEMA = 4
+        const val VIEW_TYPE_LANDSCAPE_SHOWCASE = 5
     }
 
     private var viewType = 0
@@ -126,6 +128,13 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 cinemaBinding.cardGameCinema.scaleY = 1f
                 cinemaBinding.cardGameCinema.alpha = 1f
             }
+
+            VIEW_TYPE_LANDSCAPE_SHOWCASE -> {
+                val showcaseBinding = holder.binding as CardGameLandscapeShowcaseBinding
+                showcaseBinding.cardGameLandscapeShowcase.scaleX = 1f
+                showcaseBinding.cardGameLandscapeShowcase.scaleY = 1f
+                showcaseBinding.cardGameLandscapeShowcase.alpha = 1f
+            }
         }
         // Raw M3 entrance: staggered fade+slide when the library first lays out.
         if (entranceRemaining > 0) {
@@ -150,9 +159,6 @@ class GameAdapter(private val activity: AppCompatActivity) :
      * and whenever the view mode changes).
      */
     fun playEntranceAnimation(tileCount: Int = 24) {
-        // A portrait library that falls back to a grid must still show its tiles: the bind pass
-        // above fades carousel cards out, and a grid here would leave them invisible for good.
-        viewType = VIEW_TYPE_GRID
         if (!SuyuMotion.entrancesEnabled()) {
             entranceRemaining = 0
             return
@@ -198,6 +204,12 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 false
             )
 
+            VIEW_TYPE_LANDSCAPE_SHOWCASE -> CardGameLandscapeShowcaseBinding.inflate(
+                LayoutInflater.from(parent.context),
+                parent,
+                false
+            )
+
             else -> throw IllegalArgumentException("Invalid view type")
         }
         return GameViewHolder(binding, viewType)
@@ -215,6 +227,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 VIEW_TYPE_CAROUSEL -> bindCarouselView(model)
                 VIEW_TYPE_GRID_COMPACT -> bindGridCompactView(model)
                 VIEW_TYPE_CINEMA -> bindCinemaView(model)
+                VIEW_TYPE_LANDSCAPE_SHOWCASE -> bindLandscapeShowcaseView(model)
             }
         }
 
@@ -299,6 +312,23 @@ class GameAdapter(private val activity: AppCompatActivity) :
             cinemaBinding.cardGameCinema.setOnClickListener { onClick(model) }
             cinemaBinding.cardGameCinema.setOnLongClickListener { onLongClick(model) }
             SuyuMotion.installPressFeedback(cinemaBinding.cardGameCinema)
+        }
+
+        private fun bindLandscapeShowcaseView(model: Game) {
+            val showcaseBinding = binding as CardGameLandscapeShowcaseBinding
+            showcaseBinding.imageGameLandscapeShowcase.scaleType = ImageView.ScaleType.CENTER_CROP
+            GameIconUtils.loadGameIcon(model, showcaseBinding.imageGameLandscapeShowcase)
+            showcaseBinding.textGameLandscapeShowcaseTitle.text =
+                model.title.replace("[\\t\\n\\r]+".toRegex(), " ")
+            showcaseBinding.textGameLandscapeShowcaseTitle.visibility =
+                if (BooleanSetting.HIDE_GAME_TITLES.getBoolean()) View.GONE else View.VISIBLE
+            showcaseBinding.imageGameLandscapeShowcase.contentDescription =
+                binding.root.context.getString(R.string.game_image_desc, model.title)
+            UiLayout.current(showcaseBinding.root.context)
+                .applyToCard(showcaseBinding.cardGameLandscapeShowcase)
+            showcaseBinding.cardGameLandscapeShowcase.setOnClickListener { onClick(model) }
+            showcaseBinding.cardGameLandscapeShowcase.setOnLongClickListener { onLongClick(model) }
+            SuyuMotion.installPressFeedback(showcaseBinding.cardGameLandscapeShowcase)
         }
 
         private fun bindCarouselView(model: Game) {

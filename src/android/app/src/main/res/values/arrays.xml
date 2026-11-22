@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <string-array name="gameTileSizeEntries">
+        <item>@string/game_tile_size_small</item>
+        <item>@string/game_tile_size_default</item>
+        <item>@string/game_tile_size_large</item>
+    </string-array>
+    <integer-array name="gameTileSizeValues">
+        <item>1</item>
+        <item>0</item>
+        <item>-1</item>
+    </integer-array>
+
     <string-array name="regionNames">
         <item>@string/region_australia</item>
         <item>@string/region_china</item>

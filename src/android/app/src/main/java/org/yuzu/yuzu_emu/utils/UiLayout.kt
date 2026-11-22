@@ -117,6 +117,12 @@ enum class UiLayout(
         @Volatile
         private var cached: UiLayout? = null
 
+        /** Positive values request more columns (smaller tiles); negative values request fewer. */
+        fun gameTileSizeStep(context: Context): Int = PreferenceManager
+            .getDefaultSharedPreferences(context)
+            .getInt(Settings.PREF_GAME_TILE_SIZE, 0)
+            .coerceIn(-1, 1)
+
         fun from(id: Int): UiLayout = entries.firstOrNull { it.id == id } ?: SAKURA
 
         fun current(context: Context): UiLayout {
