@@ -676,6 +676,7 @@ void RasterizerVulkan::Clear(u32 layer_count) {
             .area_w = render_area.width,
             .area_h = render_area.height,
             .layer0_single = regs.clear_surface.layer == 0 && layer_count == 1,
+            .stencil_write_mask = regs.stencil_front_mask,
         };
         ClearLoadOpPlan plan = DeriveClearLoadOp(req, shape);
         if (plan.use_clear_variant &&
@@ -684,6 +685,16 @@ void RasterizerVulkan::Clear(u32 layer_count) {
             // rejection of scissored clears.
             plan.use_clear_variant = PlanIsLegacyAllAspect(plan, shape) &&
                                      !regs.clear_control.use_scissor;
+        } else if (plan.use_clear_variant) {
+            // Extension on. Its new cases must never drop work the explicit path would have
+            // done: a begin-time CLEAR is an unmasked vkCmdClearAttachments equivalent, so
+            // colour channel subsets and masked stencil writes keep the explicit path (see
+            // PartialClearSafe). Cases passing the legacy predicate stay on the legacy route
+            // (including scissored clears whose clamped rect still covers the whole area),
+            // so ON and OFF agree there.
+            if (!PlanIsLegacyAllAspect(plan, shape)) {
+                plan.use_clear_variant = PartialClearSafe(req);
+            }
         }
         if (plan.use_clear_variant) {
             std::array<VkClearValue, 9> clear_values{};

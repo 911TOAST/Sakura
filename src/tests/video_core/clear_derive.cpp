@@ -194,3 +194,43 @@ TEST_CASE("Multiple RTs with the legacy checker never over-claims supersets", "[
     REQUIRE(plan.color_mask == (1 << 2)); // extension allows it
     REQUIRE_FALSE(PlanIsLegacyAllAspect(plan, Shape(3, true, true)));
 }
+
+TEST_CASE("PartialClearSafe rejects clear requests a begin-clear cannot express",
+          "[clear_derive]") {
+    // Colour channel subset with everything else full: a begin-clear would write all four
+    // channels, but the guest asked for a subset, so the explicit path must run.
+    {
+        ClearRequest req = LegacyCase();
+        req.clear_a = false;
+        REQUIRE_FALSE(PartialClearSafe(req));
+    }
+    // Masked stencil write: a begin-clear has no write mask, so the masked blit path must run.
+    {
+        ClearRequest req = LegacyCase();
+        req.stencil_write_mask = 0x3F;
+        REQUIRE_FALSE(PartialClearSafe(req));
+    }
+    // Full write mask and all channels: safe.
+    REQUIRE(PartialClearSafe(LegacyCase()));
+    // Mask 0 is treated as unmasked on the explicit path (the explicit path special-cases both
+    // 0 and 0xFF), so the begin-clear stays eligible.
+    {
+        ClearRequest req = LegacyCase();
+        req.stencil_write_mask = 0;
+        REQUIRE(PartialClearSafe(req));
+    }
+    // Depth-only clear: no colour, no stencil constraint.
+    {
+        ClearRequest req = FullArea();
+        req.use_depth = true;
+        REQUIRE(PartialClearSafe(req));
+    }
+    // A channel-subset clear of colour only (no depth/stencil) is also unsafe for the
+    // begin-clear and must keep the explicit ClearAttachments/blit route.
+    {
+        ClearRequest req = FullArea();
+        req.use_color = true;
+        req.clear_r = true;
+        REQUIRE_FALSE(PartialClearSafe(req));
+    }
+}

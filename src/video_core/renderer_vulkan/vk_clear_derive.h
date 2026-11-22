@@ -51,6 +51,10 @@ struct ClearRequest {
     u32 area_h = 0;
     /// regs.clear_surface.layer == 0 && clear's layerCount == 1.
     bool layer0_single = false;
+    /// regs.stencil_front_mask: a stencil clear whose write mask is neither 0xFF nor 0 goes
+    /// through the masked blit path on the explicit route; a begin-time CLEAR cannot mask, so
+    /// those requests must keep the explicit path (see PartialClearSafe).
+    u32 stencil_write_mask = 0xFF;
 };
 
 /// Which attachments may be DEFINED at pass begin instead of loaded.
@@ -119,6 +123,19 @@ constexpr bool PlanIsLegacyAllAspect(const ClearLoadOpPlan& plan, const ClearFbS
                              : u8{0};
     return plan.color_mask == full_mask && plan.depth_clear == shape.has_depth &&
            plan.stencil_clear == shape.has_stencil;
+}
+
+/// Extra eligibility rule for cases the widened (partial) clear extension adds on top of the
+/// legacy all-aspect gate. A begin-time CLEAR is the unmasked equivalent of
+/// vkCmdClearAttachments, so a request that asks for a colour CHANNEL subset (only some of
+/// RGBA) or a masked stencil write must keep the explicit path, which honours both. Returns
+/// false precisely when the begin-clear would silently write more than the guest asked for.
+constexpr bool PartialClearSafe(const ClearRequest& req) {
+    const bool whole_channels = !req.use_color ||
+                                (req.clear_r && req.clear_g && req.clear_b && req.clear_a);
+    const bool unmasked_stencil = !req.use_stencil || req.stencil_write_mask == 0xFF ||
+                                  req.stencil_write_mask == 0;
+    return whole_channels && unmasked_stencil;
 }
 
 } // namespace Vulkan
