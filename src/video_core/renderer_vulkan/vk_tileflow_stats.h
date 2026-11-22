@@ -55,7 +55,8 @@ struct TileFlowStats {
     /// Call once per emulated frame. Every kFramesPerDump frames, and only when the
     /// renderer_tileflow_counters setting is on, emit one line of running totals.
     void MaybeLogTick() {
-        if (++tick_frames < kFramesPerDump) {
+        const u64 frames = ++tick_frames;
+        if (frames < kFramesPerDump) {
             return;
         }
         tick_frames = 0;
