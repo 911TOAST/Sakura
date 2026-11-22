@@ -56,8 +56,7 @@
                 android:layout_height="23dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/sakura_flower"
-                app:tint="?attr/colorOnPrimaryContainer" />
+                android:src="@drawable/sakura_flower" />
         </FrameLayout>
 
         <TextView
