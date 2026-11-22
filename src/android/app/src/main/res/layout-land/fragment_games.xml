@@ -47,13 +47,13 @@
 
         <FrameLayout
             android:id="@+id/brand_mark"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="@drawable/sakura_icon_tile">
 
             <ImageView
-                android:layout_width="23dp"
-                android:layout_height="23dp"
+                android:layout_width="33dp"
+                android:layout_height="33dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
                 android:src="@drawable/sakura_flower" />
