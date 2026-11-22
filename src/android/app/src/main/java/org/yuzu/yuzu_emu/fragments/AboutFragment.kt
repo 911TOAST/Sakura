@@ -106,6 +106,40 @@ class AboutFragment : Fragment() {
 
         setInsets()
         playBrandIntro()
+        playNeotronBanner()
+    }
+
+    /**
+     * Slowly cross-fades the NE0TR0N card banner through the game screenshots. Posts are queued on
+     * the card's view, so pending swaps are dropped automatically when the view detaches; the null
+     * check on the binding covers teardown between the post and the callback.
+     */
+    private fun playNeotronBanner() {
+        val banners = listOf(
+            R.drawable.neotron_banner_2,
+            R.drawable.neotron_banner_1,
+            R.drawable.neotron_banner_3
+        )
+        var index = 0
+        fun advance() {
+            val root = _binding?.neotronBanner ?: return
+            index = (index + 1) % banners.size
+            root.animate().cancel()
+            root.animate()
+                .alpha(0f)
+                .setDuration(420L)
+                .withEndAction {
+                    val target = _binding?.neotronBanner ?: return@withEndAction
+                    target.setImageResource(banners[index])
+                    target.animate()
+                        .alpha(1f)
+                        .setDuration(420L)
+                        .withEndAction { target.postDelayed({ advance() }, 4200L) }
+                        .start()
+                }
+                .start()
+        }
+        binding.neotronBanner.postDelayed({ advance() }, 4200L)
     }
 
     /**
@@ -179,6 +213,7 @@ class AboutFragment : Fragment() {
     override fun onDestroyView() {
         brandAnimators.forEach { it.cancel() }
         brandAnimators.clear()
+        binding.neotronBanner.animate().cancel()
         // Restores the plain wordmark colour before the views go away. Without this the paint can
         // stay transparent and the wordmark disappears the next time the screen opens.
         BrandAnimation.stopShimmer(binding.aboutWordmark)
