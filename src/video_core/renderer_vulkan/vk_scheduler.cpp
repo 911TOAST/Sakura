@@ -300,6 +300,19 @@ bool Scheduler::UpdateRescaling(bool is_rescaling) {
     return true;
 }
 
+bool Scheduler::UpdateRescalingWords(std::span<const u32, 6> words, bool same_pipeline_bound) {
+    // Push constants are only known-persisted across a pipeline bind when the layout family does
+    // not change, so dedup only when the same pipeline stays bound. A new command buffer starts
+    // with undefined push constants, and InvalidateState drops the cache there.
+    if (same_pipeline_bound && rescaling_words_defined &&
+        std::ranges::equal(words, last_rescaling_words)) {
+        return false;
+    }
+    std::ranges::copy(words, last_rescaling_words.begin());
+    rescaling_words_defined = true;
+    return true;
+}
+
 void Scheduler::WorkerThread(std::stop_token stop_token) {
     Common::SetCurrentThreadName("VulkanWorker");
 #ifdef __ANDROID__
@@ -502,6 +515,7 @@ void Scheduler::InvalidateState() {
     ++render_pass_serial;
     state.graphics_pipeline = nullptr;
     state.rescaling_defined = false;
+    rescaling_words_defined = false;
     state_tracker.InvalidateCommandBufferState();
 }
 

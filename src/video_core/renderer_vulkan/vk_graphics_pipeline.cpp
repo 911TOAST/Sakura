@@ -604,7 +604,10 @@ void GraphicsPipeline::ConfigureDraw(const RescalingPushConstant& rescaling,
     }
 
     const void* const descriptor_data{guest_descriptor_queue.UpdateData()};
-    scheduler.Record([this, descriptor_data, bind_pipeline, rescaling_data = rescaling.Data(),
+    const bool push_rescaling_words{
+        scheduler.UpdateRescalingWords(rescaling.Data(), !bind_pipeline)};
+    scheduler.Record([this, descriptor_data, bind_pipeline, push_rescaling_words,
+                      rescaling_data = rescaling.Data(),
                       is_rescaling, update_rescaling,
                       uses_render_area = render_area.uses_render_area,
                       render_area_data = render_area.words](vk::CommandBuffer cmdbuf) {
@@ -614,9 +617,11 @@ void GraphicsPipeline::ConfigureDraw(const RescalingPushConstant& rescaling,
                                       : *pipeline;
             cmdbuf.BindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pl);
         }
-        cmdbuf.PushConstants(*pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS,
-                             RESCALING_LAYOUT_WORDS_OFFSET, sizeof(rescaling_data),
-                             rescaling_data.data());
+        if (push_rescaling_words) {
+            cmdbuf.PushConstants(*pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS,
+                                 RESCALING_LAYOUT_WORDS_OFFSET, sizeof(rescaling_data),
+                                 rescaling_data.data());
+        }
         if (update_rescaling) {
             const f32 config_down_factor{Settings::values.resolution_info.down_factor};
             const f32 scale_down_factor{is_rescaling ? config_down_factor : 1.0f};

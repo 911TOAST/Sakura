@@ -14,6 +14,7 @@
 #include <memory>
 #include <span>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <queue>
 #include <vector>
@@ -120,6 +121,13 @@ public:
     /// Update the rescaling state. Returns true if the state has to be updated.
     bool UpdateRescaling(bool is_rescaling);
 
+    /// Returns true when the rescaling push-constant words must be (re-)pushed. Deduplicates the
+    /// per-draw push of the rescaling word block for the common repeated-draw case: when the same
+    /// pipeline stays bound (so the push-constant layout family is unchanged) and the words are
+    /// identical to what this command buffer already has, the push is skipped. The cache is
+    /// dropped by InvalidateState because push constants are per-command-buffer state.
+    bool UpdateRescalingWords(std::span<const u32, 6> words, bool same_pipeline_bound);
+
     /// Invalidates current command buffer state except for render passes
     void InvalidateState();
 
@@ -135,7 +143,8 @@ public:
 
     /// Send work to a separate thread.
     template <typename T>
-        requires std::is_invocable_v<T, vk::CommandBuffer, vk::CommandBuffer>
+        requires std::is_invocable_v<T, vk::CommandBuffer, vk::CommandBuffer> ||
+                 std::is_invocable_v<T, vk::CommandBuffer>
     void RecordWithUploadBuffer(T&& command) {
         if (chunk->Record(command)) {
             return;
@@ -158,10 +167,9 @@ public:
     template <typename T>
         requires std::is_invocable_v<T, vk::CommandBuffer>
     void Record(T&& c) {
-        this->RecordWithUploadBuffer(
-            [command = std::move(c)](vk::CommandBuffer cmdbuf, vk::CommandBuffer) {
-                command(cmdbuf);
-            });
+        // The command is stored directly when its signature is (cmdbuf); only upload-buffer
+        // commands need the two-argument form. Either way TypedCommand invokes what it holds.
+        this->RecordWithUploadBuffer(std::forward<T>(c));
     }
 
     /// Returns the current command buffer tick.
@@ -245,8 +253,14 @@ private:
         TypedCommand& operator=(TypedCommand&&) = delete;
 
         void Execute(vk::CommandBuffer cmdbuf, vk::CommandBuffer upload_cmdbuf) const override {
-
-            command(cmdbuf, upload_cmdbuf);
+            // Commands that only need the main command buffer skip the upload-buffer wrap the
+            // scheduler used to add around them. This saves a second nested command object
+            // (~16+ bytes and one extra indirection per recorded command) on the 32 KiB chunk.
+            if constexpr (std::is_invocable_v<T, vk::CommandBuffer, vk::CommandBuffer>) {
+                command(cmdbuf, upload_cmdbuf);
+            } else {
+                command(cmdbuf);
+            }
         }
 
     private:
@@ -359,6 +373,10 @@ private:
     std::shared_ptr<std::atomic<VkRenderPass>> current_pass_slot;
 
     u64 render_pass_serial = 0;
+
+    /// Rescaling push-constant dedup (see UpdateRescalingWords). Only touched on the render thread.
+    std::array<u32, 6> last_rescaling_words{};
+    bool rescaling_words_defined = false;
 
     std::queue<std::unique_ptr<CommandChunk>> work_queue;
     std::vector<std::unique_ptr<CommandChunk>> chunk_reserve;
