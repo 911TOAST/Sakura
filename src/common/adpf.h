@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #pragma once
 
 #include <atomic>
@@ -36,5 +39,9 @@ void AdpfReset();
 void AdpfPurge();
 uint64_t AdpfReports() noexcept;
 uint64_t AdpfSessions() noexcept;
+
+/// Forecast thermal headroom in degrees Celsius (AThermal_getThermalHeadroom, API 31+,
+/// dlopen'd), or Common::kThermalHeadroomUnavailable when the platform cannot report one.
+[[nodiscard]] float ThermalHeadroom() noexcept;
 
 }

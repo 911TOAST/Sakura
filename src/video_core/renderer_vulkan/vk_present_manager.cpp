@@ -461,6 +461,7 @@ void PresentManager::PresentDirect(Frame* frame) {
         auto cur_t = std::chrono::steady_clock::now();
         int64_t dt = std::chrono::duration_cast<std::chrono::nanoseconds>(cur_t - prev_t).count();
         prev_t = cur_t;
+        last_present_ns.store(dt, std::memory_order_relaxed);
         Common::AdpfFrameTick(dt, 16666666LL);
     } catch (const vk::Exception& except) {
         // A lost surface is rebuilt by the render thread on its next frame: surface and swapchain
@@ -759,6 +760,7 @@ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
     auto cur_t2 = std::chrono::steady_clock::now();
     int64_t dt2 = std::chrono::duration_cast<std::chrono::nanoseconds>(cur_t2 - prev_t2).count();
     prev_t2 = cur_t2;
+    last_present_ns.store(dt2, std::memory_order_relaxed);
     Common::AdpfFrameTick(dt2, 16666666LL);
 }
 

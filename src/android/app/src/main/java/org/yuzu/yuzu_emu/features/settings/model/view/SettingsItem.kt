@@ -737,6 +737,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.RENDERER_DRS,
+                    titleId = R.string.renderer_drs,
+                    descriptionId = R.string.renderer_drs_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_STORE_ELISION,
                     titleId = R.string.renderer_store_elision,
                     descriptionId = R.string.renderer_store_elision_description

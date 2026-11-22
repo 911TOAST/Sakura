@@ -11,6 +11,7 @@
 #include <variant>
 
 #include "common/dynamic_library.h"
+#include "common/drs_policy.h"
 #include "core/frontend/framebuffer_layout.h"
 #include "video_core/host1x/gpu_device_memory_manager.h"
 #include "video_core/renderer_base.h"
@@ -96,6 +97,22 @@ private:
 
     /// Records the guest output that the frame just presented corresponds to.
     void RememberCompositedFrame(std::span<const Tegra::FramebufferConfig> framebuffers);
+
+    /// Steps the dynamic-resolution policy from the measured present interval. Only active when
+    /// renderer_drs is set; adjusts drs_offset, which ApplyPendingResolutionChange folds into the
+    /// effective internal-resolution pick. The user's setting itself is never written.
+    void TickDynamicResolution();
+
+    /// renderer_drs value seen at the previous tick; Reset()s the policy on enable changes.
+    bool drs_enabled_prev{false};
+    /// User's ResolutionSetup index seen at the last tick; bounds are rebuilt when it changes.
+    u32 drs_user_setup{};
+    /// Ladder steps the effective pick sits below the user's ResolutionSetup (0 = no scaling).
+    int drs_offset{0};
+    /// True while DRS holds the resolution below the user's pick (for a single restore log).
+    bool drs_active{false};
+    /// EMA/thermal step policy; pure and host-testable (common/drs_policy.h).
+    Common::DrsPolicy drs_policy{};
 
     Tegra::MaxwellDeviceMemoryManager& device_memory;
     Tegra::GPU& gpu;

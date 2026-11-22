@@ -374,6 +374,7 @@ class SettingsFragmentPresenter(
             add(BooleanSetting.RENDERER_MAXWELL_BYPASS.key)
             add(BooleanSetting.RENDERER_CLEAR_LOADOP.key)
             add(BooleanSetting.RENDERER_CLEAR_LOADOP_PARTIAL.key)
+            add(BooleanSetting.RENDERER_DRS.key)
             add(BooleanSetting.RENDERER_TILEFLOW_COUNTERS.key)
             add(BooleanSetting.RENDERER_STORE_ELISION.key)
             add(BooleanSetting.SKIP_CPU_READBACK.key)
@@ -450,6 +451,7 @@ class SettingsFragmentPresenter(
             add(BooleanSetting.RENDERER_FEEDBACK_LOOP_LAYOUT.key)
 
             add(HeaderSetting(R.string.experiments_group_present))
+            add(BooleanSetting.RENDERER_DRS.key)
             add(BooleanSetting.RENDERER_CORE_PINNING.key)
             add(BooleanSetting.RENDERER_ASYNC_DIRECT_PRESENT.key)
 

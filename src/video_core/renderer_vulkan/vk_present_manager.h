@@ -84,6 +84,12 @@ public:
     /// Binary semaphore the render submission must wait on before touching the acquired image.
     [[nodiscard]] VkSemaphore GetPresentWaitSemaphore() const;
 
+    /// Present-to-present interval of the last completed present, in nanoseconds (relaxed; DRS
+    /// only reads it). Set whenever a present lands, with or without the present thread.
+    [[nodiscard]] std::int64_t LastPresentNs() const noexcept {
+        return last_present_ns.load(std::memory_order_relaxed);
+    }
+
 private:
     void PresentThread(std::stop_token token);
 
@@ -127,6 +133,7 @@ private:
     bool use_direct_present;
     bool use_present_thread;
     std::size_t image_count{};
+    std::atomic<std::int64_t> last_present_ns{0};
 };
 
 } // namespace Vulkan

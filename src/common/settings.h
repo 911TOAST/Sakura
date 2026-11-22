@@ -451,6 +451,14 @@ struct Values {
                                                           "renderer_clear_loadop_partial",
                                                           Category::RendererDebug,
                                                           Specialization::Default, true, true};
+    // Dynamic resolution scaling: when the present-to-present frame time stays over ~1.15x the
+    // 60Hz target for a while, steps the internal resolution one level down and back up on
+    // sustained headroom; also steps down when AThermal reports the part at its thermal limit.
+    // Never rises above the level the user picked. Changes walk the same live-rescale path as the
+    // resolution slider, so it is off by default (visible resolution changes are a visual
+    // trade) and only reacts to sustained or thermal pressure.
+    SwitchableSetting<bool> renderer_drs{linkage, false, "renderer_drs", Category::RendererDebug,
+                                         Specialization::Default, true, true};
     // Drop degenerate draws that cannot produce a primitive: triangles with fewer than three
     // vertices and lines with fewer than two. Titles issue these for empty batches and the pipeline
     // setup costs more than the draw. Turn it off if a scene loses geometry.

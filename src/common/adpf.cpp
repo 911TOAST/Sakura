@@ -1,8 +1,12 @@
 #include "common/adpf.h"
+// SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <algorithm>
+#include "common/drs_policy.h"
 #if defined(__ANDROID__)
 #include <dlfcn.h>
+#include <android/api-level.h>
 #endif
 
 namespace Common {
@@ -167,5 +171,43 @@ void AdpfFrameTick(int64_t act_ns, int64_t tgt_ns) {
     }
     g_tid_lock.clear(std::memory_order_release);
 }
+
+#if defined(__ANDROID__)
+// Thermal headroom comes from android/thermal.h (NDK API 31+), dlopen'd next to the ADPF
+// performance-hint calls: the manager is process-global, so one lazy acquisition is enough.
+// Returns kThermalHeadroomUnavailable (defined in drs_policy.h) on any failure, so callers can
+// ignore the value instead of guessing.
+float ThermalHeadroom() noexcept {
+    static void* thermal_mgr = nullptr;
+    static bool  attempted  = false;
+    using AcquireFn = void* (*)();
+    // NDK ABI: float AThermal_getThermalHeadroom(AThermalManager*, int32_t forecast_seconds).
+    using HeadroomFn = float (*)(void*, int32_t);
+    static HeadroomFn fn_headroom = nullptr;
+
+    if (!attempted) {
+        attempted = true;
+        const int api_level = android_get_device_api_level();
+        if (api_level >= 31) {
+            void* lib = dlopen("libandroid.so", RTLD_NOW | RTLD_LOCAL);
+            if (lib) {
+                auto fn_acquire = reinterpret_cast<AcquireFn>(dlsym(lib, "AThermal_acquireManager"));
+                fn_headroom = reinterpret_cast<HeadroomFn>(dlsym(lib, "AThermal_getThermalHeadroom"));
+                if (fn_acquire && fn_headroom) {
+                    thermal_mgr = fn_acquire();
+                }
+            }
+        }
+    }
+    if (!thermal_mgr || !fn_headroom) {
+        return kThermalHeadroomUnavailable;
+    }
+    return fn_headroom(thermal_mgr, /*forecast_seconds*/ 1);
+}
+#else
+float ThermalHeadroom() noexcept {
+    return kThermalHeadroomUnavailable;
+}
+#endif
 
 }

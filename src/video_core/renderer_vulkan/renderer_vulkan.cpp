@@ -17,6 +17,7 @@
 #include "common/logging.h"
 #include <ranges>
 #include "common/scope_exit.h"
+#include "common/adpf.h"
 #include "common/settings.h"
 #include "core/core_timing.h"
 #include "core/frontend/graphics_context.h"
@@ -183,6 +184,8 @@ RendererVulkan::~RendererVulkan() {
 }
 
 void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebuffers) {
+    // DRS is stepped first so a level change this frame is applied by the rescale below.
+    TickDynamicResolution();
     ApplyPendingResolutionChange();
 
     SCOPE_EXIT {
@@ -331,7 +334,13 @@ void RendererVulkan::ApplyPendingResolutionChange() {
     // The renderer owns this translation on purpose. Writing Settings::values.resolution_info from
     // the UI thread while the GPU thread read it for a draw was a data race, and it could make the
     // render targets switch size one frame before their rescaled copies were reallocated.
-    const u32 setup = static_cast<u32>(Settings::values.resolution_setup.GetValue());
+    const u32 user_setup = static_cast<u32>(Settings::values.resolution_setup.GetValue());
+    // Fold the DRS offset in: while the policy holds the resolution down, the effective pick is
+    // drs_offset ladder steps below the user's setting, never above it and never below Res1_4X.
+    // drs_offset is written from this (GPU) thread only, so no lock is needed.
+    const u32 setup = static_cast<u32>(std::clamp(
+        static_cast<int>(user_setup) - drs_offset,
+        static_cast<int>(Settings::ResolutionSetup::Res1_4X), static_cast<int>(user_setup)));
     if (setup == applied_resolution_setup) {
         return;
     }
@@ -348,10 +357,56 @@ void RendererVulkan::ApplyPendingResolutionChange() {
     // charges each copy with GetScaledImageSizeBytes() at the time ScaleUp() created it, so refunding
     // with the new factor would leave total_used_memory skewed (underflow if the factor grew).
     rasterizer.GetTextureCache().InvalidateRescaledImages();
-    Settings::UpdateRescalingInfo();
+    // Under DRS the effective pick differs from the setting itself, so translate the folded value
+    // instead of letting UpdateRescalingInfo re-read the user's setting.
+    Settings::TranslateResolutionInfo(static_cast<Settings::ResolutionSetup>(setup),
+                                      Settings::values.resolution_info);
 
     LOG_INFO(Render_Vulkan, "[Rescale] Internal resolution applied live: {}",
              Settings::values.resolution_info.up_factor);
+}
+
+void RendererVulkan::TickDynamicResolution() {
+    const u32 user_setup = static_cast<u32>(Settings::values.resolution_setup.GetValue());
+    const bool enabled = Settings::values.renderer_drs.GetValue();
+    // The policy walks the Res* ladder only: ResTarget* picks derive their scale from a target
+    // height and have no position on the ladder, so DRS stays inert for those (and for picks at
+    // Res1_4X..Res3_4X by construction of the bounds below).
+    const bool usable = user_setup >= static_cast<u32>(Settings::ResolutionSetup::Res1X) &&
+                        user_setup <= static_cast<u32>(Settings::ResolutionSetup::Res8X);
+    if (!enabled || !usable) {
+        if (drs_active) {
+            LOG_INFO(Render_Vulkan,
+                     "[DRS] deactivated; internal resolution returns to the user's pick");
+        }
+        drs_active = false;
+        drs_offset = 0;
+        drs_enabled_prev = enabled;
+        drs_user_setup = user_setup;
+        return;
+    }
+    // Rebase whenever the enable state or the user's pick changes: the policy's range is
+    // [Res3_4X .. user pick], so a new pick needs a fresh Reset to keep level and range in sync.
+    if (!drs_enabled_prev || drs_user_setup != user_setup) {
+        drs_enabled_prev = true;
+        drs_user_setup = user_setup;
+        drs_policy.Reset(static_cast<int>(user_setup) - drs_offset,
+                         static_cast<int>(Settings::ResolutionSetup::Res3_4X),
+                         static_cast<int>(user_setup));
+    }
+    const std::int64_t present_ns = present_manager.LastPresentNs();
+    if (present_ns <= 0) {
+        // No present has been measured yet this session; the policy keeps its current level.
+        return;
+    }
+    const int level = drs_policy.Tick(present_ns, Common::ThermalHeadroom());
+    const int offset = static_cast<int>(user_setup) - level;
+    if (offset != drs_offset) {
+        drs_offset = offset;
+        drs_active = offset > 0;
+        LOG_INFO(Render_Vulkan, "[DRS] level {} -> internal setup index {} (user setup {})", level,
+                 level, user_setup);
+    }
 }
 
 void RendererVulkan::Report() const {
