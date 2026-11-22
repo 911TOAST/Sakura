@@ -155,12 +155,12 @@ VkBufferView Buffer::View(u32 offset, u32 size, VideoCore::Surface::PixelFormat 
 class QuadIndexBuffer {
 public:
     QuadIndexBuffer(const Device& device_, MemoryAllocator& memory_allocator_,
-                    Scheduler& scheduler_, StagingBufferPool& staging_pool_)
+                    Scheduler& scheduler_, StagingBufferPool& staging_pool_,
+                    BufferCacheRuntime* owner_ = nullptr)
         : device{device_}, memory_allocator{memory_allocator_}, scheduler{scheduler_},
-          staging_pool{staging_pool_} {}
+          staging_pool{staging_pool_}, owner{owner_} {}
 
     virtual ~QuadIndexBuffer() = default;
-
     void UpdateBuffer(u32 num_indices_) {
         if (num_indices_ <= num_indices) {
             return;
@@ -243,9 +243,13 @@ public:
         const size_t sub_first_offset = static_cast<size_t>(first % 4) * GetQuadsNum(num_indices);
         const size_t offset =
             (sub_first_offset + GetQuadsNum(first)) * 6ULL * BytesPerIndex(index_type);
-        scheduler.Record([buffer_ = *buffer, index_type_, offset](vk::CommandBuffer cmdbuf) {
-            cmdbuf.BindIndexBuffer(buffer_, offset, index_type_);
-        });
+        if (owner) {
+            owner->RecordIndexBind(*buffer, offset, index_type_);
+        } else {
+            scheduler.Record([buffer_ = *buffer, index_type_, offset](vk::CommandBuffer cmdbuf) {
+                cmdbuf.BindIndexBuffer(buffer_, offset, index_type_);
+            });
+        }
     }
 
 protected:
@@ -262,13 +266,16 @@ protected:
     MemoryCommit memory_commit{};
     VkIndexType index_type{};
     u32 num_indices = 0;
+    /// Null when standalone; set so quad binds share the runtime's index-bind dedup.
+    BufferCacheRuntime* owner = nullptr;
 };
 
 class QuadArrayIndexBuffer : public QuadIndexBuffer {
 public:
     QuadArrayIndexBuffer(const Device& device_, MemoryAllocator& memory_allocator_,
-                         Scheduler& scheduler_, StagingBufferPool& staging_pool_)
-        : QuadIndexBuffer(device_, memory_allocator_, scheduler_, staging_pool_) {}
+                         Scheduler& scheduler_, StagingBufferPool& staging_pool_,
+                         BufferCacheRuntime* owner_ = nullptr)
+        : QuadIndexBuffer(device_, memory_allocator_, scheduler_, staging_pool_, owner_) {}
 
     ~QuadArrayIndexBuffer() = default;
 
@@ -307,8 +314,9 @@ private:
 class QuadStripIndexBuffer : public QuadIndexBuffer {
 public:
     QuadStripIndexBuffer(const Device& device_, MemoryAllocator& memory_allocator_,
-                         Scheduler& scheduler_, StagingBufferPool& staging_pool_)
-        : QuadIndexBuffer(device_, memory_allocator_, scheduler_, staging_pool_) {}
+                         Scheduler& scheduler_, StagingBufferPool& staging_pool_,
+                         BufferCacheRuntime* owner_ = nullptr)
+        : QuadIndexBuffer(device_, memory_allocator_, scheduler_, staging_pool_, owner_) {}
 
     ~QuadStripIndexBuffer() = default;
 
@@ -364,9 +372,11 @@ BufferCacheRuntime::BufferCacheRuntime(const Device& device_, MemoryAllocator& m
                                                  compute_pass_descriptor_queue);
     }
     quad_array_index_buffer = std::make_shared<QuadArrayIndexBuffer>(device_, memory_allocator_,
-                                                                     scheduler_, staging_pool_);
+                                                                     scheduler_, staging_pool_,
+                                                                     this);
     quad_strip_index_buffer = std::make_shared<QuadStripIndexBuffer>(device_, memory_allocator_,
-                                                                     scheduler_, staging_pool_);
+                                                                     scheduler_, staging_pool_,
+                                                                     this);
 }
 
 StagingBufferRef BufferCacheRuntime::UploadStagingBuffer(size_t size) {
@@ -590,17 +600,30 @@ void BufferCacheRuntime::BindIndexBuffer(PrimitiveTopology topology, IndexFormat
         ReserveNullBuffer();
         vk_buffer = *null_buffer;
     }
-    scheduler.Record([vk_buffer, vk_offset, vk_index_type](vk::CommandBuffer cmdbuf) {
-        cmdbuf.BindIndexBuffer(vk_buffer, vk_offset, vk_index_type);
-    });
+    RecordIndexBind(vk_buffer, vk_offset, vk_index_type);
+}
+
+void BufferCacheRuntime::RecordIndexBind(VkBuffer vk_buffer, VkDeviceSize vk_offset,
+                                         VkIndexType vk_index_type) {
+    // Skip the driver bind when it would rebind exactly what is already bound. The render-pass
+    // serial epoch guards against stale assumptions across command-boundary rebinds.
+    const u64 epoch = scheduler.RenderPassSerial();
+    if (epoch != last_index_bind_epoch || vk_buffer != last_bound_index_buffer ||
+        vk_offset != last_bound_index_offset || vk_index_type != last_bound_index_type) {
+        last_index_bind_epoch = epoch;
+        last_bound_index_buffer = vk_buffer;
+        last_bound_index_offset = vk_offset;
+        last_bound_index_type = vk_index_type;
+        scheduler.Record([vk_buffer, vk_offset, vk_index_type](vk::CommandBuffer cmdbuf) {
+            cmdbuf.BindIndexBuffer(vk_buffer, vk_offset, vk_index_type);
+        });
+    }
 }
 
 void BufferCacheRuntime::BindQuadIndexBuffer(PrimitiveTopology topology, u32 first, u32 count) {
     if (count == 0) {
         ReserveNullBuffer();
-        scheduler.Record([this](vk::CommandBuffer cmdbuf) {
-            cmdbuf.BindIndexBuffer(*null_buffer, 0, VK_INDEX_TYPE_UINT32);
-        });
+        RecordIndexBind(*null_buffer, 0, VK_INDEX_TYPE_UINT32);
         return;
     }
 

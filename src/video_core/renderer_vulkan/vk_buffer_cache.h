@@ -137,10 +137,14 @@ public:
 
     void ClearBuffer(VkBuffer dest_buffer, u32 offset, size_t size, u32 value);
 
-    void BindIndexBuffer(PrimitiveTopology topology, IndexFormat index_format, u32 num_indices,
-                         u32 base_vertex, VkBuffer buffer, u32 offset, u32 size);
+    void BindIndexBuffer(PrimitiveTopology topology, IndexFormat index_format, u32 num_indices,                         u32 base_vertex, VkBuffer buffer, u32 offset, u32 size);
 
     void BindQuadIndexBuffer(PrimitiveTopology topology, u32 first, u32 count);
+
+    /// Records (or skips) a vkCmdBindIndexBuffer, shared by BindIndexBuffer and the quad
+    /// index-buffer binds so every path goes through one dedup. See the member comment for the
+    /// epoch guard.
+    void RecordIndexBind(VkBuffer buffer, VkDeviceSize offset, VkIndexType type);
 
     void BindVertexBuffer(u32 index, VkBuffer buffer, u32 offset, u32 size, u32 stride);
 
@@ -212,6 +216,15 @@ private:
     bool pending_copy_barrier = false;
     bool limit_dynamic_storage_buffers = false;
     u32 max_dynamic_storage_buffers = (std::numeric_limits<u32>::max)();
+
+    // Last-bound index buffer dedup. An identical BindIndexBuffer with no intervening bind is
+    // recorded: the driver call is skipped. Guarded by the scheduler's render-pass serial, which
+    // is bumped whenever the command stream's bound state is dropped (new command buffer or a
+    // blit that rebinds behind the renderer's back), so a stale answer cannot survive there.
+    VkBuffer last_bound_index_buffer = VK_NULL_HANDLE;
+    VkDeviceSize last_bound_index_offset = 0;
+    VkIndexType last_bound_index_type = VK_INDEX_TYPE_MAX_ENUM;
+    u64 last_index_bind_epoch = 0;
 };
 
 struct BufferCacheParams {
