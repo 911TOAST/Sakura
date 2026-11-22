@@ -523,6 +523,15 @@ private:
     Common::ScratchBuffer<u8> swizzle_data_buffer;
     Common::ScratchBuffer<u8> unswizzle_data_buffer;
 
+    /// Single-slot reusable scratch for asynchronous decodes (one texture_decode_worker thread).
+    /// The slot is handed to a queued decode with release/acquire semantics through
+    /// async_decode_scratch_free: the GPU thread fills it only when the slot is free, the decode
+    /// worker releases it after its last read. When the slot is still in use, the decode falls
+    /// back to a per-decode heap buffer like before. This removes the per-decode allocation of
+    /// the full unswizzled image without sharing unsafely.
+    Common::ScratchBuffer<u8> async_decode_scratch;
+    std::atomic<bool> async_decode_scratch_free{true};
+
     u64 modification_tick = 0;
     u64 frame_tick = 0;
     u64 last_sampler_gc_frame = (std::numeric_limits<u64>::max)();

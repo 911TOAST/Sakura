@@ -1449,17 +1449,35 @@ void TextureCache<P>::QueueAsyncDecode(Image& image, ImageId image_id) {
     decode->image_id = image_id;
     async_decodes.push_back(std::move(decode));
 
-    std::vector<u8> local_unswizzle_data_buffer(image.unswizzled_size_bytes, 0);
+    // Reuse the async-decode scratch slot when it is free (the previous decode's worker has
+    // finished with it); otherwise fall back to a per-decode heap buffer as before.
+    const bool use_member_scratch = async_decode_scratch_free.exchange(false,
+                                                                    std::memory_order_acq_rel);
+    std::unique_ptr<std::vector<u8>> local_buffer;
+    if (use_member_scratch) {
+        async_decode_scratch.resize_destructive(image.unswizzled_size_bytes);
+        std::memset(async_decode_scratch.data(), 0, image.unswizzled_size_bytes);
+    } else {
+        local_buffer = std::make_unique<std::vector<u8>>(image.unswizzled_size_bytes, 0);
+    }
+    const std::span<u8> input_span{
+        use_member_scratch ? async_decode_scratch.data() : local_buffer->data(),
+        image.unswizzled_size_bytes};
     Tegra::Memory::GpuGuestMemory<u8, Tegra::Memory::GuestMemoryFlags::UnsafeRead> swizzle_data(*gpu_memory, image.gpu_addr, image.guest_size_bytes, &swizzle_data_buffer);
-    auto copies = UnswizzleImage(*gpu_memory, image.gpu_addr, image.info, swizzle_data, local_unswizzle_data_buffer);
+    auto copies = UnswizzleImage(*gpu_memory, image.gpu_addr, image.info, swizzle_data, input_span);
     const size_t out_size = MapSizeBytes(image);
 
-    auto func = [out_size, copies, info = image.info,
-                 input = std::move(local_unswizzle_data_buffer),
+    auto func = [this, out_size, copies, info = image.info, input_span,
+                 local = std::move(local_buffer),
                  async_decode = decode_ptr]() mutable {
         async_decode->decoded_data.resize_destructive(out_size);
         std::span copies_span{copies.data(), copies.size()};
-        ConvertImage(input, info, async_decode->decoded_data, copies_span);
+        ConvertImage(input_span, info, async_decode->decoded_data, copies_span);
+
+        if (!local) {
+            // The slot scratch is done being read; hand it back for the next queued decode.
+            this->async_decode_scratch_free.store(true, std::memory_order_release);
+        }
 
         // TODO: Do we need this lock?
         std::unique_lock lock{async_decode->mutex};
