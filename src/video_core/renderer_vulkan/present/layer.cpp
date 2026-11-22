@@ -113,7 +113,7 @@ void Layer::ConfigureDraw(const Device& device, PresentPushConstants* out_push_c
     SetAntiAliasPass(device);
 
     // Finish any pending renderpass
-    scheduler.RequestOutsideRenderPassOperationContext();
+    scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::PresentFilter);
     scheduler.Wait(resource_ticks[image_index]);
     SCOPE_EXIT {
         resource_ticks[image_index] = scheduler.CurrentTick();

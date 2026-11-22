@@ -806,7 +806,7 @@ void RasterizerVulkan::DispatchCompute() {
         const auto post_op = VideoCommon::ObtainBufferOperation::DiscardWrite;
         const auto [buffer, offset] =
             buffer_cache.ObtainBuffer(*indirect_address, 12, sync_info, post_op);
-        scheduler.RequestOutsideRenderPassOperationContext();
+        scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::ComputePass);
         scheduler.Record([indirect_buffer = buffer->Handle(),
                           indirect_offset = offset](vk::CommandBuffer cmdbuf) {
             cmdbuf.DispatchIndirect(indirect_buffer, indirect_offset);
@@ -814,7 +814,7 @@ void RasterizerVulkan::DispatchCompute() {
         return;
     }
     const std::array<u32, 3> dim{qmd.grid_dim_x, qmd.grid_dim_y, qmd.grid_dim_z};
-    scheduler.RequestOutsideRenderPassOperationContext();
+    scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::ComputePass);
     static constexpr VkMemoryBarrier READ_BARRIER{
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
         .pNext = nullptr,
@@ -1103,6 +1103,7 @@ void RasterizerVulkan::TickFrame() {
     depth_buffer_dirty = true;
     guest_descriptor_queue.TickFrame();
     compute_pass_descriptor_queue.TickFrame();
+    scheduler.stats.MaybeLogTick();
     fence_manager.TickFrame();
     staging_pool.TickFrame();
     {

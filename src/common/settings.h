@@ -473,6 +473,12 @@ struct Values {
     SwitchableSetting<bool> renderer_store_elision{linkage, true, "renderer_store_elision",
                                                    Category::RendererDebug,
                                                    Specialization::Default, true, true};
+    // Log tile-flow diagnostics (render-pass begins, mid-frame render-pass breaks by cause,
+    // clear-as-loadOp hits, elided stores) once every ~600 frames to the Vulkan log. Counters are
+    // always collected; this only toggles the periodic logcat dump.
+    SwitchableSetting<bool> renderer_tileflow_counters{linkage, false, "renderer_tileflow_counters",
+                                                       Category::RendererDebug,
+                                                       Specialization::Default, true, true};
     // Recompress guest BCn colour textures (BC1/BC2/BC3/BC7) to native ASTC 4x4 at upload instead
     // of inflating them to uncompressed RGBA8. Mali samples ASTC natively, so this keeps texture
     // memory and fetch bandwidth close to the guest format (4x smaller than RGBA8) like a native

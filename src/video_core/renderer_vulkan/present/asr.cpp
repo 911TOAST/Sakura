@@ -753,7 +753,7 @@ VkImageView ASR::Draw(const Device& d, size_t i, VkImage src, VkImageView sv, co
     if (tm) {
         tq.Arm(i);
     }
-    sch.RequestOutsideRenderPassOperationContext();
+    sch.RequestOutsideRenderPassOperationContext(TileFlowBreak::PresentFilter);
     sch.Record([this, i, tm, rfresh, cfresh, reuse, imgs, oi, sa0, sa1, sb1, sb2, sc3, sc2, sc1,
                 sd1, pa, pb1, pb2, pc3, pc2, pc1, pd, cp, dd, cutb, rsz,
                 lz](vk::CommandBuffer cb) {

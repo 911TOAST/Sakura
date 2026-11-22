@@ -886,7 +886,7 @@ void BlitScale(Scheduler& scheduler, VkImage src_image, VkImage dst_image, const
     const bool is_bilinear{is_color && !IsPixelFormatInteger(info.format)};
     const VkFilter vk_filter = is_bilinear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
 
-    scheduler.RequestOutsideRenderPassOperationContext();
+    scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::BlitImage);
     scheduler.Record([dst_image, src_image, extent, resources, aspect_mask, resolution, is_2d,
                       vk_filter, up_scaling](vk::CommandBuffer cmdbuf) {
         const VkOffset2D src_size{
@@ -1126,7 +1126,7 @@ void TextureCacheRuntime::BarrierFeedbackLoop() {
         // force the full tile writeback the extension exists to avoid.
         return;
     }
-    scheduler.RequestOutsideRenderPassOperationContext();
+    scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageLayout);
 }
 
 void TextureCacheRuntime::ReinterpretImage(Image& dst, Image& src,
@@ -1156,7 +1156,7 @@ void TextureCacheRuntime::ReinterpretImage(Image& dst, Image& src,
     const VkBuffer copy_buffer = GetTemporaryBuffer(total_size);
     const VkImage dst_image = dst.Handle();
     const VkImage src_image = src.Handle();
-    scheduler.RequestOutsideRenderPassOperationContext();
+    scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageLayout);
     scheduler.Record([dst_image, src_image, copy_buffer, src_aspect_mask, dst_aspect_mask,
                       vk_in_copies, vk_out_copies](vk::CommandBuffer cmdbuf) {
         RangedBarrierRange dst_range;
@@ -1333,7 +1333,7 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
         return;
     }
     const bool is_resolve = is_src_msaa && !is_dst_msaa;
-    scheduler.RequestOutsideRenderPassOperationContext();
+    scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::BlitImage);
     scheduler.Record([filter, dst_region, src_region, dst_image, src_image, dst_layers, src_layers,
                       aspect_mask, is_resolve](vk::CommandBuffer cmdbuf) {
         const std::array read_barriers{
@@ -1615,7 +1615,7 @@ void TextureCacheRuntime::CopyImage(Image& dst, Image& src,
     });
     const VkImage dst_image = dst.Handle();
     const VkImage src_image = src.Handle();
-    scheduler.RequestOutsideRenderPassOperationContext();
+    scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::BlitImage);
     scheduler.Record([dst_image, src_image, aspect_mask, vk_copies](vk::CommandBuffer cmdbuf) {
         RangedBarrierRange dst_range;
         RangedBarrierRange src_range;
@@ -1876,7 +1876,7 @@ void Image::UploadMemory(VkBuffer buffer, VkDeviceSize offset,
         temp_wrapper->initialized = true;
 
         // Upload to the temporary non-MSAA image
-        scheduler->RequestOutsideRenderPassOperationContext();
+        scheduler->RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageUpload);
         auto vk_copies = TransformBufferImageCopies(copies, offset, temp_wrapper->aspect_mask);
         const VkBuffer src_buffer = buffer;
         const VkImage temp_vk_image = *temp_wrapper->original_image;
@@ -1914,7 +1914,7 @@ void Image::UploadMemory(VkBuffer buffer, VkDeviceSize offset,
     }
 
     // Regular non-MSAA upload (original behavior preserved)
-    scheduler->RequestOutsideRenderPassOperationContext();
+    scheduler->RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageUpload);
     auto vk_copies = TransformBufferImageCopies(copies, offset, aspect_mask);
     const VkBuffer src_buffer = buffer;
     const VkImage vk_image = *original_image;
@@ -1992,7 +1992,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                     TransformBufferImageCopies(copies, offsets_span[index], aspect_mask));
             }
 
-            scheduler->RequestOutsideRenderPassOperationContext();
+            scheduler->RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageDownload);
             scheduler->Record([buffers = std::move(buffers_vector), image = *temp_wrapper.original_image,
                                aspect_mask_ = aspect_mask, vk_copies](vk::CommandBuffer cmdbuf) {
                 const VkImageMemoryBarrier read_barrier{
@@ -2059,7 +2059,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
             vk_copies.emplace_back(
                 TransformBufferImageCopies(copies, offsets_span[index], aspect_mask));
         }
-        scheduler->RequestOutsideRenderPassOperationContext();
+        scheduler->RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageDownload);
         scheduler->Record([buffers = std::move(buffers_vector), image = *original_image,
                            aspect_mask_ = aspect_mask, vk_copies](vk::CommandBuffer cmdbuf) {
             const VkImageMemoryBarrier read_barrier{
@@ -2851,7 +2851,7 @@ void TextureCacheRuntime::TransitionImageLayout(Image& image) {
                 .layerCount = VK_REMAINING_ARRAY_LAYERS,
             },
         };
-        scheduler.RequestOutsideRenderPassOperationContext();
+        scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageLayout);
         scheduler.Record([barrier](vk::CommandBuffer cmdbuf) {
             cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
                                    vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, 0, barrier);
@@ -2909,7 +2909,7 @@ void Image::TransitionLayout(VkImageLayout new_layout, VkAccessFlags src_access,
             .layerCount = VK_REMAINING_ARRAY_LAYERS,
         },
     };
-    scheduler->RequestOutsideRenderPassOperationContext();
+    scheduler->RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageLayout);
     scheduler->Record([barrier, src_stage, dst_stage](vk::CommandBuffer cmdbuf) {
         cmdbuf.PipelineBarrier(src_stage, dst_stage, 0, barrier);
     });

@@ -23,6 +23,7 @@
 #include "common/polyfill_thread.h"
 #include "common/settings.h"
 #include "video_core/renderer_vulkan/vk_master_semaphore.h"
+#include "video_core/renderer_vulkan/vk_tileflow_stats.h"
 #include "video_core/vulkan_common/vulkan_wrapper.h"
 
 namespace VideoCommon {
@@ -99,8 +100,14 @@ public:
     }
 
     /// Requests the current execution context to be able to execute operations only allowed outside
-    /// of a renderpass.
-    void RequestOutsideRenderPassOperationContext();
+    /// of a renderpass. \\p reason records why the pass had to be closed, for the tile-flow
+    /// counters (vk_tileflow_stats.h); pass a classified TileFlowBreak from sites you know.
+    void RequestOutsideRenderPassOperationContext(
+        TileFlowBreak reason = TileFlowBreak::Other);
+
+    /// Diagnostic counters for the tile-flow work. Collection is unconditional; behaviour never
+    /// depends on these values.
+    TileFlowStats stats;
 
     /// Returns true when a render pass is currently active in the scheduler state.
     bool IsRenderPassActive() const {

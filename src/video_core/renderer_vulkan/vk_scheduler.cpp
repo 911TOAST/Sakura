@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <bit>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -174,6 +175,7 @@ void Scheduler::RequestRenderpass(const Framebuffer* framebuffer, bool general_l
     state.feedback_layout = feedback_layout;
     current_pass_slot = std::make_shared<std::atomic<VkRenderPass>>(renderpass);
     ++render_pass_serial;
+    stats.pass_begins.fetch_add(1, std::memory_order_relaxed);
 
     // Log render pass begin
     if (GPU::Logging::IsActive() &&
@@ -206,6 +208,7 @@ bool Scheduler::RequestRenderpassClear(const Framebuffer* framebuffer,
                                       std::span<const VkClearValue> clear_values) {
     const VkRenderPass renderpass = framebuffer->ClearRenderPass();
     if (renderpass == VK_NULL_HANDLE || renderpass == framebuffer->RenderPass()) {
+        stats.clear_loadop_misses.fetch_add(1, std::memory_order_relaxed);
         return false;
     }
     const VkFramebuffer framebuffer_handle = framebuffer->Handle();
@@ -213,8 +216,10 @@ bool Scheduler::RequestRenderpassClear(const Framebuffer* framebuffer,
     if (renderpass == state.renderpass && framebuffer_handle == state.framebuffer) {
         // Already open: the clear-values of a begin that happened before this call do not describe
         // what the guest is asking for now, so the caller has to clear explicitly.
+        stats.clear_loadop_misses.fetch_add(1, std::memory_order_relaxed);
         return false;
     }
+    stats.clear_loadop_hits.fetch_add(1, std::memory_order_relaxed);
     EndRenderPass(framebuffer, true);
     state.renderpass = renderpass;
     state.framebuffer = framebuffer_handle;
@@ -225,6 +230,7 @@ bool Scheduler::RequestRenderpassClear(const Framebuffer* framebuffer,
     state.feedback_layout = false;
     current_pass_slot = std::make_shared<std::atomic<VkRenderPass>>(renderpass);
     ++render_pass_serial;
+    stats.pass_begins.fetch_add(1, std::memory_order_relaxed);
 
     std::array<VkClearValue, 9> values{};
     const size_t count = std::min<size_t>(clear_values.size(), values.size());
@@ -252,7 +258,10 @@ bool Scheduler::RequestRenderpassClear(const Framebuffer* framebuffer,
     return true;
 }
 
-void Scheduler::RequestOutsideRenderPassOperationContext() {
+void Scheduler::RequestOutsideRenderPassOperationContext(TileFlowBreak reason) {
+    if (state.renderpass != VK_NULL_HANDLE) {
+        stats.AddBreak(reason);
+    }
     EndRenderPass();
 }
 
@@ -520,6 +529,7 @@ void Scheduler::EndRenderPass(const Framebuffer* next_framebuffer, bool next_is_
                                                                 state.feedback_layout,
                                                                 state.renderpass_is_clear),
                     std::memory_order_release);
+                stats.AddStoreElide(static_cast<u32>(std::popcount(mask)));
             }
         }
 
