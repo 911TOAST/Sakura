@@ -20,6 +20,7 @@ add_executable(tests
     core/core_timing.cpp
     core/internal_network/network.cpp
     video_core/clear_derive.cpp
+    video_core/vertex_compaction.cpp
     video_core/memory_tracker.cpp
     input_common/calibration_configuration_job.cpp
 )

@@ -653,7 +653,10 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .has_broken_robust =
             device.IsNvidia() && device.GetNvidiaArch() <= NvidiaArchitecture::Arch_Pascal,
         .min_ssbo_alignment = device.GetStorageBufferAlignment(),
-        .max_user_clip_distances = device.GetMaxUserClipDistances()
+        .max_user_clip_distances = device.GetMaxUserClipDistances(),
+        // Compact guest vertex locations to the host limit so shaders using locations above it
+        // (e.g. 32-location guests on a 16-location driver) still build their pipelines.
+        .max_vertex_input_attributes = device.GetMaxVertexInputAttributes()
     };
     profile.relax_fp32_precision = Settings::values.renderer_relaxed_precision.GetValue();
     profile.collect_debug_info = Settings::values.renderer_debug.GetValue();
@@ -700,7 +703,9 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
     host_info.ApplyDescriptorLimitPolicy();
 
     if (device.GetMaxVertexInputAttributes() < Maxwell::NumVertexAttributes) {
-        LOG_WARNING(Render_Vulkan, "maxVertexInputAttributes is too low: {} < {}",
+        LOG_WARNING(Render_Vulkan,
+                    "maxVertexInputAttributes is too low: {} < {}; compacting vertex input "
+                    "locations to fit",
                     device.GetMaxVertexInputAttributes(), Maxwell::NumVertexAttributes);
     }
     if (device.GetMaxVertexInputBindings() < Maxwell::NumVertexArrays) {

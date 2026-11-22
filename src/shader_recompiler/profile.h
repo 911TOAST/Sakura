@@ -98,6 +98,10 @@ struct Profile {
 
     u64 min_ssbo_alignment{};
     u32 max_user_clip_distances{};
+    /// Host limit for vertex input attributes. When 0 < limit < IR::NUM_GENERICS, guest vertex
+    /// input locations are compacted (see attribute_compaction.h), because a module declaring
+    /// higher locations fails pipeline creation on such hosts. 0 keeps guest numbering.
+    u32 max_vertex_input_attributes{};
 
     /// Allow the SPIR-V backend to decorate fragment FP32 arithmetic as RelaxedPrecision
     bool relax_fp32_precision{};

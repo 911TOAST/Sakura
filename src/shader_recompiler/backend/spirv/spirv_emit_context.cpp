@@ -15,6 +15,7 @@
 
 #include "common/common_types.h"
 #include "common/div_ceil.h"
+#include "shader_recompiler/attribute_compaction.h"
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 
@@ -1558,6 +1559,13 @@ void EmitContext::DefineInputs(const IR::Program& program) {
         loads[IR::Attribute::TessellationEvaluationPointV]) {
         tess_coord = DefineInput(*this, F32[3], false, spv::BuiltIn::TessCoord);
     }
+    // Vertex input location compaction (see attribute_compaction.h). Inactive (identity mapping)
+    // for every other stage and whenever the profile does not ask for compaction.
+    const std::array<u32, IR::NUM_GENERICS> input_locations{
+        CompactVertexInputLocations(runtime_info.previous_stage_stores, loads,
+                                    runtime_info.generic_input_types,
+                                    stage == Stage::VertexB ? profile.max_vertex_input_attributes
+                                                            : 0u)};
     for (size_t index = 0; index < IR::NUM_GENERICS; ++index) {
         const AttributeType input_type{runtime_info.generic_input_types[index]};
         if (!runtime_info.previous_stage_stores.Generic(index)) {
@@ -1571,7 +1579,7 @@ void EmitContext::DefineInputs(const IR::Program& program) {
         }
         const Id type{GetAttributeType(*this, input_type)};
         const Id id{DefineInput(*this, type, true)};
-        Decorate(id, spv::Decoration::Location, static_cast<u32>(index));
+        Decorate(id, spv::Decoration::Location, input_locations[index]);
         Name(id, fmt::format("in_attr{}", index));
         input_generics[index] = GetAttributeInfo(*this, input_type, id);
 

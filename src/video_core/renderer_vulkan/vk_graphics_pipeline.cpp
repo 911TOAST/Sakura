@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <array>
 #include <iostream>
 #include <span>
 
@@ -27,6 +28,7 @@
 #include "video_core/texture_cache/texture_cache.h"
 #include "video_core/vulkan_common/vulkan_device.h"
 #include "video_core/gpu_logging/gpu_logging.h"
+#include "shader_recompiler/attribute_compaction.h"
 #include "common/settings.h"
 
 #if defined(_MSC_VER) && defined(NDEBUG)
@@ -661,6 +663,25 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
     static_vector<VkVertexInputBindingDivisorDescriptionEXT, 32> vertex_binding_divisors;
     static_vector<VkVertexInputAttributeDescription, 32> vertex_attributes;
     if (!key.state.dynamic_vertex_input) {
+        // When the host vertex attribute limit is below the guest's 32, compact the used
+        // locations the same way the SPIR-V backend does (attribute_compaction.h). Without this
+        // a module or pipeline declaring locations above the limit fails to build and the model
+        // does not render (observed on a 16-attribute ARM Mali driver).
+        const u32 max_vertex_attributes{device.GetMaxVertexInputAttributes()};
+        const bool compact_attributes =
+            max_vertex_attributes != 0 && max_vertex_attributes < IR::NUM_GENERICS;
+        std::array<u32, IR::NUM_GENERICS> location_map{};
+        if (compact_attributes) {
+            Shader::VaryingState full_stores;
+            full_stores.mask.set();
+            location_map = Shader::CompactVertexInputLocations(
+                full_stores, stage_infos[0].loads, stage_infos[0].generic_input_types,
+                max_vertex_attributes);
+        } else {
+            for (u32 index = 0; index < IR::NUM_GENERICS; ++index) {
+                location_map[index] = index;
+            }
+        }
         const size_t num_vertex_arrays = (std::min)(
             Maxwell::NumVertexArrays, static_cast<size_t>(device.GetMaxVertexInputBindings()));
         for (size_t index = 0; index < num_vertex_arrays; ++index) {
@@ -688,7 +709,7 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
                 continue;
             }
             vertex_attributes.push_back({
-                .location = static_cast<u32>(index),
+                .location = location_map[index],
                 .binding = attribute.buffer,
                 .format = MaxwellToVK::VertexFormat(device, attribute.Type(), attribute.Size()),
                 .offset = attribute.offset,
