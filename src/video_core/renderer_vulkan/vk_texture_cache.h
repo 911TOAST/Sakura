@@ -241,6 +241,14 @@ public:
     [[nodiscard]] VkRenderPass RenderPassStoreElide(u16 mask, bool general_layout,
                                                     bool feedback_layout, bool clear) const;
 
+    /// Clear-variant pass that defines ONLY the aspects in \p color_mask (bit k = colour RT k)
+    /// / \p depth / \p stencil at begin; every other aspect keeps LOAD. When the mask covers all
+    /// present aspects this returns the prebuilt all-clear variant, so the legacy path keeps its
+    /// exact handle. Built on demand from base_key like RenderPassStoreElide.
+    [[nodiscard]] VkRenderPass RenderPassClearAspect(u8 color_mask, bool depth_clear,
+                                                     bool stencil_clear, bool general_layout,
+                                                     bool feedback_layout) const;
+
 private:
     vk::Framebuffer framebuffer;
     VkRenderPass renderpass{};

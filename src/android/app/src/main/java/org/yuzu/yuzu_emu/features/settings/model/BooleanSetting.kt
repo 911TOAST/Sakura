@@ -32,6 +32,8 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     NO_WELL("no_well"),
     RENDERER_MAXWELL_BYPASS("renderer_maxwell_bypass"),
     RENDERER_CLEAR_LOADOP("renderer_clear_loadop"),
+    RENDERER_CLEAR_LOADOP_PARTIAL("renderer_clear_loadop_partial"),
+    RENDERER_TILEFLOW_COUNTERS("renderer_tileflow_counters"),
     RENDERER_STORE_ELISION("renderer_store_elision"),
     RENDERER_RELAXED_PRECISION("renderer_relaxed_precision"),
     RENDERER_BCN_TO_ASTC("renderer_bcn_to_astc"),

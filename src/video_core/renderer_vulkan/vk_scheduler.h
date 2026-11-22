@@ -89,9 +89,12 @@ public:
 
     /// Requests to begin the variant of the framebuffer's render pass whose attachments are
     /// defined at pass begin instead of loaded. Returns false when no such pass was begun, in which
-    /// case the caller has to clear explicitly as usual.
+    /// case the caller has to clear explicitly as usual. \p forced_variant (e.g. the result of
+    /// Framebuffer::RenderPassClearAspect) selects a partial-clear variant; VK_NULL_HANDLE keeps
+    /// the legacy all-clear variant.
     bool RequestRenderpassClear(const Framebuffer* framebuffer,
-                                std::span<const VkClearValue> clear_values);
+                                std::span<const VkClearValue> clear_values,
+                                VkRenderPass forced_variant = VK_NULL_HANDLE);
 
     /// Bumped every time a render pass begins or ends, or the command stream's bound state is
     /// dropped. A renderer that caches command-stream state (bound pipeline, descriptor sets) uses

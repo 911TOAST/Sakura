@@ -442,6 +442,15 @@ struct Values {
     SwitchableSetting<bool> renderer_clear_loadop{linkage, true, "renderer_clear_loadop",
                                                   Category::RendererDebug,
                                                   Specialization::Default, true, true};
+    // Extends the clear-loadop path to partial clears: single RT of an MRT target, depth without
+    // stencil (and vice versa), and scissored clears whose clamped rect still covers the whole
+    // render area. Only aspects the guest actually clears become CLEAR; every other aspect keeps
+    // LOAD, so it is a superset of the legacy all-aspect gate. Reverting to off restores the
+    // all-aspect-only behaviour.
+    SwitchableSetting<bool> renderer_clear_loadop_partial{linkage, true,
+                                                          "renderer_clear_loadop_partial",
+                                                          Category::RendererDebug,
+                                                          Specialization::Default, true, true};
     // Drop degenerate draws that cannot produce a primitive: triangles with fewer than three
     // vertices and lines with fewer than two. Titles issue these for empty batches and the pipeline
     // setup costs more than the draw. Turn it off if a scene loses geometry.

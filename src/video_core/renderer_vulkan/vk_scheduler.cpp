@@ -165,6 +165,18 @@ void Scheduler::RequestRenderpass(const Framebuffer* framebuffer, bool general_l
         render_area.height == state.render_area.height) {
         return;
     }
+    // Partial-clear variants (renderer_clear_loadop_partial): an already-open clear-variant of
+    // this framebuffer has every attachment fully defined at begin (cleared or loaded), which is
+    // exactly the attachment state the requested loading pass would establish. Reusing the open
+    // pass therefore skips an end/store/load/begin round trip without changing what any draw
+    // reads or writes; only the layout family must match the request.
+    if (Settings::values.renderer_clear_loadop_partial.GetValue() && state.renderpass_is_clear &&
+        framebuffer_handle == state.framebuffer &&
+        state.general_layout == general_layout && state.feedback_layout == feedback_layout &&
+        render_area.width == state.render_area.width &&
+        render_area.height == state.render_area.height) {
+        return;
+    }
     EndRenderPass();
     state.renderpass = renderpass;
     state.framebuffer = framebuffer_handle;
@@ -205,8 +217,11 @@ void Scheduler::RequestRenderpass(const Framebuffer* framebuffer, bool general_l
 }
 
 bool Scheduler::RequestRenderpassClear(const Framebuffer* framebuffer,
-                                      std::span<const VkClearValue> clear_values) {
-    const VkRenderPass renderpass = framebuffer->ClearRenderPass();
+                                       std::span<const VkClearValue> clear_values,
+                                       VkRenderPass forced_variant) {
+    const VkRenderPass renderpass = forced_variant != VK_NULL_HANDLE
+                                        ? forced_variant
+                                        : framebuffer->ClearRenderPass();
     if (renderpass == VK_NULL_HANDLE || renderpass == framebuffer->RenderPass()) {
         stats.clear_loadop_misses.fetch_add(1, std::memory_order_relaxed);
         return false;

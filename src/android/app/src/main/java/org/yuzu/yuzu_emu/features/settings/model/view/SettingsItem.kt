@@ -723,6 +723,20 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.RENDERER_CLEAR_LOADOP_PARTIAL,
+                    titleId = R.string.renderer_clear_loadop_partial,
+                    descriptionId = R.string.renderer_clear_loadop_partial_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_TILEFLOW_COUNTERS,
+                    titleId = R.string.renderer_tileflow_counters,
+                    descriptionId = R.string.renderer_tileflow_counters_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_STORE_ELISION,
                     titleId = R.string.renderer_store_elision,
                     descriptionId = R.string.renderer_store_elision_description

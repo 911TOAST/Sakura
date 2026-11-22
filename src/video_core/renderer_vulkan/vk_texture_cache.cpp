@@ -2721,7 +2721,10 @@ void Framebuffer::CreateFramebuffer(TextureCacheRuntime& runtime,
     pass_cache = &runtime.render_pass_cache;
 
     RenderPassKey clear_key = renderpass_key;
-    clear_key.color_clear = true;
+    // All-aspect clear variant: every valid colour bit set. Partial-aspect
+    // variants are built on demand in RenderPassClearAspect().
+    clear_key.color_clear_mask =
+        num_colors != 0 ? static_cast<u8>((1u << num_colors) - 1u) : u8{0};
     clear_key.depth_clear = has_depth;
     clear_key.stencil_clear = has_stencil;
 
@@ -2784,7 +2787,7 @@ void Framebuffer::CreateFramebuffer(TextureCacheRuntime& runtime,
 VkRenderPass Framebuffer::RenderPassStoreElide(u16 mask, bool general_layout, bool feedback_layout,
                                                bool clear) const {
     RenderPassKey key = base_key;
-    key.color_clear = clear;
+    key.color_clear_mask = clear ? static_cast<u8>((1u << num_color_buffers) - 1u) : u8{0};
     key.depth_clear = clear && has_depth;
     key.stencil_clear = clear && has_stencil;
     // Mirror the variant selection in CreateFramebuffer: a feedback pass keeps the optimal layout,
@@ -2796,6 +2799,20 @@ VkRenderPass Framebuffer::RenderPassStoreElide(u16 mask, bool general_layout, bo
     key.optimal_layout = use_feedback ? true : (effective_general ? false : base_key.optimal_layout);
     key.feedback_loop = use_feedback;
     key.store_elide_mask = mask;
+    return pass_cache->Get(key);
+}
+
+VkRenderPass Framebuffer::RenderPassClearAspect(u8 color_mask, bool depth_clear,
+                                                bool stencil_clear, bool general_layout,
+                                                bool feedback_layout) const {
+    const bool use_feedback = feedback_layout && feedback_supported;
+    const bool effective_general = general_layout || (feedback_layout && !feedback_supported);
+    RenderPassKey key = base_key;
+    key.color_clear_mask = color_mask;
+    key.depth_clear = depth_clear && has_depth;
+    key.stencil_clear = stencil_clear && has_stencil;
+    key.optimal_layout = use_feedback ? true : (effective_general ? false : base_key.optimal_layout);
+    key.feedback_loop = use_feedback;
     return pass_cache->Get(key);
 }
 

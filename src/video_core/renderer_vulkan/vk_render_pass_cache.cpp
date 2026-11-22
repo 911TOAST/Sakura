@@ -118,8 +118,9 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
         };
         if (is_valid) {
             const bool elide_store = (key.store_elide_mask >> num_colors) & 1;
+            const bool clear_this_color = (key.color_clear_mask >> num_colors) & 1;
             descriptions.push_back(AttachmentDescription(*device, format, key.samples,
-                                                         key.color_clear, key.depth_clear,
+                                                         clear_this_color, key.depth_clear,
                                                          key.stencil_clear, elide_store,
                                                          key.afbc_layout));
             num_attachments = static_cast<u32>(index + 1);
@@ -134,7 +135,7 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
             .layout = depth_layout,
         };
         descriptions.push_back(AttachmentDescription(*device, key.depth_format, key.samples,
-                                                     key.color_clear, key.depth_clear,
+                                                     key.color_clear_mask != 0, key.depth_clear,
                                                      key.stencil_clear,
                                                      (key.store_elide_mask >> num_colors) & 1,
                                                      key.afbc_layout));

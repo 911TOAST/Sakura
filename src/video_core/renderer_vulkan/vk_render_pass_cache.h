@@ -23,7 +23,9 @@ struct RenderPassKey {
     /// Define the attachment instead of loading it at pass begin. The clear variant is used when
     /// the guest's first use of a render target is a clear that covers the whole surface: on a
     /// tiler the load would fetch every tile from DRAM and the clear would immediately discard it.
-    bool color_clear{};
+    /// Masked per colour attachment: bit k set defines colour attachment k at begin; a plain
+    /// all-aspect clear uses (1 << num_color_attachments) - 1, i.e. every valid bit.
+    u8 color_clear_mask{};
     bool depth_clear{};
     bool stencil_clear{};
     /// Use COLOR_ATTACHMENT_OPTIMAL / DEPTH_STENCIL_ATTACHMENT_OPTIMAL attachment references for
@@ -59,7 +61,7 @@ struct hash<Vulkan::RenderPassKey> {
         for (size_t i = 0; i < key.color_formats.size(); ++i) {
             value ^= static_cast<size_t>(key.color_formats[i]) << (i * 6);
         }
-        value ^= static_cast<size_t>(key.color_clear) << 58;
+        value ^= static_cast<size_t>(key.color_clear_mask) << 58;
         value ^= static_cast<size_t>(key.depth_clear) << 59;
         value ^= static_cast<size_t>(key.stencil_clear) << 60;
         value ^= static_cast<size_t>(key.optimal_layout) << 61;

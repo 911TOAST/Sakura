@@ -29,6 +29,7 @@
 #include "video_core/renderer_vulkan/fixed_pipeline_state.h"
 #include "video_core/renderer_vulkan/maxwell_to_vk.h"
 #include "video_core/renderer_vulkan/vk_buffer_cache.h"
+#include "video_core/renderer_vulkan/vk_clear_derive.h"
 #include "video_core/renderer_vulkan/vk_compute_pipeline.h"
 #include "video_core/renderer_vulkan/vk_descriptor_pool.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
@@ -639,12 +640,12 @@ void RasterizerVulkan::Clear(u32 layer_count) {
     // A clear that covers the whole render target and happens before anything else touches it can
     // be expressed as the pass's own load operation. The loading variant would fetch every tile
     // from DRAM first only for this clear to discard that data, which is the largest single waste
-    // on a tiler. The clear pass defines every aspect it has, so it may only be used when the guest
-    // is clearing exactly the aspects the framebuffer carries.
-    const bool clears_all_aspects =
-        (framebuffer->NumColorBuffers() != 0) == (use_color != 0) &&
-        framebuffer->HasAspectDepthBit() == (use_depth != 0) &&
-        framebuffer->HasAspectStencilBit() == (use_stencil != 0);
+    // on a tiler. DeriveClearLoadOp() decides which attachments can be DEFINED at begin: an
+    // attachment the guest clears (full area, all four colour channels, single layer) becomes
+    // CLEAR, everything else keeps LOAD, so contents are preserved exactly as on the explicit
+    // path. The renderer_clear_loadop_partial extension widens this to single-RT clears of MRT
+    // targets, depth/stencil aspect subsets, and scissored clears whose clamped rect still covers
+    // the whole area.
     bool single_layer = true;
     for (u32 index = 0; index < framebuffer->NumImages(); ++index) {
         if (framebuffer->ImageRanges()[index].layerCount != 1) {
@@ -652,50 +653,79 @@ void RasterizerVulkan::Clear(u32 layer_count) {
             break;
         }
     }
-    if (Settings::values.renderer_clear_loadop.GetValue() && clears_all_aspects &&
-        single_layer && regs.clear_surface.layer == 0 && layer_count == 1 &&
-        !regs.clear_control.use_scissor && clear_rect.rect.offset.x == 0 &&
-        clear_rect.rect.offset.y == 0 && clear_rect.rect.extent.width == render_area.width &&
-        clear_rect.rect.extent.height == render_area.height &&
-        (!use_color || (framebuffer->NumColorBuffers() == 1 && regs.clear_surface.RT == 0 &&
-                        regs.clear_surface.R && regs.clear_surface.G && regs.clear_surface.B &&
-                        regs.clear_surface.A))) {
-        std::array<VkClearValue, 9> clear_values{};
-        if (use_color) {
-            const auto color_format = VideoCore::Surface::PixelFormatFromRenderTargetFormat(
-                regs.rt[0].format);
-            VkClearValue& value = clear_values[0];
-            const bool is_integer = IsPixelFormatInteger(color_format);
-            const bool is_signed = IsPixelFormatSignedInteger(color_format);
-            const size_t int_size = PixelComponentSizeBitsInteger(color_format);
-            if (!is_integer) {
-                std::memcpy(value.color.float32, regs.clear_color.data(),
-                            regs.clear_color.size() * sizeof(f32));
-            } else if (!is_signed) {
-                for (size_t i = 0; i < 4; ++i) {
-                    value.color.uint32[i] = u32(f32(u64(int_size) << 1U) * regs.clear_color[i]);
-                }
-            } else {
-                for (size_t i = 0; i < 4; ++i) {
-                    value.color.int32[i] =
-                        s32(f32(s64(int_size - 1) << 1) * (regs.clear_color[i] - 0.5f));
+    if (Settings::values.renderer_clear_loadop.GetValue()) {
+        const ClearFbShape shape{
+            .num_color_buffers = framebuffer->NumColorBuffers(),
+            .has_depth = framebuffer->HasAspectDepthBit(),
+            .has_stencil = framebuffer->HasAspectStencilBit(),
+            .single_layer = single_layer,
+        };
+        const ClearRequest req{
+            .use_color = use_color != 0,
+            .clear_r = regs.clear_surface.R != 0,
+            .clear_g = regs.clear_surface.G != 0,
+            .clear_b = regs.clear_surface.B != 0,
+            .clear_a = regs.clear_surface.A != 0,
+            .use_depth = use_depth != 0,
+            .use_stencil = use_stencil != 0,
+            .rt = regs.clear_surface.RT,
+            .rect_x = static_cast<u32>(clear_rect.rect.offset.x),
+            .rect_y = static_cast<u32>(clear_rect.rect.offset.y),
+            .rect_w = clear_rect.rect.extent.width,
+            .rect_h = clear_rect.rect.extent.height,
+            .area_w = render_area.width,
+            .area_h = render_area.height,
+            .layer0_single = regs.clear_surface.layer == 0 && layer_count == 1,
+        };
+        ClearLoadOpPlan plan = DeriveClearLoadOp(req, shape);
+        if (plan.use_clear_variant &&
+            !Settings::values.renderer_clear_loadop_partial.GetValue()) {
+            // Extension off: keep the legacy all-aspect-only behaviour exactly, including the
+            // rejection of scissored clears.
+            plan.use_clear_variant = PlanIsLegacyAllAspect(plan, shape) &&
+                                     !regs.clear_control.use_scissor;
+        }
+        if (plan.use_clear_variant) {
+            std::array<VkClearValue, 9> clear_values{};
+            if (plan.color_mask != 0) {
+                const u32 color_attachment = plan.value_color_index;
+                const auto color_format = VideoCore::Surface::PixelFormatFromRenderTargetFormat(
+                    regs.rt[color_attachment].format);
+                VkClearValue& value = clear_values[color_attachment];
+                const bool is_integer = IsPixelFormatInteger(color_format);
+                const bool is_signed = IsPixelFormatSignedInteger(color_format);
+                const size_t int_size = PixelComponentSizeBitsInteger(color_format);
+                if (!is_integer) {
+                    std::memcpy(value.color.float32, regs.clear_color.data(),
+                                regs.clear_color.size() * sizeof(f32));
+                } else if (!is_signed) {
+                    for (size_t i = 0; i < 4; ++i) {
+                        value.color.uint32[i] = u32(f32(u64(int_size) << 1U) * regs.clear_color[i]);
+                    }
+                } else {
+                    for (size_t i = 0; i < 4; ++i) {
+                        value.color.int32[i] =
+                            s32(f32(s64(int_size - 1) << 1) * (regs.clear_color[i] - 0.5f));
+                    }
                 }
             }
-        }
-        if (use_depth || use_stencil) {
-            VkClearValue& value = clear_values[framebuffer->NumColorBuffers()];
-            value.depthStencil.depth = regs.clear_depth;
-            value.depthStencil.stencil = use_stencil ? regs.clear_stencil : 0;
-        }
-        const size_t value_count = framebuffer->NumImages();
-        if (scheduler.RequestRenderpassClear(framebuffer,
-                                             std::span(clear_values.data(), value_count))) {
+            if (use_depth || use_stencil) {
+                VkClearValue& value = clear_values[framebuffer->NumColorBuffers()];
+                value.depthStencil.depth = regs.clear_depth;
+                value.depthStencil.stencil = use_stencil ? regs.clear_stencil : 0;
+            }
+            const size_t value_count = framebuffer->NumImages();
+            const VkRenderPass clear_variant = framebuffer->RenderPassClearAspect(
+                plan.color_mask, plan.depth_clear, plan.stencil_clear, false, false);
+            if (scheduler.RequestRenderpassClear(
+                    framebuffer, std::span(clear_values.data(), value_count), clear_variant)) {
             // Same bookkeeping as the explicit path below, minus the clear itself.
             query_cache.NotifySegment(true);
             query_cache.CounterEnable(VideoCommon::QueryType::ZPassPixelCount64,
                                       maxwell3d->regs.zpass_pixel_count_enable);
             UpdateViewportsState(regs);
             return;
+        }
         }
     }
     scheduler.RequestRenderpass(framebuffer);
