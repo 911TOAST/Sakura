@@ -414,6 +414,8 @@ class SettingsFragmentPresenter(
         BooleanSetting.ENABLE_BUFFER_HISTORY,
         BooleanSetting.ENABLE_GPU_BUFFER_READBACK,
         BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS,
+        BooleanSetting.SHADOW_COMPARE_BYPASS,
+        BooleanSetting.FORCE_STATIC_VERTEX_INPUT,
         BooleanSetting.NO_WELL,
         BooleanSetting.RENDERER_ASYNC_PRESENTATION,
         BooleanSetting.RENDERER_REACTIVE_FLUSHING,
@@ -463,6 +465,8 @@ class SettingsFragmentPresenter(
             add(HeaderSetting(R.string.experiments_group_shaders))
             add(BooleanSetting.RENDERER_RELAXED_PRECISION.key)
             add(BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS.key)
+            add(BooleanSetting.SHADOW_COMPARE_BYPASS.key)
+            add(BooleanSetting.FORCE_STATIC_VERTEX_INPUT.key)
             add(BooleanSetting.NO_WELL.key)
 
             add(HeaderSetting(R.string.experiments_group_risky))

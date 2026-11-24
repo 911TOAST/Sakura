@@ -667,18 +667,46 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
         // locations the same way the SPIR-V backend does (attribute_compaction.h). Without this
         // a module or pipeline declaring locations above the limit fails to build and the model
         // does not render (observed on a 16-attribute ARM Mali driver).
+        // Invariant: when key.state.dynamic_vertex_input is set, the shader side is not compacted
+        // either (profile.max_vertex_input_attributes is forced to 0 in vk_pipeline_cache.cpp),
+        // because the vkCmdSetVertexInput path below always records guest locations.
         const u32 max_vertex_attributes{device.GetMaxVertexInputAttributes()};
         const bool compact_attributes =
-            max_vertex_attributes != 0 && max_vertex_attributes < IR::NUM_GENERICS;
-        std::array<u32, IR::NUM_GENERICS> location_map{};
+            max_vertex_attributes != 0 && max_vertex_attributes < Shader::IR::NUM_GENERICS;
+        std::array<u32, Shader::IR::NUM_GENERICS> location_map{};
         if (compact_attributes) {
+            // Mirror MakeRuntimeInfo (vk_pipeline_cache.cpp): for VertexB the generic input
+            // types come straight from the pipeline key's vertex attributes.
+            std::array<Shader::AttributeType, Shader::IR::NUM_GENERICS> generic_input_types{};
+            auto to_attribute_type = [](const FixedPipelineState::VertexAttribute& attr) {
+                if (attr.enabled == 0) {
+                    return Shader::AttributeType::Disabled;
+                }
+                switch (attr.Type()) {
+                case Maxwell::VertexAttribute::Type::SNorm:
+                case Maxwell::VertexAttribute::Type::UNorm:
+                case Maxwell::VertexAttribute::Type::Float:
+                    return Shader::AttributeType::Float;
+                case Maxwell::VertexAttribute::Type::SInt:
+                    return Shader::AttributeType::SignedInt;
+                case Maxwell::VertexAttribute::Type::UInt:
+                    return Shader::AttributeType::UnsignedInt;
+                case Maxwell::VertexAttribute::Type::UScaled:
+                    return Shader::AttributeType::UnsignedScaled;
+                case Maxwell::VertexAttribute::Type::SScaled:
+                    return Shader::AttributeType::SignedScaled;
+                default:
+                    return Shader::AttributeType::Disabled;
+                }
+            };
+            std::ranges::transform(key.state.attributes, generic_input_types.begin(),
+                                   to_attribute_type);
             Shader::VaryingState full_stores;
             full_stores.mask.set();
             location_map = Shader::CompactVertexInputLocations(
-                full_stores, stage_infos[0].loads, stage_infos[0].generic_input_types,
-                max_vertex_attributes);
+                full_stores, stage_infos[0].loads, generic_input_types, max_vertex_attributes);
         } else {
-            for (u32 index = 0; index < IR::NUM_GENERICS; ++index) {
+            for (u32 index = 0; index < Shader::IR::NUM_GENERICS; ++index) {
                 location_map[index] = index;
             }
         }

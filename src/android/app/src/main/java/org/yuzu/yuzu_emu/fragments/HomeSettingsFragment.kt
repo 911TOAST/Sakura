@@ -305,6 +305,17 @@ class HomeSettingsFragment : Fragment() {
             )
             add(
                 HomeSetting(
+                    R.string.storage_cleanup,
+                    R.string.storage_cleanup_description,
+                    R.drawable.ic_delete,
+                    {
+                        StorageCleanupDialogFragment.newInstance()
+                            .show(parentFragmentManager, StorageCleanupDialogFragment.TAG)
+                    }
+                )
+            )
+            add(
+                HomeSetting(
                     R.string.verify_installed_content,
                     R.string.verify_installed_content_description,
                     R.drawable.ic_check_circle,

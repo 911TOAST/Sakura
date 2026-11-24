@@ -154,8 +154,18 @@ void EmitEmitVertex(EmitContext& ctx, const IR::Value& stream) {
         ConvertDepthMode(ctx);
     }
     if (!ctx.profile.support_geometry_streams) {
-        throw NotImplementedException("Geometry streams");
-    } else if (stream.IsImmediate()) {
+        if (!ctx.allow_stream0_fallback) {
+            throw NotImplementedException("Geometry streams");
+        }
+        // Drivers without transform feedback geometry streams (observed on ARM Mali r44) still
+        // support single-stream geometry output. Emitting on the default stream keeps pipelines
+        // alive instead of failing the whole draw (e.g. NieR:Automata Switch renders only water
+        // and sky when these pipelines are dropped).
+        LOG_WARNING(Shader_SPIRV, "Geometry streams unsupported; emitting on stream 0");
+        ctx.OpEmitVertex();
+        return;
+    }
+    if (stream.IsImmediate()) {
         ctx.OpEmitStreamVertex(ctx.Def(stream));
     } else {
         LOG_WARNING(Shader_SPIRV, "Stream is not immediate");
@@ -167,8 +177,14 @@ void EmitEmitVertex(EmitContext& ctx, const IR::Value& stream) {
 
 void EmitEndPrimitive(EmitContext& ctx, const IR::Value& stream) {
     if (!ctx.profile.support_geometry_streams) {
-        throw NotImplementedException("Geometry streams");
-    } else if (stream.IsImmediate()) {
+        if (!ctx.allow_stream0_fallback) {
+            throw NotImplementedException("Geometry streams");
+        }
+        LOG_WARNING(Shader_SPIRV, "Geometry streams unsupported; ending primitive on stream 0");
+        ctx.OpEndPrimitive();
+        return;
+    }
+    if (stream.IsImmediate()) {
         ctx.OpEndStreamPrimitive(ctx.Def(stream));
     } else {
         LOG_WARNING(Shader_SPIRV, "Stream is not immediate");

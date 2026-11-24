@@ -40,22 +40,37 @@ u16 StoreElideMask(const Framebuffer& current, const Framebuffer& next) {
     u16 mask = 0;
     const auto& cur_images = current.Images();
     const auto& next_images = next.Images();
+    const auto& cur_ranges = current.ImageRanges();
+    const auto& next_ranges = next.ImageRanges();
     const u32 cur_colors = current.NumColorBuffers();
     const u32 next_colors = next.NumColorBuffers();
+    // Eliding the store is only safe when the clearing pass discards exactly the content this
+    // pass wrote: loadOp CLEAR and storeOp DONT_CARE apply to the attachment's image *view*,
+    // so the views must be identical. Two framebuffers may share one VkImage with different
+    // mip ranges or array layers (bloom chains, texture-array targets); matching by image only
+    // would drop the store of a write the clear never shows.
+    // VkImageSubresourceRange is a plain C struct with no operator==; compare field-wise.
+    const auto range_equal = [](const VkImageSubresourceRange& a, const VkImageSubresourceRange& b) {
+        return a.aspectMask == b.aspectMask && a.baseMipLevel == b.baseMipLevel &&
+               a.levelCount == b.levelCount && a.baseArrayLayer == b.baseArrayLayer &&
+               a.layerCount == b.layerCount;
+    };
+    const auto same_range = [&](u32 k, u32 j) {
+        return cur_images[k] == next_images[j] && range_equal(cur_ranges[k], next_ranges[j]);
+    };
     for (u32 k = 0; k < cur_colors; ++k) {
         if (cur_images[k] == VK_NULL_HANDLE) {
             continue;
         }
         for (u32 j = 0; j < next_colors; ++j) {
-            if (cur_images[k] == next_images[j]) {
+            if (same_range(k, j)) {
                 mask |= static_cast<u16>(1u << k);
                 break;
             }
         }
     }
     if (current.HasAspectDepthBit() && next.HasAspectDepthBit() &&
-        cur_images[cur_colors] != VK_NULL_HANDLE &&
-        cur_images[cur_colors] == next_images[next_colors]) {
+        cur_images[cur_colors] != VK_NULL_HANDLE && same_range(cur_colors, next_colors)) {
         mask |= static_cast<u16>(1u << cur_colors);
     }
     return mask;
@@ -234,8 +249,15 @@ bool Scheduler::RequestRenderpassClear(const Framebuffer* framebuffer,
         stats.clear_loadop_misses.fetch_add(1, std::memory_order_relaxed);
         return false;
     }
+    // Only a pass that defines every attachment at begin (the full clear variants) may carry
+    // next_is_clear into store elision. Partial clear-aspect variants define just the masked
+    // aspects and LOAD the rest; eliding the previous pass's store against those would drop a
+    // write the very next pass loads back. Store elision is enabled by the full-clear call
+    // below; partial clears keep the storing variant.
+    const bool full_clear = renderpass == framebuffer->ClearRenderPass() ||
+                            renderpass == framebuffer->FeedbackClearRenderPass();
     stats.clear_loadop_hits.fetch_add(1, std::memory_order_relaxed);
-    EndRenderPass(framebuffer, true);
+    EndRenderPass(framebuffer, full_clear);
     state.renderpass = renderpass;
     state.framebuffer = framebuffer_handle;
     state.render_area = render_area;
@@ -551,7 +573,16 @@ void Scheduler::EndRenderPass(const Framebuffer* next_framebuffer, bool next_is_
         // load, or an unknown next use) keeps the storing variant the slot already holds.
         if (current_pass_slot && next_is_clear && next_framebuffer && state.framebuffer_ptr &&
             Settings::values.renderer_store_elision.GetValue()) {
-            const u16 mask = StoreElideMask(*state.framebuffer_ptr, *next_framebuffer);
+            // The elide variant re-derives load ops from state.renderpass_is_clear: a full clear
+            // or a plain load pass keep their load semantics, but a partial clear-aspect pass
+            // would silently become a full clear (uncleared slots carry zero clear values).
+            const bool safe_open_pass =
+                !state.renderpass_is_clear ||
+                state.renderpass == state.framebuffer_ptr->ClearRenderPass(state.general_layout) ||
+                state.renderpass == state.framebuffer_ptr->FeedbackClearRenderPass();
+            const u16 mask = safe_open_pass
+                                 ? StoreElideMask(*state.framebuffer_ptr, *next_framebuffer)
+                                 : u16{0};
             if (mask != 0) {
                 current_pass_slot->store(
                     state.framebuffer_ptr->RenderPassStoreElide(mask, state.general_layout,

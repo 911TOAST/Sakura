@@ -15,6 +15,7 @@
 
 #include "common/common_types.h"
 #include "common/div_ceil.h"
+#include "common/logging/log.h"
 #include "shader_recompiler/attribute_compaction.h"
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
@@ -737,6 +738,12 @@ void EmitContext::DefineAttributeMemAccess(const Info& info) {
         OpSelectionMerge(end_block, spv::SelectionControlMask::MaskNone);
         OpSwitch(compare_index, default_label, literals, labels);
         AddLabel(default_label);
+        // TEMPORARY DEBUG (black models on Mali): the guest read a vertex attribute at an
+        // offset this switch does not handle; it returns 0.0f, which zeroes lighting inputs.
+        LOG_WARNING(Render_Vulkan,
+                    "ATTR-ZERO unreached default branch: indexed vertex attribute load falls "
+                    "back to 0.0f (stage={})",
+                    static_cast<u32>(stage));
         OpReturnValue(Const(0.0f));
         size_t label_index{0};
         if (info.loads.AnyComponent(IR::Attribute::PositionX)) {

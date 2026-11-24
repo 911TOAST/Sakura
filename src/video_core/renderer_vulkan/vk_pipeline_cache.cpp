@@ -4,6 +4,7 @@
 // SPDX-FileCopyrightText: Copyright 2019 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <array>
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -57,6 +58,7 @@
 #include "video_core/shader_notify.h"
 #include "video_core/surface.h"
 #include "video_core/vulkan_common/vulkan_device.h"
+#include "common/settings.h"
 #include "video_core/vulkan_common/vulkan_wrapper.h"
 #include "video_core/gpu_logging/gpu_logging.h"
 
@@ -77,11 +79,11 @@ using VideoCommon::FileEnvironment;
 using VideoCommon::GenericEnvironment;
 using VideoCommon::GraphicsEnvironment;
 
-constexpr u32 CACHE_VERSION = 21;
+constexpr u32 CACHE_VERSION = 22; // bumped with SPIRV_CACHE_VERSION for shadow_compare_bypass
 constexpr std::array<char, 8> VULKAN_CACHE_MAGIC_NUMBER{'y', 'u', 'z', 'u', 'v', 'k', 'c', 'h'};
 
 constexpr u32 SPIRV_CACHE_MAGIC = 0x43565053; // "SPVC"
-constexpr u32 SPIRV_CACHE_VERSION = 1;
+constexpr u32 SPIRV_CACHE_VERSION = 3; // bumped: TEMPORARY DEBUG black-model diagnostics retranslate cached shaders
 constexpr size_t MAX_CACHED_STAGES = 5;
 constexpr size_t MAX_CACHED_SPIRV_WORDS = 16 * 1024 * 1024 / sizeof(u32);
 constexpr size_t MAX_CACHED_PAYLOAD_SIZE = 64 * 1024 * 1024;
@@ -97,6 +99,23 @@ struct CachedStage {
     std::vector<u32> spirv;
     Shader::Info info;
 };
+
+// Five-word placeholder serialized in place of a passthrough geometry shader that was elided
+// because the driver lacks SPV_NV_geometry_shader_passthrough. It passes the SPIR-V header
+// sanity checks in DeserializeCachedStages but is never handed to vkCreateShaderModule: the
+// consumer treats a stage whose cached SPIR-V equals this marker as absent.
+constexpr std::array<u32, 5> kElidedGeometryStageMarker{
+    0x07230203U, // magic
+    0x00010000U, // version 1.0
+    0U,
+    1U, // generator id bound must be non-zero
+    0U,
+};
+
+bool IsElidedGeometryStageMarker(const std::vector<u32>& spirv) {
+    return spirv.size() == kElidedGeometryStageMarker.size() &&
+           std::equal(spirv.begin(), spirv.end(), kElidedGeometryStageMarker.begin());
+}
 
 std::vector<u8> SerializeCachedStages(std::span<const CachedStage> stages, u64 salt) {
     std::vector<u8> out;
@@ -630,10 +649,13 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .support_sampled_image_array_nonuniform_indexing =
             device.IsSampledImageArrayNonUniformIndexingSupported(),
 
+        .shadow_compare_bypass = Settings::values.shadow_compare_bypass.GetValue(),
+
         .warp_size_potentially_larger_than_guest = device.IsWarpSizePotentiallyBiggerThanGuest(),
 
         .lower_left_origin_mode = false,
         .need_declared_frag_colors = false,
+
         .need_gather_subpixel_offset = driver_id == VK_DRIVER_ID_AMD_PROPRIETARY ||
                                        driver_id == VK_DRIVER_ID_AMD_OPEN_SOURCE ||
                                        driver_id == VK_DRIVER_ID_MESA_RADV ||
@@ -654,12 +676,14 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
             device.IsNvidia() && device.GetNvidiaArch() <= NvidiaArchitecture::Arch_Pascal,
         .min_ssbo_alignment = device.GetStorageBufferAlignment(),
         .max_user_clip_distances = device.GetMaxUserClipDistances(),
-        // Compact guest vertex locations to the host limit so shaders using locations above it
-        // (e.g. 32-location guests on a 16-location driver) still build their pipelines.
-        .max_vertex_input_attributes = device.GetMaxVertexInputAttributes()
+        // Set below, after dynamic_features: compaction must stay inactive when draws use the
+        // dynamic vertex input path (vkCmdSetVertexInput always issues guest locations).
+        .max_vertex_input_attributes = 0u
     };
     profile.relax_fp32_precision = Settings::values.renderer_relaxed_precision.GetValue();
     profile.collect_debug_info = Settings::values.renderer_debug.GetValue();
+    LOG_INFO(Render_Vulkan, "TEMP-DEBUG shadow_compare_bypass={} (profile built once)",
+             Settings::values.shadow_compare_bypass.GetValue());
 
     const std::string_view model_name{device.GetModelName()};
     // The salt must change whenever the serialized reflection layout changes, otherwise a cache
@@ -668,6 +692,9 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
     // too: without it, shaders cached before the switch was flipped keep coming back from disk.
     // The multiplier is the relaxation revision; bump it whenever the selection rules change.
     constexpr u64 relaxed_precision_revision = 2;
+    // Compaction gating changed (now off on the dynamic vertex input path): bump so devices with
+    // VK_EXT_vertex_input_dynamic_state do not reuse SPIR-V cached by builds that compacted there.
+    constexpr u64 vertex_compaction_revision = 2;
     shader_cache_salt = Common::CityHash64(model_name.data(), model_name.size()) ^
                         (static_cast<u64>(device.GetDriverVersion()) << 32) ^
                         static_cast<u64>(device.ApiVersion()) ^
@@ -675,6 +702,7 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
                         ((static_cast<u64>(profile.relax_fp32_precision) *
                           relaxed_precision_revision)
                          << 56) ^
+                        (vertex_compaction_revision << 48) ^
                         static_cast<u64>(Shader::Serialize::InfoSerializationVersion);
 
     host_info = Shader::HostTranslateInfo{
@@ -755,6 +783,15 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
     dynamic_features.has_dynamic_vertex_input =
         device.IsExtVertexInputDynamicStateSupported() &&
         Settings::values.vertex_input_dynamic_state.GetValue();
+
+    // Vertex input compaction (attribute_compaction.h): only active on the static vertex input
+    // path. The SPIR-V backend compacts locations to fit the host limit, but the dynamic path
+    // (vkCmdSetVertexInput, vk_graphics_pipeline.cpp) always records guest locations, so
+    // compacting there would make shaders read the wrong attributes (black geometry on drivers
+    // that both expose the extension and report maxVertexInputAttributes < 32).
+    profile.max_vertex_input_attributes = dynamic_features.has_dynamic_vertex_input
+                                              ? 0u
+                                              : device.GetMaxVertexInputAttributes();
 
     dynamic_features.has_provoking_vertex = device.IsExtProvokingVertexSupported();
     dynamic_features.has_provoking_vertex_first_mode =
@@ -925,6 +962,10 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
 
     const auto recompile_marker{base_dir / "force_gpu_recompile.once"};
     force_gpu_recompile = Common::FS::Exists(recompile_marker);
+    // Per-game "Build all shaders before launch" toggle: the queue is always drained below
+    // (WaitForRequests) and in-game compilation of any shaders missed by the warmup is
+    // synchronous, so the game starts with nothing left to build in the background.
+    precompile_all = Common::FS::Exists(base_dir / "precompile_all.once");
     const auto rebuilt_pipeline_cache_filename{base_dir / "vulkan_pipelines_rebuild.bin"};
     const auto title_pipeline_cache_filename{base_dir / "vulkan_pipelines.bin"};
     // The rebuilt guest shader cache is written here first and only replaces vulkan.bin once the
@@ -1297,7 +1338,7 @@ GraphicsPipeline* PipelineCache::BuiltPipeline(GraphicsPipeline* pipeline) const
     if (pipeline->IsBuilt()) {
         return pipeline;
     }
-    if (!use_asynchronous_shaders) {
+    if (!use_asynchronous_shaders || precompile_all) {
         return pipeline;
     }
     // If games are using a small index count, we can assume these are full screen quads.
@@ -1369,6 +1410,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
 
     const Shader::IR::Program* previous_stage{};
     Shader::Backend::Bindings binding;
+    bool elided_geometry{false};
     for (size_t index = uses_vertex_a && uses_vertex_b ? 1 : 0; index < Maxwell::MaxShaderProgram;
          ++index) {
         const bool is_emulated_stage = layer_source_program != nullptr &&
@@ -1377,6 +1419,21 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
             continue;
         }
         UNIMPLEMENTED_IF(index == 0);
+
+        // Elide passthrough geometry shaders on drivers without SPIR-V passthrough support:
+        // a passthrough geometry stage forwards its inputs unchanged, so dropping it entirely
+        // is semantically identical and avoids Mali's shader compiler crashing on the lowered
+        // fallback module. The layer-emulation geometry stage (is_emulated_stage) must never
+        // be elided because it synthesizes real work.
+        const bool elide_geometry = index == static_cast<u32>(Maxwell::ShaderType::Geometry) &&
+                                    programs[index].is_geometry_passthrough && !is_emulated_stage &&
+                                    !profile.support_geometry_shader_passthrough;
+        if (elide_geometry) {
+            LOG_INFO(Render_Vulkan,
+                     "Eliding passthrough geometry shader (driver lacks geometry passthrough)");
+            elided_geometry = true;
+            continue;
+        }
 
         Shader::IR::Program& program{programs[index]};
         const size_t stage_index{index - 1};
@@ -1419,12 +1476,57 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
             const std::string name{fmt::format("Shader {:016x}", key.unique_hashes[index])};
             modules[stage_index].SetObjectNameEXT(name.c_str());
         }
+        if (index == static_cast<u32>(Maxwell::ShaderType::Pixel)) {
+            // TEMPORARY DEBUG: varyings consistency between the real previous stage and the
+            // fragment loads. Missing stores read as (0,0,0,1) -> black shaded geometry.
+            const auto generics_bits = [](const Shader::VaryingState& v) {
+                u32 bits = 0;
+                for (size_t g = 0; g < Shader::IR::NUM_GENERICS; ++g) {
+                    if (v.Generic(g, 0) || v.Generic(g, 1) || v.Generic(g, 2) || v.Generic(g, 3)) {
+                        bits |= 1u << g;
+                    }
+                }
+                return bits;
+            };
+            const Shader::VaryingState& stores{previous_stage ? previous_stage->info.stores
+                                                              : runtime_info.previous_stage_stores};
+            const bool prev_is_passthrough =
+                previous_stage != nullptr && previous_stage->is_geometry_passthrough;
+            for (size_t g = 0; g < Shader::IR::NUM_GENERICS; ++g) {
+                for (u32 c = 0; c < 4; ++c) {
+                    // Component-wise: a previous stage may store only .x of a generic while the
+                    // fragment loads .y/.z/.w, which the old single-component check missed.
+                    if (program.info.loads.Generic(g, c) && !stores.Generic(g, c)) {
+                        LOG_WARNING(Render_Vulkan,
+                                    "VARYING-GAP-COMP elided={} prev_is_passthrough={} frag loads "
+                                    "generic{}.{} not stored by previous stage",
+                                    elided_geometry, prev_is_passthrough, g, c);
+                    }
+                }
+            }
+            LOG_WARNING(Render_Vulkan,
+                        "FRAGLINK elided={} frag_loads={:08x} prev_stores={:08x} "
+                        "prev_passthrough={:08x}",
+                        elided_geometry, generics_bits(program.info.loads), generics_bits(stores),
+                        previous_stage ? generics_bits(previous_stage->info.passthrough) : 0u);
+        }
         previous_stage = &program;
     }
     if (out_cache_payload) {
         std::vector<CachedStage> stages;
         stages.reserve(Maxwell::MaxShaderStage);
         for (size_t stage = 0; stage < Maxwell::MaxShaderStage; ++stage) {
+            if (stage == static_cast<size_t>(Maxwell::ShaderType::Geometry) - 1 &&
+                elided_geometry) {
+                // Keep an entry for the elided stage so from-cache deserialization still
+                // considers the payload complete.
+                stages.push_back(CachedStage{
+                    .stage_index = static_cast<u32>(stage),
+                    .spirv = {kElidedGeometryStageMarker.begin(), kElidedGeometryStageMarker.end()},
+                    .info = {},
+                });
+                continue;
+            }
             if (!infos[stage] || stage_codes[stage].empty()) {
                 continue;
             }
@@ -1482,6 +1584,9 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipelineFromCache
     std::array<const Shader::Info*, Maxwell::MaxShaderStage> infos{};
     for (size_t stage = 0; stage < Maxwell::MaxShaderStage; ++stage) {
         if (!cached[stage]) {
+            continue;
+        }
+        if (IsElidedGeometryStageMarker(cached[stage]->spirv)) {
             continue;
         }
         modules[stage] = BuildShader(device, cached[stage]->spirv);

@@ -695,6 +695,36 @@
     <string name="renderer_async_direct_present_description">Hands the zero-copy Malikan frame to the display from a dedicated thread, so the CPU starts the next frame instead of waiting for the render worker to drain. Mali GPUs only, and it takes effect when a game starts. Turn it off if a device shows pacing or surface glitches.</string>
     <string name="renderer_reactive_flushing">Use reactive flushing</string>
     <string name="renderer_reactive_flushing_description">Improves rendering accuracy in some games at the cost of performance.</string>
+    <string name="shadow_compare_bypass">Bypass shadow map compare (experiments)</string>
+    <string name="shadow_compare_bypass_description">Makes all shadow-map samples return "lit". Diagnostic: turns black, unlit 3D objects textured. Do not expect correct shadows while on.</string>
+    <string name="force_static_vertex_input">Force static vertex input (experiments)</string>
+    <string name="force_static_vertex_input_description">Never use VK_EXT_vertex_input_dynamic_state, even in Malikan/Native modes. Diagnostic for suspected ARM driver vertex-binding stride bugs. Increases pipeline variants.</string>
+
+    <!-- Smart Storage Cleanup -->
+    <string name="storage_cleanup">Smart storage cleanup</string>
+    <string name="storage_cleanup_description">Find and remove orphaned shader caches, leftover mod folders and temporary files. Nothing is deleted without your confirmation.</string>
+    <string name="storage_cleanup_scanning">Scanning…</string>
+    <string name="storage_cleanup_nothing_found">No leftover files found. Storage is clean!</string>
+    <string name="storage_cleanup_summary_header">%1$d items found · up to %2$s recoverable</string>
+    <string name="storage_cleanup_entry">%1$s\n%2$s · %3$s</string>
+    <string name="storage_cleanup_delete_selected">Delete selected</string>
+    <string name="storage_cleanup_confirm_title">Delete diagnostic files?</string>
+    <string name="storage_cleanup_confirm_message">Some selected items are diagnostic files (crash reports etc.). Double-check that you do not need them before deleting.</string>
+    <string name="storage_cleanup_complete">Cleanup complete</string>
+    <string name="storage_cleanup_done">Removed %1$d items and freed %2$s.</string>
+    <string name="storage_cleanup_done_with_failures">Removed %1$d items and freed %2$s. %3$d items could not be deleted (possibly in use).</string>
+    <string name="storage_cleanup_category_shader_cache">Orphaned shader cache</string>
+    <string name="storage_cleanup_category_mods">Orphaned mod / update folder</string>
+    <string name="storage_cleanup_category_temp">Temporary file (app cache)</string>
+    <string name="storage_cleanup_category_crash_logs">Crash report / diagnostic log</string>
+
+    <!-- Precompile all shaders -->
+    <string name="precompile_shaders">Build all shaders before launch</string>
+    <string name="precompile_shaders_description">On the next launch, every cached shader for this game is compiled on the loading screen and the queue is always waited out before the game starts, even with the disk shader cache off. On for this game.</string>
+    <string name="precompile_shaders_off_description">On the next launch, every cached shader for this game is compiled on the loading screen and the queue is always waited out before the game starts, even with the disk shader cache off. Off for this game.</string>
+    <string name="precompile_shaders_enabled">Build shaders: On</string>
+    <string name="precompile_shaders_disabled">Build shaders: Off</string>
+    <string name="precompile_shaders_running">Marked all cached shaders for building. Launch the game to run the compile on the loading screen.</string>
     <string name="mali_afrc">Mali AFRC compression (experimental)</string>
     <string name="mali_afrc_description">Asks Mali for the strongest fixed-rate compression (2:1, 4 bits per component) on eligible render targets. The Mali profile already applies the lighter 4:3 rate on its own; this switch selects 2:1. It cuts render-target memory traffic but can slightly change image quality. Unsupported images use the normal path.</string>
     <string name="frame_gen">Lemon FG</string>
@@ -1208,6 +1238,7 @@
 
     <!-- GPU overclock factors -->
     <string name="off">Off</string>
+    <string name="on">On</string>
     <string name="fast_gpu_medium">Medium (256)</string>
     <string name="fast_gpu_high">High (512)</string>
     <string name="fast_gpu_veryhigh">Very High (1024)</string>

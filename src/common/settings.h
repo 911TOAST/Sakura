@@ -428,6 +428,16 @@ struct Values {
     // Experimental: skip the NVIDIA Maxwell shader workaround pass. This does not bypass
     // Maxwell shader translation; Switch shaders are still translated to SPIR-V.
     SwitchableSetting<bool> no_well{linkage, false, "no_well", Category::RendererDebug};
+    // Experimental: make every guest depth-compare (shadow map) sample return "lit". Diagnostic
+    // switch for black-model bugs: if objects gain texture/lighting with this on, the shadow-map
+    // compare path is the culprit on this driver.
+    SwitchableSetting<bool> shadow_compare_bypass{linkage, false, "shadow_compare_bypass",
+                                                  Category::RendererDebug};
+    // Experimental: never use VK_EXT_vertex_input_dynamic_state, even in Malikan mode. Diagnostic
+    // for suspected ARM r4x driver bugs where dynamic vertex input strides/bindings misbehave
+    // (ANGLE blacklists the feature on ARM < r48).
+    SwitchableSetting<bool> force_static_vertex_input{linkage, false, "force_static_vertex_input",
+                                                      Category::RendererDebug};
     // Draw-path experiments are read when the draw or the render pass is built, never cached at
     // startup, so they can be flipped mid-session to bisect a regression without relaunching.
     //
@@ -1108,7 +1118,7 @@ struct Values {
     Setting<GpuLogLevel> gpu_log_level{linkage, GpuLogLevel::Off, "gpu_log_level",
                                        Category::Debugging};
     Setting<bool> gpu_log_vulkan_calls{linkage, true, "gpu_log_vulkan_calls", Category::Debugging};
-    Setting<bool> gpu_log_shader_dumps{linkage, false, "gpu_log_shader_dumps", Category::Debugging};
+    Setting<bool> gpu_log_shader_dumps{linkage, true, "gpu_log_shader_dumps", Category::Debugging}; // TEMP_DEBUG
     Setting<bool> gpu_log_memory_tracking{linkage, true, "gpu_log_memory_tracking",
                                            Category::Debugging};
     Setting<bool> gpu_log_driver_debug{linkage, true, "gpu_log_driver_debug", Category::Debugging};

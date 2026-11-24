@@ -227,6 +227,8 @@ ShaderCache::ShaderCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
           .need_fastmath_off = device.NeedsFastmathOff(),
           .need_gather_subpixel_offset = device.IsAmd() || device.IsIntel(),
 
+          .shadow_compare_bypass = Settings::values.shadow_compare_bypass.GetValue(),
+
           .has_broken_spirv_clamp = true,
           .has_broken_unsigned_image_offsets = true,
           .has_broken_signed_operations = true,

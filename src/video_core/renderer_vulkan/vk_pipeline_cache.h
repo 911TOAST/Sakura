@@ -179,6 +179,9 @@ private:
     bool use_asynchronous_shaders{};
     bool use_vulkan_pipeline_cache{};
     bool force_gpu_recompile{};
+    // Per-game "Build all shaders before launch" toggle (precompile_all.once marker):
+    // warmup always runs and in-game pipeline compilation is synchronous (no popups).
+    bool precompile_all{};
     std::unique_ptr<PipelineStatistics> runtime_statistics;
 
     GraphicsPipelineCacheKey graphics_key{};

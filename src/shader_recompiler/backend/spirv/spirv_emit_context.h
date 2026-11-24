@@ -234,6 +234,10 @@ public:
     const Profile& profile;
     const RuntimeInfo& runtime_info;
     Stage stage{};
+    // Stream-0 fallback for geometry emission when the driver lacks transform feedback
+    // geometry streams. Disabled for lowered geometry-passthrough programs: the ARM Mali
+    // r44 shader compiler segfaults while compiling those modules.
+    bool allow_stream0_fallback{false};
 
     Id void_id{};
     Id U1{};

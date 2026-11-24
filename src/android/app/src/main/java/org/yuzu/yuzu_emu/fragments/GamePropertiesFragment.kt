@@ -480,6 +480,41 @@ class GamePropertiesFragment : Fragment() {
                         )
                     )
                 }
+                val precompileMarker = File(
+                    DirectoryInitialization.userDirectory +
+                        "/cache/shader/" + args.game.settingsName.lowercase(),
+                    "precompile_all.once"
+                )
+                add(
+                    SubmenuProperty(
+                        R.string.precompile_shaders,
+                        R.string.precompile_shaders_description,
+                        R.drawable.ic_m3_apps,
+                        details = {
+                            if (precompileMarker.exists()) {
+                                getString(R.string.precompile_shaders_enabled)
+                            } else {
+                                getString(R.string.precompile_shaders_disabled)
+                            }
+                        },
+                        action = {
+                            runCatching {
+                                if (!precompileMarker.exists()) {
+                                    precompileMarker.parentFile?.mkdirs()
+                                    precompileMarker.writeText("1")
+                                } else {
+                                    precompileMarker.delete()
+                                }
+                            }
+                            Toast.makeText(
+                                YuzuApplication.appContext,
+                                R.string.precompile_shaders_running,
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            homeViewModel.reloadPropertiesList(true)
+                        }
+                    )
+                )
                 add(
                     InstallableProperty(
                         R.string.share_shader_cache,

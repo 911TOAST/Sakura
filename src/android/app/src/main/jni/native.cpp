@@ -513,8 +513,18 @@ void EmulationSession::RunEmulation() {
     const auto recompile_marker{Common::FS::GetSuyuPath(Common::FS::SuyuPath::ShaderDir) /
                                 fmt::format("{:016x}", program_id) /
                                 "force_gpu_recompile.once"};
+    // "Build all shaders before launch" per-game toggle: same rule, persistent marker, so the
+    // warmup (and the full pipeline queue) always runs before the game starts.
+    const auto precompile_marker{Common::FS::GetSuyuPath(Common::FS::SuyuPath::ShaderDir) /
+                                 fmt::format("{:016x}", program_id) / "precompile_all.once"};
     if (Settings::values.use_disk_shader_cache.GetValue() ||
-        Common::FS::Exists(recompile_marker)) {
+        Common::FS::Exists(recompile_marker) || Common::FS::Exists(precompile_marker)) {
+        if (Common::FS::Exists(precompile_marker)) {
+            LOG_INFO(Frontend,
+                     "\"Build all shaders before launch\" is on for title {:016x}: the warmup "
+                     "queue runs to completion on the loading screen before emulation starts",
+                     program_id);
+        }
         LoadDiskCacheProgress(VideoCore::LoadCallbackStage::Prepare, 0, 0);
         m_system.Renderer().ReadRasterizer()->LoadDiskResources(program_id, std::stop_token{},
                                                                 LoadDiskCacheProgress);

@@ -55,6 +55,10 @@ struct Profile {
     bool support_geometry_streams{};
     bool support_sampled_image_array_nonuniform_indexing{};
 
+    // Experimental diagnostic: replace guest depth-compare (shadow map) sample results with
+    // "lit" (1.0). Set from Settings::values.shadow_compare_bypass by each renderer profile.
+    bool shadow_compare_bypass{};
+
     bool warp_size_potentially_larger_than_guest{};
 
     bool lower_left_origin_mode{};

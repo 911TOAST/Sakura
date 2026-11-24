@@ -757,7 +757,9 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
         driver_id == VK_DRIVER_ID_ARM_PROPRIETARY &&
         properties.properties.driverVersion < VK_MAKE_VERSION(42, 0, 0);
     const bool use_dynamic_vertex_input =
-        Settings::values.vertex_input_dynamic_state.GetValue() || (malikan_mode && !old_arm_driver);
+        !Settings::values.force_static_vertex_input.GetValue() &&
+        (Settings::values.vertex_input_dynamic_state.GetValue() ||
+         (malikan_mode && !old_arm_driver));
     if (!use_dynamic_vertex_input) {
         RemoveExtensionFeature(extensions.vertex_input_dynamic_state, features.vertex_input_dynamic_state, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     }
@@ -1088,6 +1090,20 @@ bool Device::GetSuitability(bool requires_swapchain) {
                  VK_KHR_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
     }
 
+    // TEMP-DEBUG: Eden's "Restore conditional rendering workaround for Adreno, Mali and Turnip"
+    // (b027dc42ce) disables host conditional rendering on Mali drivers because the extension
+    // misbehaves there. Disable it on Mali so guest gated draws fall back to the emulated path.
+    if (extensions.conditional_rendering &&
+        (properties.driver.driverID == VK_DRIVER_ID_ARM_PROPRIETARY ||
+         properties.properties.vendorID == 0x13B5) &&
+        properties.driver.driverID != VK_DRIVER_ID_MESA_PANVK) {
+        loaded_extensions.erase(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
+        extensions.conditional_rendering = false;
+        LOG_WARNING(Render_Vulkan,
+                    "TEMP-DEBUG: disabling VK_EXT_conditional_rendering on Mali (known-broken "
+                    "driver behavior; Eden workaround b027dc42ce)");
+    }
+
 #undef FEATURE_EXTENSION
 #undef EXTENSION
 
@@ -1174,6 +1190,15 @@ bool Device::GetSuitability(bool requires_swapchain) {
 
     // Base Vulkan 1.0 features are always valid regardless of instance version.
     features.features = features2.features;
+
+    // TEMPORARY DEBUG (black models on Mali): dump the caps the black-model hypotheses hinge on.
+    LOG_INFO(Render_Vulkan,
+             "CAPS nullDescriptor={} maxPerStageDescriptorSampledImages={} "
+             "maxPerStageResources={} maxColorAttachments={}",
+             features.robustness2.nullDescriptor,
+             properties.properties.limits.maxPerStageDescriptorSampledImages,
+             properties.properties.limits.maxPerStageResources,
+             properties.properties.limits.maxColorAttachments);
 
     // Audit trail: this capability decides whether feedback draws keep framebuffer compression.
     if (IsExtAttachmentFeedbackLoopLayoutSupported()) {

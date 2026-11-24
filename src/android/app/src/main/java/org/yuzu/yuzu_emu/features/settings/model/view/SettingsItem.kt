@@ -971,6 +971,20 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.SHADOW_COMPARE_BYPASS,
+                    titleId = R.string.shadow_compare_bypass,
+                    descriptionId = R.string.shadow_compare_bypass_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.FORCE_STATIC_VERTEX_INPUT,
+                    titleId = R.string.force_static_vertex_input,
+                    descriptionId = R.string.force_static_vertex_input_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_REACTIVE_FLUSHING,
                     titleId = R.string.renderer_reactive_flushing,
                     descriptionId = R.string.renderer_reactive_flushing_description

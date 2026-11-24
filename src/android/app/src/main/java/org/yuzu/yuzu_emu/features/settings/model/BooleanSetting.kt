@@ -30,6 +30,8 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     RENDERER_ASYNCHRONOUS_GPU_EMULATION("use_asynchronous_gpu_emulation"),
     NATIVE_GPU_MODE("native_gpu_mode"),
     NO_WELL("no_well"),
+    SHADOW_COMPARE_BYPASS("shadow_compare_bypass"),
+    FORCE_STATIC_VERTEX_INPUT("force_static_vertex_input"),
     RENDERER_MAXWELL_BYPASS("renderer_maxwell_bypass"),
     RENDERER_CLEAR_LOADOP("renderer_clear_loadop"),
     RENDERER_CLEAR_LOADOP_PARTIAL("renderer_clear_loadop_partial"),

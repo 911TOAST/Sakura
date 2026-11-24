@@ -12,6 +12,7 @@
 #include <boost/container/small_vector.hpp>
 
 #include "common/common_types.h"
+#include "common/logging/log.h"
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
 #include "shader_recompiler/shader_info.h"
 #include "video_core/renderer_vulkan/vk_texture_cache.h"
@@ -230,8 +231,19 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
             ImageView& image_view{texture_cache.GetImageView(image_view_id)};
             VkImageView vk_image_view{image_view.Handle(desc.type)};
             if (vk_image_view == VK_NULL_HANDLE) {
+                // TEMPORARY DEBUG (black models on Mali): a sampled texture resolved to no view.
+                // With robustness2 nullDescriptor the fallback below can also be null, in which
+                // case the shader reads a null descriptor -> (0,0,0,0), a flat black material.
                 const VkImageView null_image_view{texture_cache.GetImageView(VideoCommon::NULL_IMAGE_VIEW_ID).Handle(desc.type)};
-                if (null_image_view != VK_NULL_HANDLE) vk_image_view = null_image_view;
+                if (null_image_view != VK_NULL_HANDLE) {
+                    vk_image_view = null_image_view;
+                } else {
+                    LOG_WARNING(Render_Vulkan,
+                                "NULLDESC-SAMPLED pipeline gets a null descriptor "
+                                "(primary and fallback views are VK_NULL_HANDLE) type={} cbuf={} "
+                                "slot={}",
+                                static_cast<u32>(desc.type), desc.cbuf_index, desc.cbuf_offset);
+                }
             }
             const Sampler& sampler{texture_cache.GetSampler(sampler_id)};
             const bool use_fallback_sampler{sampler.HasAddedAnisotropy() &&

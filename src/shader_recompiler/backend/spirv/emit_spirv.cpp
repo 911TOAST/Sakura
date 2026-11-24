@@ -625,6 +625,14 @@ std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_in
         effective.relax_fp32_precision = false;
     }
     EmitContext ctx{effective, runtime_info, program, bindings};
+    if (program.stage == Stage::Geometry && program.is_geometry_passthrough &&
+        !effective.support_geometry_shader_passthrough) {
+        // Lowered passthrough modules crash the ARM Mali r44 compiler; leave them unimplemented
+        // instead of feeding the driver a module it cannot compile.
+        ctx.allow_stream0_fallback = false;
+    } else {
+        ctx.allow_stream0_fallback = true;
+    }
     const Id main{DefineMain(ctx, program)};
     if (ctx.CanRelaxF32()) {
         DecorateRelaxedPrecision(program, ctx);
