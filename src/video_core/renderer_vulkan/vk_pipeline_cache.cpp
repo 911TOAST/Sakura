@@ -656,7 +656,10 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .max_user_clip_distances = device.GetMaxUserClipDistances(),
         // Compact guest vertex locations to the host limit so shaders using locations above it
         // (e.g. 32-location guests on a 16-location driver) still build their pipelines.
-        .max_vertex_input_attributes = device.GetMaxVertexInputAttributes()
+        // Set below, right after dynamic_features: compaction must stay inactive when draws use
+        // the dynamic vertex input path, because vkCmdSetVertexInput always records guest
+        // locations there; compacting the SPIR-V side only would fetch the wrong attributes.
+        .max_vertex_input_attributes = 0u
     };
     profile.relax_fp32_precision = Settings::values.renderer_relaxed_precision.GetValue();
     profile.collect_debug_info = Settings::values.renderer_debug.GetValue();
@@ -668,6 +671,10 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
     // too: without it, shaders cached before the switch was flipped keep coming back from disk.
     // The multiplier is the relaxation revision; bump it whenever the selection rules change.
     constexpr u64 relaxed_precision_revision = 2;
+    // Compaction gating changed (now off when the dynamic vertex input path is used): bump so
+    // devices with VK_EXT_vertex_input_dynamic_state do not reuse SPIR-V cached by earlier
+    // builds that compacted there.
+    constexpr u64 vertex_compaction_revision = 2;
     shader_cache_salt = Common::CityHash64(model_name.data(), model_name.size()) ^
                         (static_cast<u64>(device.GetDriverVersion()) << 32) ^
                         static_cast<u64>(device.ApiVersion()) ^
@@ -675,6 +682,7 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
                         ((static_cast<u64>(profile.relax_fp32_precision) *
                           relaxed_precision_revision)
                          << 56) ^
+                        (vertex_compaction_revision << 48) ^
                         static_cast<u64>(Shader::Serialize::InfoSerializationVersion);
 
     host_info = Shader::HostTranslateInfo{
@@ -755,6 +763,15 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
     dynamic_features.has_dynamic_vertex_input =
         device.IsExtVertexInputDynamicStateSupported() &&
         Settings::values.vertex_input_dynamic_state.GetValue();
+
+    // Vertex input compaction (attribute_compaction.h): only active on the static vertex input
+    // path. The SPIR-V backend compacts locations to fit the host limit, but the dynamic path
+    // (vkCmdSetVertexInput, vk_graphics_pipeline.cpp) always records guest locations, so
+    // compacting there would make shaders read the wrong attributes (black geometry on drivers
+    // that both expose the extension and report maxVertexInputAttributes < 32).
+    profile.max_vertex_input_attributes = dynamic_features.has_dynamic_vertex_input
+                                              ? 0u
+                                              : device.GetMaxVertexInputAttributes();
 
     dynamic_features.has_provoking_vertex = device.IsExtProvokingVertexSupported();
     dynamic_features.has_provoking_vertex_first_mode =

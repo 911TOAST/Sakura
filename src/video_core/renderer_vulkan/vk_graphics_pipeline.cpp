@@ -667,6 +667,9 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
         // locations the same way the SPIR-V backend does (attribute_compaction.h). Without this
         // a module or pipeline declaring locations above the limit fails to build and the model
         // does not render (observed on a 16-attribute ARM Mali driver).
+        // Invariant: when key.state.dynamic_vertex_input is set, the shader side is not compacted
+        // either (profile.max_vertex_input_attributes is forced to 0 in vk_pipeline_cache.cpp),
+        // because the vkCmdSetVertexInput path below always records guest locations.
         const u32 max_vertex_attributes{device.GetMaxVertexInputAttributes()};
         const bool compact_attributes =
             max_vertex_attributes != 0 && max_vertex_attributes < IR::NUM_GENERICS;
