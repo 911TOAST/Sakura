@@ -83,7 +83,7 @@ constexpr u32 CACHE_VERSION = 22; // bumped with SPIRV_CACHE_VERSION for shadow_
 constexpr std::array<char, 8> VULKAN_CACHE_MAGIC_NUMBER{'y', 'u', 'z', 'u', 'v', 'k', 'c', 'h'};
 
 constexpr u32 SPIRV_CACHE_MAGIC = 0x43565053; // "SPVC"
-constexpr u32 SPIRV_CACHE_VERSION = 3; // bumped: TEMPORARY DEBUG black-model diagnostics retranslate cached shaders
+constexpr u32 SPIRV_CACHE_VERSION = 4; // bumped: force_implicit_lod_explicit changes SPIR-V output // bumped: TEMPORARY DEBUG black-model diagnostics retranslate cached shaders
 constexpr size_t MAX_CACHED_STAGES = 5;
 constexpr size_t MAX_CACHED_SPIRV_WORDS = 16 * 1024 * 1024 / sizeof(u32);
 constexpr size_t MAX_CACHED_PAYLOAD_SIZE = 64 * 1024 * 1024;
@@ -650,6 +650,12 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
             device.IsSampledImageArrayNonUniformIndexingSupported(),
 
         .shadow_compare_bypass = Settings::values.shadow_compare_bypass.GetValue(),
+
+        // TEMPORARY Mali driver workaround (black models): MTK's ARM Mali r44 evaluates
+        // derivatives incorrectly for implicit-LOD samples inside divergent fragment branches,
+        // so those samples return black. Force explicit LOD 0 on every Mali driver while this
+        // is being verified (see docs/DriverBugs.md when the workaround lands for real).
+        .force_implicit_lod_explicit = device.IsMali(),
 
         .warp_size_potentially_larger_than_guest = device.IsWarpSizePotentiallyBiggerThanGuest(),
 

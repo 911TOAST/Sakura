@@ -490,7 +490,7 @@ Id EmitImageSampleImplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Value&
     const bool is_integer{IsTextureInteger(ctx, info)};
     const Id result_type{is_integer ? ctx.U32[4] : ctx.F32[4]};
     Id color;
-    if (ctx.stage == Stage::Fragment) {
+    if (ctx.stage == Stage::Fragment && !ctx.profile.force_implicit_lod_explicit) {
         const ImageOperands operands(ctx, info.has_bias != 0, false, info.has_lod_clamp != 0,
                                      bias_lc, offset);
         color = Emit(&EmitContext::OpImageSparseSampleImplicitLod,
@@ -499,7 +499,7 @@ Id EmitImageSampleImplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Value&
     } else {
         // We can't use implicit lods on non-fragment stages on SPIR-V. Maxwell hardware behaves as
         // if the lod was explicitly zero.  This may change on Turing with implicit compute
-        // derivatives
+        // derivatives. Also used by the force_implicit_lod_explicit Mali driver workaround.
         const Id lod{ctx.Const(0.0f)};
         const ImageOperands operands(ctx, false, true, info.has_lod_clamp != 0, lod, offset);
         color = Emit(&EmitContext::OpImageSparseSampleExplicitLod,
@@ -535,7 +535,7 @@ Id EmitImageSampleDrefImplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Va
         // shading caused by broken depth-compare (e.g. Mali drivers) becomes visible instead.
         return ctx.Const(1.0f);
     }
-    if (ctx.stage == Stage::Fragment) {
+    if (ctx.stage == Stage::Fragment && !ctx.profile.force_implicit_lod_explicit) {
         const ImageOperands operands(ctx, info.has_bias != 0, false, info.has_lod_clamp != 0,
                                      bias_lc, offset);
         return Emit(&EmitContext::OpImageSparseSampleDrefImplicitLod,

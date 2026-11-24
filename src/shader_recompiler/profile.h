@@ -59,6 +59,11 @@ struct Profile {
     // "lit" (1.0). Set from Settings::values.shadow_compare_bypass by each renderer profile.
     bool shadow_compare_bypass{};
 
+    // Experimental workaround for drivers (MediaTek-bundled ARM Mali, r44) that mis-evaluate
+    // derivatives for implicit-LOD samples inside divergent fragment control flow, returning
+    // black. Forces every implicit-LOD sample in the fragment stage down to explicit LOD 0.
+    bool force_implicit_lod_explicit{};
+
     bool warp_size_potentially_larger_than_guest{};
 
     bool lower_left_origin_mode{};
