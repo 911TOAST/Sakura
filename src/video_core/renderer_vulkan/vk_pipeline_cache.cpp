@@ -83,7 +83,7 @@ constexpr u32 CACHE_VERSION = 22; // bumped with SPIRV_CACHE_VERSION for shadow_
 constexpr std::array<char, 8> VULKAN_CACHE_MAGIC_NUMBER{'y', 'u', 'z', 'u', 'v', 'k', 'c', 'h'};
 
 constexpr u32 SPIRV_CACHE_MAGIC = 0x43565053; // "SPVC"
-constexpr u32 SPIRV_CACHE_VERSION = 4; // bumped: force_implicit_lod_explicit changes SPIR-V output // bumped: TEMPORARY DEBUG black-model diagnostics retranslate cached shaders
+constexpr u32 SPIRV_CACHE_VERSION = 5; // bumped: dref-gather shadow bypass changes SPIR-V output // bumped: force_implicit_lod_explicit changes SPIR-V output // bumped: TEMPORARY DEBUG black-model diagnostics retranslate cached shaders
 constexpr size_t MAX_CACHED_STAGES = 5;
 constexpr size_t MAX_CACHED_SPIRV_WORDS = 16 * 1024 * 1024 / sizeof(u32);
 constexpr size_t MAX_CACHED_PAYLOAD_SIZE = 64 * 1024 * 1024;

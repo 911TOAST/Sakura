@@ -585,6 +585,12 @@ Id EmitImageGather(EmitContext& ctx, IR::Inst* inst, const IR::Value& index, Id 
 Id EmitImageGatherDref(EmitContext& ctx, IR::Inst* inst, const IR::Value& index, Id coords,
                        const IR::Value& offset, const IR::Value& offset2, Id dref) {
     const auto info{inst->Flags<IR::TextureInstInfo>()};
+    if (ctx.profile.shadow_compare_bypass) {
+        // Experimental diagnostic: report "lit" for every depth-compare gather (PCF shadow) so
+        // black shading caused by broken depth-compare (e.g. Mali drivers) becomes visible
+        // instead. The sample-Dref emits have the same bypass; the gather path was missed.
+        return ctx.Const(1.0f);
+    }
     const bool is_integer{IsTextureInteger(ctx, info)};
     const Id result_type{is_integer ? ctx.U32[4] : ctx.F32[4]};
     const ImageOperands operands(ctx, offset, offset2);
