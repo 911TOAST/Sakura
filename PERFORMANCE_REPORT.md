@@ -1,6 +1,83 @@
 # Sakura optimized build — performance reports
 
-Date: 2026-10-24 (CPU pass), updated 2026-11-14 (memory budget pass), updated 2026-11-12 (Mali layout experiments + BCn→ASTC)
+Date: 2026-10-24 (CPU pass), updated 2026-11-25 (hot-path micro pass), updated 2026-11-14 (memory budget pass), updated 2026-11-12 (Mali layout experiments + BCn→ASTC)
+
+## 2026-11-25 pass — hot-path micro pass (batched downloads, transfer-engine blits, sync churn)
+
+Branch: `perf/zero-cost-hot-paths`. Files:
+`src/video_core/texture_cache/texture_cache.h`,
+`src/video_core/renderer_vulkan/vk_texture_cache.cpp`,
+`src/video_core/renderer_vulkan/vk_buffer_cache.cpp`,
+`src/video_core/dma_pusher.h`,
+`src/core/hle/service/nvdrv/devices/nvhost_gpu.cpp`,
+`src/core/core_timing.cpp`,
+`src/core/hle/kernel/k_scheduler.cpp`,
+`src/common/bounded_threadsafe_queue.h`.
+
+### What changed
+
+All of these are mechanism-level changes found by a code audit plus external literature; none is
+measured. Each removes work that executes unconditionally on a hot path, with no behavioural
+change intended.
+
+- **Batched texture download drain** (`texture_cache.h`, `DownloadMemory`): the flush path called
+  `runtime.Finish()` (full submit + wait, which on a tiler also flushes tile writeback of prior
+  passes) once **per image** inside the loop. The batch records every `CopyImageToBuffer` into
+  the current stream and issues one `Finish` for up to 4 images / 32 MiB (residency cap degrades
+  to per-image behaviour beyond that). Copy order and swizzle order are unchanged; the single
+  wait happens before any map is read, as before.
+- **Transfer-engine path for same-format 1:1 color blits** (`vk_texture_cache.cpp`,
+  `BlitImage`): same-format, unscaled, `SrcCopy`/nearest, non-rescaled color blits now fall
+  through to the existing `vkCmdBlitImage` transfer path instead of the shader helper. The
+  shader variant cost a render pass (tile store + load), a descriptor commit and a pipeline bind
+  per blit; the transfer variant is one blit-engine command. Format conversion, scaling,
+  filtering, MSAA and rescaled surfaces all keep the shader path.
+- **Exact subresource ranges on download barriers** (`vk_texture_cache.cpp`,
+  `Image::DownloadMemory`): both the MSAA-resolve and regular download lambdas barriered
+  `VK_REMAINING_MIP_LEVELS / VK_REMAINING_ARRAY_LAYERS`; they now compute a `RangedBarrierRange`
+  from the actual copies, mirroring what the upload path already does.
+- **Narrowed write-barrier scopes on non-upload buffer copies** (`vk_buffer_cache.cpp`,
+  `CopyBuffer` / `PostCopyBarrier`): on Mali the destination stage is now
+  `GRAPHICS|COMPUTE|TRANSFER|DRAW_INDIRECT`, matching the scope the scheduler's upload-completion
+  barrier already uses; other drivers keep `ALL_COMMANDS`.
+- **GPFIFO submit skips the zeroing pass** (`dma_pusher.h`, `nvhost_gpu.cpp`): the non-kickoff
+  submit paths value-initialized the whole header list and then `memcpy`ed/overwrote it. A new
+  iterator-range `CommandList` constructor copies the headers straight into uninitialized
+  storage; the one-shot kickoff path keeps the previous behaviour.
+- **`CoreTiming::UnscheduleEvent` identity compare** (`core_timing.cpp`): the O(queue) scan
+  resolved a `weak_ptr` (acquire+release refcount pair) per queued entry just to compare
+  pointers; it now compares control-block identity via `owner_before`.
+- **Yield/park fixes** (`k_scheduler.cpp`, `core_timing.cpp`): the scheduler context-guard spin
+  loop burns a full core slice with no hint when a loser contends; it now issues
+  `__builtin_arm_yield()` (WFE) on aarch64. `CoreTiming::SyncPause`'s naked spin got a yield.
+- **`SPSCQueue` steady-state fast path** (`bounded_threadsafe_queue.h`): `EmplaceWait`/`PopWait`
+  took two mutex round trips plus an unconditional condvar notify per item even when the queue
+  was neither full nor empty. Space/emptiness is now checked before locking, and notify only
+  fires when the peer is actually parked (a parked-flag atomic in each side's struct; both wait
+  sides still re-check their predicate under the mutex, so the skipped-notify race is benign).
+
+### Considered and rejected
+
+- **No-op'ing the Mali occlusion-query streamer**: the initial audit claimed Mali discards query
+  results, but the async-flush path (`PushUnsyncedQueries` → `SamplesQueryBank::Sync` →
+  `QueryCacheBase::SemiFlushQueryDirty`) writes those results to guest memory. Skewing them
+  (e.g. always "visible", 1) would be a behaviour change, not a free win.
+- **Eliding the pre-dispatch barrier between consecutive compute dispatches**: that barrier *is*
+  the memory dependency that makes dispatch N's writes visible to dispatch N's reads; Vulkan
+  provides no implicit compute→compute visibility inside a command buffer.
+- **Snapshotting clock settings in `GetClockTicks`**: `SwitchableSetting::GetValue` supports
+  live per-game overrides; snapshotting at `Initialize` would freeze mid-session UI changes.
+- **Hoisting `ArmNce::Initialize` out of `RunThread`**: it registers the per-thread signal
+  altstack and must re-run per host thread that enters a core.
+
+### Verification
+
+Static only. No device, no build: this pass was written in a worktree and the tree builds in
+GitHub Actions (Step 5 of `AGENTS.md`). There is no RSS, FPS, frametime or thermal number to
+report for any bullet above; each is a removal of work that the code provably did. The
+measurement hooks are the existing `[TileFlow]` counters (`renderer_tileflow_counters`, which
+will show fewer `TileFlowBreak::ImageDownload`/`BlitImage` pass breaks per flush event) and
+`malioc`/Streamline on-device A/B per `docs/MOBILE_PERF_AUDIT.md`.
 
 ## 2026-11-14 pass — 6 GiB process budget, deep memory pass
 
