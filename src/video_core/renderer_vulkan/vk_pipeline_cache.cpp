@@ -885,15 +885,13 @@ void PipelineCache::InitializeMaxwellBypass() {
     maxwell_bypass_initialized = true;
 
     // Skipping the derivation is only sound when every piece of state that reaches the key is
-    // covered by a watched dirty flag. That holds for the full extended-dynamic-state permutation:
-    // the others fold whole register blocks into FixedPipelineState::dynamic_state and the vertex
-    // attribute table, which this path does not track.
+    // covered by a watched dirty flag. EDS1 + EDS2 + dynamic vertex input cover the untracked
+    // dynamic_state/vertex-attribute blocks; the non-EDS3 fallback paths (Blending, LogicOp,
+    // LogicOpEnable, DepthClampEnable, LineStippleEnable) all use watched dirty flags, so EDS3
+    // is not required (important for ARM Mali drivers that lack EDS3).
     maxwell_bypass_available =
         dynamic_features.has_extended_dynamic_state &&
         dynamic_features.has_extended_dynamic_state_2 &&
-        dynamic_features.has_extended_dynamic_state_2_logic_op &&
-        dynamic_features.has_extended_dynamic_state_3_blend &&
-        dynamic_features.has_extended_dynamic_state_3_enables &&
         dynamic_features.has_dynamic_vertex_input;
     if (!maxwell_bypass_available) {
         LOG_INFO(Render_Vulkan, "[Bypass] Maxwell pipeline bypass unavailable on this device");
