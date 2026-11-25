@@ -15,6 +15,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.MotionEvent
+import android.view.ContextThemeWrapper
 import android.os.Handler
 import android.os.Looper
 import androidx.appcompat.app.AlertDialog
@@ -40,6 +41,7 @@ import org.yuzu.yuzu_emu.features.settings.model.view.SpinBoxSetting
 import org.yuzu.yuzu_emu.features.settings.model.view.StringInputSetting
 import org.yuzu.yuzu_emu.features.settings.model.view.StringSingleChoiceSetting
 import org.yuzu.yuzu_emu.ui.theme.ThemeController
+import org.yuzu.yuzu_emu.utils.Log
 import org.yuzu.yuzu_emu.utils.ParamPackage
 import org.yuzu.yuzu_emu.utils.collect
 
@@ -67,22 +69,30 @@ class SettingsDialogFragment : DialogFragment(), DialogInterface.OnClickListener
     /**
      * Material's builder validates the context theme. After a theme or night-mode change the
      * activity is recreated while a settings dialog is still attached; re-inflating that dialog
-     * in the torn-down window can yield a context that lost its AppCompat theme, and the
-     * convolution then throws IllegalArgumentException and kills the app. Falling back to an
-     * explicit Material 3 theme keeps the switch alive.
+     * in the torn-down window can yield a context that lost its Material theme, and the
+     * construction throws IllegalArgumentException and kills the app (observed after the 2026
+     * theme-pipeline rework on Android 16, even when wrapped in a full palette theme).
+     * Recovery ladder, each rung logged so device reports name themselves:
+     * 1. the activity context as-is (full palette theme in the normal case);
+     * 2. an explicit wrapper carrying the resolved palette theme;
+     * 3. a plain AppCompat builder — no Material enforcement, plainer styling, app stays alive.
      */
-    private fun dialogBuilder(): MaterialAlertDialogBuilder =
+    private fun dialogBuilder(): AlertDialog.Builder =
         try {
             MaterialAlertDialogBuilder(requireContext())
-        } catch (_: IllegalArgumentException) {
-            // Wrap in the full resolved palette theme, not the activity (possibly an
-            // overlay-only theme mid-recreation), so the dialog keeps the user's palette.
-            MaterialAlertDialogBuilder(
-                android.view.ContextThemeWrapper(
-                    requireContext(),
-                    ThemeController.current().xmlTheme()
-                )
+        } catch (first: IllegalArgumentException) {
+            Log.warning(
+                "dialogBuilder: activity theme rejected (${first.message}); " +
+                    "context=${requireContext().javaClass.simpleName}"
             )
+            try {
+                MaterialAlertDialogBuilder(
+                    ContextThemeWrapper(requireContext(), ThemeController.current().xmlTheme())
+                )
+            } catch (second: IllegalArgumentException) {
+                Log.warning("dialogBuilder: palette wrapper rejected too; using AppCompat builder")
+                AlertDialog.Builder(requireContext())
+            }
         }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
