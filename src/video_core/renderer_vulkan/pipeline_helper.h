@@ -13,6 +13,7 @@
 
 #include "common/common_types.h"
 #include "common/logging/log.h"
+#include "common/settings.h"
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
 #include "shader_recompiler/shader_info.h"
 #include "video_core/renderer_vulkan/vk_texture_cache.h"
@@ -254,8 +255,12 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
                 VideoCore::Surface::IsPixelFormatInteger(image_view.format)) {
                 vk_sampler = sampler.HandleWithNearestFilter();
             }
+            // TEMPORARY DEBUG (black models on Mali): when manual depth-compare is enabled via
+            // shadow_compare_manual_flip, sample depth textures WITHOUT the hardware compare.
             if (desc.is_depth && sampler.HasDepthComparison() &&
-                !image_view.SupportsDepthComparison()) {
+                ((Settings::values.shadow_compare_bypass.GetValue() &&
+                  Settings::values.shadow_compare_manual_flip.GetValue()) ||
+                 !image_view.SupportsDepthComparison())) {
                 vk_sampler = sampler.HandleWithoutDepthComparison();
             }
             guest_descriptor_queue.AddSampledImage(vk_image_view, vk_sampler);

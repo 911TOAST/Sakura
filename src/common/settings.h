@@ -433,6 +433,10 @@ struct Values {
     // compare path is the culprit on this driver.
     SwitchableSetting<bool> shadow_compare_bypass{linkage, false, "shadow_compare_bypass",
                                                   Category::RendererDebug};
+    // Experimental: flips the direction of the manual in-shader depth compare used by
+    // shadow_compare_bypass (false: depth <= ref is "lit", true: depth >= ref is "lit").
+    SwitchableSetting<bool> shadow_compare_manual_flip{linkage, false, "shadow_compare_manual_flip",
+                                                       Category::RendererDebug};
     // Experimental: never use VK_EXT_vertex_input_dynamic_state, even in Malikan mode. Diagnostic
     // for suspected ARM r4x driver bugs where dynamic vertex input strides/bindings misbehave
     // (ANGLE blacklists the feature on ARM < r48).

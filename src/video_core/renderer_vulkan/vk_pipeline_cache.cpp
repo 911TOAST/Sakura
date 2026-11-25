@@ -83,7 +83,7 @@ constexpr u32 CACHE_VERSION = 22; // bumped with SPIRV_CACHE_VERSION for shadow_
 constexpr std::array<char, 8> VULKAN_CACHE_MAGIC_NUMBER{'y', 'u', 'z', 'u', 'v', 'k', 'c', 'h'};
 
 constexpr u32 SPIRV_CACHE_MAGIC = 0x43565053; // "SPVC"
-constexpr u32 SPIRV_CACHE_VERSION = 5; // bumped: dref-gather shadow bypass changes SPIR-V output // bumped: force_implicit_lod_explicit changes SPIR-V output // bumped: TEMPORARY DEBUG black-model diagnostics retranslate cached shaders
+constexpr u32 SPIRV_CACHE_VERSION = 7; // bumped: shadow bypass defaults to constant 1.0 (manual compare gated on shadow_compare_manual_flip); gather dref uses Texture() sampled image
 constexpr size_t MAX_CACHED_STAGES = 5;
 constexpr size_t MAX_CACHED_SPIRV_WORDS = 16 * 1024 * 1024 / sizeof(u32);
 constexpr size_t MAX_CACHED_PAYLOAD_SIZE = 64 * 1024 * 1024;
@@ -650,6 +650,7 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
             device.IsSampledImageArrayNonUniformIndexingSupported(),
 
         .shadow_compare_bypass = Settings::values.shadow_compare_bypass.GetValue(),
+        .shadow_compare_manual_flip = Settings::values.shadow_compare_manual_flip.GetValue(),
 
         // TEMPORARY Mali driver workaround (black models): MTK's ARM Mali r44 evaluates
         // derivatives incorrectly for implicit-LOD samples inside divergent fragment branches,

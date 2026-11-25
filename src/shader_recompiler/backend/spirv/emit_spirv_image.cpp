@@ -527,13 +527,44 @@ Id EmitImageSampleExplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Value&
     return is_integer ? ctx.OpBitcast(ctx.F32[4], result) : result;
 }
 
+// TEMPORARY DEBUG (black models on Mali): manual depth-compare. The runtime pushes a
+// compare-disable sampler (pipeline_helper.h), so raw depth lands in the sampled channels and
+// we perform the guest compare in-shader. shadow_compare_manual_flip selects the direction.
+Id ManualDrefCompare(EmitContext& ctx, Id depth, Id dref) {
+    const Id cond{ctx.profile.shadow_compare_manual_flip
+                      ? ctx.OpFOrdGreaterThanEqual(ctx.U1, depth, dref)
+                      : ctx.OpFOrdLessThanEqual(ctx.U1, depth, dref)};
+    return ctx.OpSelect(ctx.F32[1], cond, ctx.Const(1.0f), ctx.Const(0.0f));
+}
+
+Id ManualDrefCompareVec4(EmitContext& ctx, Id depth4, Id dref) {
+    const Id bvec4{ctx.TypeVector(ctx.U1, 4)};
+    const Id dref4{ctx.OpCompositeConstruct(ctx.F32[4], dref, dref, dref, dref)};
+    const Id mask{ctx.profile.shadow_compare_manual_flip
+                      ? ctx.OpFOrdGreaterThanEqual(bvec4, depth4, dref4)
+                      : ctx.OpFOrdLessThanEqual(bvec4, depth4, dref4)};
+    const Id ones{ctx.OpCompositeConstruct(ctx.F32[4], ctx.Const(1.0f), ctx.Const(1.0f),
+                                           ctx.Const(1.0f), ctx.Const(1.0f))};
+    const Id zeros{ctx.OpCompositeConstruct(ctx.F32[4], ctx.Const(0.0f), ctx.Const(0.0f),
+                                            ctx.Const(0.0f), ctx.Const(0.0f))};
+    return ctx.OpSelect(ctx.F32[4], mask, ones, zeros);
+}
+
 Id EmitImageSampleDrefImplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Value& index,
                                   Id coords, Id dref, Id bias_lc, const IR::Value& offset) {
     const auto info{inst->Flags<IR::TextureInstInfo>()};
     if (ctx.profile.shadow_compare_bypass) {
-        // Experimental diagnostic: report "lit" for every shadow-map compare sample so black
-        // shading caused by broken depth-compare (e.g. Mali drivers) becomes visible instead.
-        return ctx.Const(1.0f);
+        if (!ctx.profile.shadow_compare_manual_flip) {
+            // Constant 1.0 un-blacks the models on Mali drivers where raw depth sampling returns 0.0.
+            return ctx.Const(1.0f);
+        }
+        // Mali workaround: hardware depth-compare misbehaves on this driver, so fetch raw depth
+        // (the bound sampler has compare disabled) and compare in-shader at LOD 0.
+        const ImageOperands operands(ctx, false, true, false, ctx.Const(0.0f), offset);
+        const Id color{Emit(&EmitContext::OpImageSparseSampleExplicitLod,
+                            &EmitContext::OpImageSampleExplicitLod, ctx, inst, ctx.F32[4],
+                            Texture(ctx, info, index), coords, operands.Mask(), operands.Span())};
+        return ManualDrefCompare(ctx, ctx.OpCompositeExtract(ctx.F32[1], color, 0U), dref);
     }
     if (ctx.stage == Stage::Fragment && !ctx.profile.force_implicit_lod_explicit) {
         const ImageOperands operands(ctx, info.has_bias != 0, false, info.has_lod_clamp != 0,
@@ -557,8 +588,16 @@ Id EmitImageSampleDrefExplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Va
                                   Id coords, Id dref, Id lod, const IR::Value& offset) {
     const auto info{inst->Flags<IR::TextureInstInfo>()};
     if (ctx.profile.shadow_compare_bypass) {
-        // Same diagnostic as the implicit-lod variant; NieR machines use this path.
-        return ctx.Const(1.0f);
+        if (!ctx.profile.shadow_compare_manual_flip) {
+            // Constant 1.0 un-blacks the models on Mali drivers where raw depth sampling returns 0.0.
+            return ctx.Const(1.0f);
+        }
+        // Same workaround as the implicit-lod variant; NieR machines use these paths.
+        const ImageOperands operands(ctx, false, true, false, lod, offset);
+        const Id color{Emit(&EmitContext::OpImageSparseSampleExplicitLod,
+                            &EmitContext::OpImageSampleExplicitLod, ctx, inst, ctx.F32[4],
+                            Texture(ctx, info, index), coords, operands.Mask(), operands.Span())};
+        return ManualDrefCompare(ctx, ctx.OpCompositeExtract(ctx.F32[1], color, 0U), dref);
     }
     const ImageOperands operands(ctx, false, true, false, lod, offset);
     return Emit(&EmitContext::OpImageSparseSampleDrefExplicitLod,
@@ -586,10 +625,24 @@ Id EmitImageGatherDref(EmitContext& ctx, IR::Inst* inst, const IR::Value& index,
                        const IR::Value& offset, const IR::Value& offset2, Id dref) {
     const auto info{inst->Flags<IR::TextureInstInfo>()};
     if (ctx.profile.shadow_compare_bypass) {
-        // Experimental diagnostic: report "lit" for every depth-compare gather (PCF shadow) so
-        // black shading caused by broken depth-compare (e.g. Mali drivers) becomes visible
-        // instead. The sample-Dref emits have the same bypass; the gather path was missed.
-        return ctx.Const(1.0f);
+        if (!ctx.profile.shadow_compare_manual_flip) {
+            // Constant 1.0 un-blacks the models on Mali drivers where raw depth sampling returns 0.0.
+            // Dref gather returns a vec4 of 4 depth comparison results.
+            const Id one{ctx.Const(1.0f)};
+            return ctx.OpCompositeConstruct(ctx.F32[4], one, one, one, one);
+        }
+        // Mali workaround: no hardware dref gather. Gather raw depth (component 0) with the
+        // compare-disable sampler and emulate the per-texel compare in-shader.
+        const ImageOperands operands(ctx, offset, offset2);
+        Id raw_coords{coords};
+        if (ctx.profile.need_gather_subpixel_offset) {
+            raw_coords = ImageGatherSubpixelOffset(ctx, info, TextureImage(ctx, info, index),
+                                                   raw_coords);
+        }
+        const Id raw{Emit(&EmitContext::OpImageSparseGather, &EmitContext::OpImageGather, ctx,
+                          inst, ctx.F32[4], Texture(ctx, info, index), raw_coords,
+                          ctx.Const(0U), operands.MaskOptional(), operands.Span())};
+        return ManualDrefCompareVec4(ctx, raw, dref);
     }
     const bool is_integer{IsTextureInteger(ctx, info)};
     const Id result_type{is_integer ? ctx.U32[4] : ctx.F32[4]};

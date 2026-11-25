@@ -57,7 +57,11 @@ struct Profile {
 
     // Experimental diagnostic: replace guest depth-compare (shadow map) sample results with
     // "lit" (1.0). Set from Settings::values.shadow_compare_bypass by each renderer profile.
+    // With this set, the emits instead gather raw depth and compare manually in-shader; the
+    // runtime must push a compare-disable sampler (pipeline_helper.h HandleWithoutDepthComparison).
     bool shadow_compare_bypass{};
+    // Direction of the manual compare above: false = depth <= ref is "lit", true = depth >= ref.
+    bool shadow_compare_manual_flip{};
 
     // Experimental workaround for drivers (MediaTek-bundled ARM Mali, r44) that mis-evaluate
     // derivatives for implicit-LOD samples inside divergent fragment control flow, returning
