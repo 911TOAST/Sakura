@@ -6,6 +6,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.content.Intent
@@ -35,7 +37,7 @@ class SetupWarningDialogFragment : DialogFragment() {
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val builder = MaterialAlertDialogBuilder(requireContext())
+        val builder = SakuraDialogs.builder(requireContext())
             .setPositiveButton(R.string.warning_skip) { _: DialogInterface?, _: Int ->
                 setupFragment.pageForward()
                 setupFragment.setPageWarned(page)

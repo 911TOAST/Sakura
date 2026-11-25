@@ -6,6 +6,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.os.Bundle
@@ -40,7 +42,7 @@ class ProgressDialogFragment : DialogFragment() {
 
         binding = DialogProgressBarBinding.inflate(layoutInflater)
         binding.progressBar.isIndeterminate = true
-        val dialog = MaterialAlertDialogBuilder(requireContext())
+        val dialog = SakuraDialogs.builder(requireContext())
             .setTitle(titleId)
             .setView(binding.root)
 

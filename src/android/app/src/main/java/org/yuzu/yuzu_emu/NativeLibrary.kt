@@ -6,6 +6,8 @@
 
 package org.yuzu.yuzu_emu
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.content.DialogInterface
 import android.net.Uri
 import android.text.Html
@@ -428,7 +430,7 @@ object NativeLibrary {
             return
         }
 
-        val builder = MaterialAlertDialogBuilder(emulationActivity)
+        val builder = SakuraDialogs.builder(emulationActivity)
             .setTitle(captionId)
             .setMessage(
                 Html.fromHtml(

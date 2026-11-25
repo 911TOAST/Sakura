@@ -6,6 +6,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.os.Bundle
@@ -44,7 +46,7 @@ class GameFolderPropertiesDialogFragment : DialogFragment() {
             }
         }
 
-        return MaterialAlertDialogBuilder(requireContext())
+        return SakuraDialogs.builder(requireContext())
             .setView(binding.root)
             .setTitle(R.string.game_folder_properties)
             .setPositiveButton(android.R.string.ok) { _: DialogInterface, _: Int ->

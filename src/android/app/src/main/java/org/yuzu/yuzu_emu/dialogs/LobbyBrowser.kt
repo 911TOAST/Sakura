@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.dialogs
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Configuration
@@ -170,7 +172,7 @@ class LobbyBrowser(context: Context) : BottomSheetDialog(context) {
         val dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_password_input, null)
         val passwordInput = dialogView.findViewById<TextInputEditText>(R.id.password_input)
 
-        MaterialAlertDialogBuilder(context)
+        SakuraDialogs.builder(context)
             .setTitle(context.getString(R.string.multiplayer_password_required))
             .setView(dialogView)
             .setPositiveButton(R.string.multiplayer_join_room) { _, _ ->

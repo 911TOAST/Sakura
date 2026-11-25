@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.dialogs
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Configuration
@@ -609,7 +611,7 @@ class NetPlayDialog(context: Context) : BottomSheetDialog(context) {
 
     private fun showModerationDialog() {
         val activity = CompatUtils.findActivity(context)
-        val dialog = MaterialAlertDialogBuilder(activity)
+        val dialog = SakuraDialogs.builder(activity)
         dialog.setTitle(R.string.multiplayer_moderation_title)
 
         val banList = NetPlayManager.getBanList()
@@ -627,7 +629,7 @@ class NetPlayDialog(context: Context) : BottomSheetDialog(context) {
         lateinit var adapter: BanListAdapter
 
         val onUnban: (String) -> Unit = { bannedItem ->
-            MaterialAlertDialogBuilder(activity)
+            SakuraDialogs.builder(activity)
                 .setTitle(R.string.multiplayer_unban_title)
                 .setMessage(activity.getString(R.string.multiplayer_unban_message, bannedItem))
                 .setPositiveButton(R.string.multiplayer_unban) { _, _ ->

@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
@@ -178,7 +180,7 @@ class EditUserDialogFragment : Fragment() {
         val progressLoading = dialogView.findViewById<View>(R.id.progress_loading)
         val textEmpty = dialogView.findViewById<View>(R.id.text_empty)
 
-        val dialog = MaterialAlertDialogBuilder(requireContext())
+        val dialog = SakuraDialogs.builder(requireContext())
             .setTitle(R.string.profile_firmware_avatars)
             .setView(dialogView)
             .setNegativeButton(android.R.string.cancel, null)
@@ -286,7 +288,7 @@ class EditUserDialogFragment : Fragment() {
             val croppedBitmap = centerCropBitmap(bitmap, 256, 256)
             binding.imageUserAvatar.setImageBitmap(croppedBitmap)
         } catch (e: Exception) {
-            MaterialAlertDialogBuilder(requireContext())
+            SakuraDialogs.builder(requireContext())
                 .setTitle(R.string.error)
                 .setMessage(getString(R.string.profile_image_load_error, e.message))
                 .setPositiveButton(android.R.string.ok, null)
@@ -408,7 +410,7 @@ class EditUserDialogFragment : Fragment() {
     }
 
     private fun showError(message: String) {
-        MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.error)
             .setMessage(message)
             .setPositiveButton(android.R.string.ok, null)

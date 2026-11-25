@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.applets.keyboard.ui
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.os.Bundle
@@ -65,7 +67,7 @@ class KeyboardDialogFragment : DialogFragment() {
         val okText =
             config.ok_text!!.ifEmpty { resources.getString(R.string.submit) }
 
-        return MaterialAlertDialogBuilder(requireContext())
+        return SakuraDialogs.builder(requireContext())
             .setTitle(headerText)
             .setView(binding.root)
             .setPositiveButton(okText) { _, _ ->

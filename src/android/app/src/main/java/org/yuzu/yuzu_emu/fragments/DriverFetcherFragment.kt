@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.os.Bundle
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
@@ -178,7 +180,7 @@ class DriverFetcherFragment : Fragment() {
                         }
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
-                            MaterialAlertDialogBuilder(requireActivity()).setTitle(
+                            SakuraDialogs.builder(requireActivity()).setTitle(
                                 getString(R.string.error_during_fetch)
                             )
                                 .setMessage(

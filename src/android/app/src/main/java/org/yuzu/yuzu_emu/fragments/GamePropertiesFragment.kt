@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
@@ -200,7 +202,7 @@ class GamePropertiesFragment : Fragment() {
         minutesInput.setText(minutes.toString())
         secondsInput.setText(seconds.toString())
 
-        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+        val dialog = SakuraDialogs.builder(requireContext())
             .setTitle(R.string.edit_playtime)
             .setView(dialogView)
             .setPositiveButton(android.R.string.ok, null)
@@ -825,7 +827,7 @@ class GamePropertiesFragment : Fragment() {
             return@registerForActivityResult
         }
 
-        MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.community_config_import_title)
             .setMessage(
                 getString(
@@ -886,7 +888,7 @@ class GamePropertiesFragment : Fragment() {
 
     private fun restoreConfigBackup() {
         val backup = latestConfigBackup() ?: return
-        MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.restore_config_backup)
             .setMessage(R.string.restore_config_backup_warning)
             .setNegativeButton(android.R.string.cancel, null)

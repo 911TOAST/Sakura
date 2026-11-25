@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.os.Bundle
@@ -25,7 +27,7 @@ class LaunchGameDialogFragment : DialogFragment() {
             selectedItem = savedInstanceState.getInt(SELECTED_ITEM)
         }
 
-        return MaterialAlertDialogBuilder(requireContext())
+        return SakuraDialogs.builder(requireContext())
             .setTitle(R.string.launch_options)
             .setPositiveButton(android.R.string.ok) { _: DialogInterface, _: Int ->
                 val action = HomeNavigationDirections

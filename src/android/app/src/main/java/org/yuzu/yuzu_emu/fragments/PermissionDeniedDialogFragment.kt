@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.content.Intent
@@ -15,7 +17,7 @@ import org.yuzu.yuzu_emu.R
 
 class PermissionDeniedDialogFragment : DialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        return MaterialAlertDialogBuilder(requireContext())
+        return SakuraDialogs.builder(requireContext())
             .setPositiveButton(R.string.home_settings) { _: DialogInterface?, _: Int ->
                 openSettings()
             }

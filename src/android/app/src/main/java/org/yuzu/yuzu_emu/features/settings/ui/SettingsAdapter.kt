@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.features.settings.ui
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.content.Context
 import android.icu.util.Calendar
 import android.icu.util.TimeZone
@@ -129,7 +131,7 @@ class SettingsAdapter(
             // Restore the off state while the user decides; frame generation only becomes active
             // after explicit confirmation.
             notifyItemChanged(position)
-            MaterialAlertDialogBuilder(fragment.requireContext())
+            SakuraDialogs.builder(fragment.requireContext())
                 .setTitle(R.string.frame_gen_warning_title)
                 .setMessage(R.string.frame_gen_warning)
                 .setNegativeButton(android.R.string.cancel, null)

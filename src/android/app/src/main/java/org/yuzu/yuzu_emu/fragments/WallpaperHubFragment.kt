@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -217,7 +219,7 @@ class WallpaperHubFragment : Fragment() {
     }
 
     private fun confirmRestoreDefault() {
-        MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.wallpaper_restore)
             .setMessage(R.string.wallpaper_restore_message)
             .setNegativeButton(R.string.cancel, null)

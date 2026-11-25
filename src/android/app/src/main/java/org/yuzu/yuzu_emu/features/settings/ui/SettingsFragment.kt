@@ -6,6 +6,8 @@
 
 package org.yuzu.yuzu_emu.features.settings.ui
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
@@ -272,7 +274,7 @@ private fun getPlayerIndex(): Int =
 
     private fun handlePathPickerRequest() {
         if (!hasAllFilesPermission()) {
-            MaterialAlertDialogBuilder(requireContext())
+            SakuraDialogs.builder(requireContext())
                 .setTitle(R.string.all_files_permission_required)
                 .setMessage(R.string.all_files_permission_required)
                 .setPositiveButton(R.string.grant_permission) { _, _ ->
@@ -342,7 +344,7 @@ private fun getPlayerIndex(): Int =
         }
 
         if (destHasSaves) {
-            MaterialAlertDialogBuilder(requireContext())
+            SakuraDialogs.builder(requireContext())
                 .setTitle(R.string.migrate_save_data)
                 .setMessage(R.string.destination_has_saves)
                 .setPositiveButton(R.string.confirm) { _, _ ->
@@ -354,7 +356,7 @@ private fun getPlayerIndex(): Int =
                 .setNeutralButton(R.string.cancel, null)
                 .show()
         } else {
-            MaterialAlertDialogBuilder(requireContext())
+            SakuraDialogs.builder(requireContext())
                 .setTitle(R.string.migrate_save_data)
                 .setMessage(R.string.migrate_save_data_question)
                 .setPositiveButton(R.string.confirm) { _, _ ->
@@ -430,7 +432,7 @@ private fun getPlayerIndex(): Int =
         val currentPath = pathSetting.getCurrentPath()
         val defaultPath = pathSetting.getDefaultPath()
 
-        MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.reset_to_nand)
             .setMessage(R.string.migrate_save_data_question)
             .setPositiveButton(R.string.confirm) { _, _ ->

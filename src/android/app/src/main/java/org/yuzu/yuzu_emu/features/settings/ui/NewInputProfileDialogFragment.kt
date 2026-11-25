@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.features.settings.ui
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.os.Bundle
 import android.widget.Toast
@@ -29,7 +31,7 @@ class NewInputProfileDialogFragment : DialogFragment() {
         binding = DialogEditTextBinding.inflate(layoutInflater)
 
         val setting = settingsViewModel.clickedItem as InputProfileSetting
-        return MaterialAlertDialogBuilder(requireContext())
+        return SakuraDialogs.builder(requireContext())
             .setTitle(R.string.enter_profile_name)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 val profileName = binding.editText.text.toString()

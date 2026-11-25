@@ -6,6 +6,8 @@
 
 package org.yuzu.yuzu_emu.utils
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.content.Context
 import android.widget.Toast
 import androidx.fragment.app.FragmentActivity
@@ -168,7 +170,7 @@ object CustomSettingsHandler {
                     dialogBinding.title.text = activity.getString(R.string.installing_driver)
                     dialogBinding.status.text = activity.getString(R.string.downloading)
 
-                    val progressDialog = MaterialAlertDialogBuilder(activity)
+                    val progressDialog = SakuraDialogs.builder(activity)
                         .setView(dialogBinding.root)
                         .setCancelable(false)
                         .create()
@@ -408,7 +410,7 @@ object CustomSettingsHandler {
     private suspend fun askUserToOverwriteConfig(activity: FragmentActivity, gameTitle: String): Boolean {
         return suspendCoroutine { continuation ->
             activity.runOnUiThread {
-                MaterialAlertDialogBuilder(activity)
+                SakuraDialogs.builder(activity)
                     .setTitle(activity.getString(R.string.config_already_exists_title))
                     .setMessage(
                         activity.getString(R.string.config_already_exists_message, gameTitle)
@@ -431,7 +433,7 @@ object CustomSettingsHandler {
     private suspend fun askUserToDownloadDriver(activity: FragmentActivity, driverName: String): Boolean {
         return suspendCoroutine { continuation ->
             activity.runOnUiThread {
-                MaterialAlertDialogBuilder(activity)
+                SakuraDialogs.builder(activity)
                     .setTitle(activity.getString(R.string.driver_missing_title))
                     .setMessage(
                         activity.getString(R.string.driver_missing_message, driverName)

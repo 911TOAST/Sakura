@@ -6,6 +6,8 @@
 
 package org.yuzu.yuzu_emu.features.settings.ui
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.graphics.drawable.Animatable2
 import android.graphics.drawable.AnimatedVectorDrawable
@@ -56,7 +58,7 @@ class InputDialogFragment : DialogFragment() {
         inputSetting = settingsViewModel.clickedItem as InputSetting
         binding = DialogMappingBinding.inflate(layoutInflater)
 
-        val builder = MaterialAlertDialogBuilder(requireContext())
+        val builder = SakuraDialogs.builder(requireContext())
             .setPositiveButton(android.R.string.cancel) { _, _ ->
                 NativeInput.stopMapping()
                 dismiss()

@@ -6,6 +6,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.app.AlertDialog
@@ -589,7 +591,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                     getString(R.string.custom_intent_launch_message, gameTitle)
                 }
 
-                MaterialAlertDialogBuilder(requireContext())
+                SakuraDialogs.builder(requireContext())
                     .setTitle(getString(R.string.custom_intent_launch_title))
                     .setMessage(message)
                     .setPositiveButton(getString(R.string.launch)) { _, _ ->
@@ -613,7 +615,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
     ): Boolean {
         return suspendCoroutine { continuation ->
             requireActivity().runOnUiThread {
-                MaterialAlertDialogBuilder(requireContext())
+                SakuraDialogs.builder(requireContext())
                     .setTitle(getString(R.string.custom_settings_failed_title))
                     .setMessage(
                         getString(R.string.custom_settings_failed_message, gameTitle, errorMessage)
@@ -1626,7 +1628,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
             return
         }
 
-        MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.amiibo_title)
             .setMessage(messageRes)
             .setPositiveButton(R.string.ok, null)
@@ -2373,7 +2375,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                         }?.enabled == true
                     }
 
-                    val dialog = MaterialAlertDialogBuilder(requireContext())
+                    val dialog = SakuraDialogs.builder(requireContext())
                         .setTitle(R.string.emulation_toggle_controls)
                         .setMultiChoiceItems(
                             R.array.gamepadButtons,
@@ -2501,7 +2503,7 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
             inputOpacityValue.text = "${inputOpacitySlider.value.toInt()}%"
         }
 
-        MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.emulation_control_adjust)
             .setView(adjustBinding.root)
             .setPositiveButton(android.R.string.ok) { _: DialogInterface?, _: Int ->

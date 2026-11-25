@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -439,7 +441,7 @@ class HomeSettingsFragment : Fragment() {
             getString(R.string.performance_preset_max),
             getString(R.string.performance_preset_balanced)
         )
-        MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.performance_preset_title)
             .setItems(choices) { _, which -> applyPerformancePreset(maximum = which == 0) }
             .setNegativeButton(R.string.cancel, null)

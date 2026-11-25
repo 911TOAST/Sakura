@@ -6,6 +6,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.net.Uri
@@ -31,7 +33,7 @@ class AddGameFolderDialogFragment : DialogFragment() {
         }
         binding.path.text = Uri.parse(folderUriString).path
 
-        return MaterialAlertDialogBuilder(requireContext())
+        return SakuraDialogs.builder(requireContext())
             .setTitle(R.string.add_game_folder)
             .setPositiveButton(android.R.string.ok) { _: DialogInterface, _: Int ->
                 val newGameDir = GameDir(folderUriString!!, binding.deepScanSwitch.isChecked)

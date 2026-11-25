@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.os.Bundle
 import androidx.fragment.app.DialogFragment
@@ -14,7 +16,7 @@ class ResetSettingsDialogFragment : DialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val settingsActivity = requireActivity() as SettingsActivity
 
-        return MaterialAlertDialogBuilder(requireContext())
+        return SakuraDialogs.builder(requireContext())
             .setTitle(R.string.reset_all_settings)
             .setMessage(R.string.reset_all_settings_description)
             .setPositiveButton(android.R.string.ok) { _, _ ->

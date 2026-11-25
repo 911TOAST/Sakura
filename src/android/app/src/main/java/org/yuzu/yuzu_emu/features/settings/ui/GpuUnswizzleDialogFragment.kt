@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.features.settings.ui
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.os.Bundle
@@ -98,7 +100,7 @@ class GpuUnswizzleDialogFragment : DialogFragment() {
             updateDropdownsState(checked)
         }
 
-        val dialog = MaterialAlertDialogBuilder(requireContext())
+        val dialog = SakuraDialogs.builder(requireContext())
             .setTitle(item.title)
             .setView(binding.root)
             .create()

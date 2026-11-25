@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.ActivityManager
 import android.app.Dialog
 import android.content.Context
@@ -23,7 +25,7 @@ class SystemInfoDialogFragment : DialogFragment() {
 
         populateSystemInfo()
 
-        val dialog = MaterialAlertDialogBuilder(requireContext())
+        val dialog = SakuraDialogs.builder(requireContext())
             .setTitle(R.string.system_information)
             .setPositiveButton(android.R.string.ok, null)
             .create()

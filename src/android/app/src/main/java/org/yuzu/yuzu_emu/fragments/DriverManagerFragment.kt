@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -266,7 +268,7 @@ class DriverManagerFragment : Fragment() {
         }
 
     private fun showDriverShaderWipeDialog() {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.driver_shader_wipe_dialog_title)
             .setMessage(R.string.driver_shader_wipe_dialog_message)
             .setPositiveButton(android.R.string.ok) { _, _ ->

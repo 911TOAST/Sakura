@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.os.Bundle
@@ -13,7 +15,7 @@ import org.yuzu.yuzu_emu.R
 
 class CoreErrorDialogFragment : DialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
-        MaterialAlertDialogBuilder(requireActivity())
+        SakuraDialogs.builder(requireActivity())
             .setTitle(requireArguments().getString(TITLE))
             .setMessage(requireArguments().getString(MESSAGE))
             .setPositiveButton(R.string.continue_button, null)

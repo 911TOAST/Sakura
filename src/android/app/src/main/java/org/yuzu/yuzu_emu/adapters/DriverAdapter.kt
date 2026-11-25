@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.adapters
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.content.Context
 import android.content.res.ColorStateList
 import android.view.LayoutInflater
@@ -86,7 +88,7 @@ class DriverAdapter(private val driverViewModel: DriverViewModel) :
          */
         private fun confirmDelete(model: Driver) {
             val context = binding.root.context
-            MaterialAlertDialogBuilder(context)
+            SakuraDialogs.builder(context)
                 .setTitle(R.string.driver_delete_title)
                 .setMessage(context.getString(R.string.driver_delete_message, model.title))
                 .setNegativeButton(android.R.string.cancel, null)

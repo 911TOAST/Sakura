@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.ui.main
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.content.Intent
 import android.content.Context
 import android.content.ClipData
@@ -184,7 +186,7 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
         val scroller = ScrollView(this).apply {
             addView(reportView)
         }
-        MaterialAlertDialogBuilder(this)
+        SakuraDialogs.builder(this)
             .setTitle(R.string.crash_report_title)
             .setView(scroller)
             .setPositiveButton(R.string.copy) { _, _ ->
@@ -277,7 +279,7 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
         progressBar = progressView.findViewById(R.id.download_progress_bar)
         progressMessage = progressView.findViewById(R.id.download_progress_message)
 
-        progressDialog = MaterialAlertDialogBuilder(this)
+        progressDialog = SakuraDialogs.builder(this)
             .setTitle(R.string.downloading_update)
             .setView(progressView)
             .setCancelable(false)

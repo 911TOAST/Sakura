@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -59,7 +61,7 @@ class ProfileManagerFragment : Fragment() {
             if (NativeLibrary.canCreateUser()) {
                 findNavController().navigate(R.id.action_profileManagerFragment_to_newUserDialog)
             } else {
-                MaterialAlertDialogBuilder(requireContext())
+                SakuraDialogs.builder(requireContext())
                     .setTitle(R.string.profile_max_users_title)
                     .setMessage(R.string.profile_max_users_message)
                     .setPositiveButton(android.R.string.ok, null)
@@ -127,7 +129,7 @@ class ProfileManagerFragment : Fragment() {
         val currentUser = NativeLibrary.getCurrentUser()
         val isCurrentUser = profile.uuid == currentUser
 
-        MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.profile_delete_confirm_title)
             .setMessage(
                 if (isCurrentUser) {

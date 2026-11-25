@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.adapters
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.content.DialogInterface
 import android.text.Html
 import android.view.LayoutInflater
@@ -417,7 +419,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
                 !NativeLibrary.isFirmwareAvailable() &&
                 !BooleanSetting.FAKE_SYSTEM_APPLETS.getBoolean()
             ) {
-                MaterialAlertDialogBuilder(activity)
+                SakuraDialogs.builder(activity)
                     .setTitle(R.string.loader_requires_firmware)
                     .setMessage(
                         Html.fromHtml(
@@ -469,7 +471,7 @@ class GameAdapter(private val activity: AppCompatActivity) :
         }
 
         private fun confirmGpuRecompile(game: Game) {
-            MaterialAlertDialogBuilder(activity)
+            SakuraDialogs.builder(activity)
                 .setTitle(R.string.recompile_gpu)
                 .setMessage(R.string.recompile_gpu_description)
                 .setNegativeButton(android.R.string.cancel, null)

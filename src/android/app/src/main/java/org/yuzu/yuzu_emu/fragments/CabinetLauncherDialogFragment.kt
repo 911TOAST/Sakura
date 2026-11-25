@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -25,7 +27,7 @@ class CabinetLauncherDialogFragment : DialogFragment() {
             adapter = CabinetLauncherDialogAdapter(this@CabinetLauncherDialogFragment)
         }
 
-        return MaterialAlertDialogBuilder(requireContext())
+        return SakuraDialogs.builder(requireContext())
             .setTitle(R.string.cabinet_launcher)
             .setView(binding.root)
             .create()

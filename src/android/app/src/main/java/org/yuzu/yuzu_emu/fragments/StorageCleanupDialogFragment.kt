@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.os.Bundle
 import android.view.View
@@ -37,7 +39,7 @@ class StorageCleanupDialogFragment : DialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val content = buildContentView()
-        val dialog = MaterialAlertDialogBuilder(requireContext())
+        val dialog = SakuraDialogs.builder(requireContext())
             .setTitle(R.string.storage_cleanup)
             .setView(content)
             .setNegativeButton(android.R.string.cancel, null)
@@ -175,7 +177,7 @@ class StorageCleanupDialogFragment : DialogFragment() {
             return
         }
         if (selected.any { it.requiresExtraConfirm }) {
-            MaterialAlertDialogBuilder(requireContext())
+            SakuraDialogs.builder(requireContext())
                 .setTitle(R.string.storage_cleanup_confirm_title)
                 .setMessage(R.string.storage_cleanup_confirm_message)
                 .setNegativeButton(android.R.string.cancel, null)
@@ -210,7 +212,7 @@ class StorageCleanupDialogFragment : DialogFragment() {
                     result.failures.size
                 )
             }
-            MaterialAlertDialogBuilder(requireContext())
+            SakuraDialogs.builder(requireContext())
                 .setTitle(R.string.storage_cleanup_complete)
                 .setMessage(message)
                 .setPositiveButton(android.R.string.ok) { _, _ -> startScan() }

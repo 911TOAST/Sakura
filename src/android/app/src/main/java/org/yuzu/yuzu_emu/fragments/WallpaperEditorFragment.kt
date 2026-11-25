@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -188,7 +190,7 @@ class WallpaperEditorFragment : Fragment() {
             leave()
             return
         }
-        MaterialAlertDialogBuilder(requireContext())
+        SakuraDialogs.builder(requireContext())
             .setTitle(R.string.wallpaper_discard_title)
             .setMessage(R.string.wallpaper_discard_message)
             .setNegativeButton(R.string.wallpaper_keep_editing, null)

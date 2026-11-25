@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.features.fetcher
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.animation.LayoutTransition
 import android.content.res.ColorStateList
 import android.text.Html
@@ -202,7 +204,7 @@ class ReleaseAdapter(
                         dialogBinding.title.text = context.getString(R.string.installing_driver)
                         dialogBinding.status.text = context.getString(R.string.downloading)
 
-                        val progressDialog = MaterialAlertDialogBuilder(context)
+                        val progressDialog = SakuraDialogs.builder(context)
                             .setView(dialogBinding.root)
                             .setCancelable(false)
                             .create()
@@ -284,7 +286,7 @@ class ReleaseAdapter(
                             } catch (e: Exception) {
                                 progressDialog.dismiss()
 
-                                MaterialAlertDialogBuilder(context)
+                                SakuraDialogs.builder(context)
                                     .setTitle(context.getString(R.string.driver_failed_title))
                                     .setMessage(e.message)
                                     .setPositiveButton(R.string.ok) { dialog, _ ->

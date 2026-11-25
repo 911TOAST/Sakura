@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.features.settings.ui
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -91,7 +93,7 @@ class InputProfileDialogFragment : DialogFragment() {
             adapter = InputProfileAdapter(options)
         }
 
-        return MaterialAlertDialogBuilder(requireContext())
+        return SakuraDialogs.builder(requireContext())
             .setView(binding.root)
             .create()
     }

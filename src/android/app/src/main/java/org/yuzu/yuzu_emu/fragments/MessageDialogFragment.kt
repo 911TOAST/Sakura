@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.Intent
 import android.net.Uri
@@ -63,7 +65,7 @@ class MessageDialogFragment : DialogFragment() {
         val clearPositiveAction = requireArguments().getBoolean(CLEAR_ACTIONS)
         val showNegativeButton = requireArguments().getBoolean(SHOW_NEGATIVE_BUTTON)
 
-        val builder = MaterialAlertDialogBuilder(requireContext())
+        val builder = SakuraDialogs.builder(requireContext())
 
         if (clearPositiveAction) {
             messageDialogViewModel.positiveAction = null

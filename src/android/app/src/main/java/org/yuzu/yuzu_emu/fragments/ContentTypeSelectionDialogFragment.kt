@@ -6,6 +6,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.os.Bundle
@@ -33,7 +35,7 @@ class ContentTypeSelectionDialogFragment : DialogFragment() {
             selectedItem = savedInstanceState.getInt(SELECTED_ITEM)
         }
 
-        return MaterialAlertDialogBuilder(requireContext())
+        return SakuraDialogs.builder(requireContext())
             .setTitle(R.string.select_content_type)
             .setPositiveButton(android.R.string.ok) { _: DialogInterface, _: Int ->
                 when (selectedItem) {

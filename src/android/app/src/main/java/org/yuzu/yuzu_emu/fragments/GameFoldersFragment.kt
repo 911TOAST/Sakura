@@ -3,6 +3,8 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import org.yuzu.yuzu_emu.utils.SakuraDialogs
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -91,7 +93,7 @@ class GameFoldersFragment : Fragment() {
                 getString(R.string.external_content)
             )
 
-            MaterialAlertDialogBuilder(requireContext())
+            SakuraDialogs.builder(requireContext())
                 .setTitle(R.string.add_folders)
                 .setItems(options) { _, which ->
                     when (which) {
