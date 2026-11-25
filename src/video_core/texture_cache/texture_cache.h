@@ -8,6 +8,7 @@
 
 #include <limits>
 #include <optional>
+#include <utility>
 #include <bit>
 #include <ankerl/unordered_dense.h>
 #include <boost/container/small_vector.hpp>
@@ -676,14 +677,51 @@ void TextureCache<P>::DownloadMemory(DAddr cpu_addr, size_t size) {
     std::ranges::sort(images, [this](ImageId lhs, ImageId rhs) {
         return slot_images[lhs].modification_tick < slot_images[rhs].modification_tick;
     });
+    // Batch the drain: record every CopyImageToBuffer into the current command stream and issue
+    // a single submit+wait for the whole batch, instead of one device-wide Finish per image.
+    // Each Finish flushes the entire queue (including tile writeback of prior passes), so N
+    // drains per flush region stall the tiler N times. The swizzle pass only needs its map to
+    // be host-visible, which the single Finish after the batch guarantees for all of them.
+    // The residency cap bounds how many staging buffers stay alive at once; it exists so a
+    // pathological flush region (many large images) cannot balloon staging memory, and it
+    // degrades to the previous per-image behaviour when reached.
+    static constexpr size_t DownloadBatchImages = 4;
+    static constexpr u64 DownloadBatchBytes = 32ULL << 20;
+    using DownloadStagingRef = decltype(runtime.DownloadStagingBuffer(0));
+    // Same container flavour FixSmallVectorADL hands out on this platform (small_vector or
+    // std::vector), so the pending store matches what FullDownloadCopies produces.
+    using DownloadCopiesList =
+        decltype(FixSmallVectorADL(FullDownloadCopies(std::declval<const ImageInfo&>())));
+    struct PendingDownload {
+        ImageId image_id;
+        DownloadStagingRef map;
+        DownloadCopiesList copies;
+    };
+    boost::container::small_vector<PendingDownload, 4> pending;
+    u64 pending_bytes = 0;
+    const auto DrainPending = [&]() {
+        runtime.Finish();
+        for (PendingDownload& entry : pending) {
+            Image& image = slot_images[entry.image_id];
+            SwizzleImage(*gpu_memory, image.gpu_addr, image.info, entry.copies,
+                         entry.map.mapped_span, swizzle_data_buffer);
+        }
+        pending.clear();
+        pending_bytes = 0;
+    };
     for (const ImageId image_id : images) {
         Image& image = slot_images[image_id];
         auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
         const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
         image.DownloadMemory(map, copies);
-        runtime.Finish();
-        SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, map.mapped_span,
-                     swizzle_data_buffer);
+        pending.push_back(PendingDownload{image_id, map, copies});
+        pending_bytes += image.unswizzled_size_bytes;
+        if (pending.size() >= DownloadBatchImages || pending_bytes >= DownloadBatchBytes) {
+            DrainPending();
+        }
+    }
+    if (!pending.empty()) {
+        DrainPending();
     }
 }
 

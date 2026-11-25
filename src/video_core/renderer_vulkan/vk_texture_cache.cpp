@@ -1289,9 +1289,29 @@ void TextureCacheRuntime::BlitImage(Framebuffer* dst_framebuffer, ImageView& dst
         return;
     }
     if (aspect_mask == VK_IMAGE_ASPECT_COLOR_BIT && !is_src_msaa && !is_dst_msaa) {
-        blit_image_helper.BlitColor(dst_framebuffer, src, dst_region, src_region, filter,
-                                    operation);
-        return;
+        // A same-format, unscaled, SrcCopy/nearest blit is a pure copy: no format conversion, no
+        // rescale and no filtering. Send it through the transfer path below instead of the
+        // shader helper — on a tiler the shader variant costs a render pass (tile store + load
+        // of the destination), a descriptor commit and a pipeline bind, while the transfer
+        // variant is one blit-engine command and keeps the copy AFBC-compressible.
+        const bool is_plain_copy = src.format == dst.format &&
+                                   operation == Fermi2D::Operation::SrcCopy &&
+                                   filter == Fermi2D::Filter::Point &&
+                                   dst_region.end.x - dst_region.start.x ==
+                                       src_region.end.x - src_region.start.x &&
+                                   dst_region.end.y - dst_region.start.y ==
+                                       src_region.end.y - src_region.start.y &&
+                                   (!blit_src_image ||
+                                    False(blit_src_image->flags & ImageFlagBits::Rescaled)) &&
+                                   (!blit_dst_image ||
+                                    False(blit_dst_image->flags & ImageFlagBits::Rescaled));
+        if (!is_plain_copy) {
+            blit_image_helper.BlitColor(dst_framebuffer, src, dst_region, src_region, filter,
+                                        operation);
+            return;
+        }
+        // Fall through to the transfer-based blit below; the ASSERTs it makes on format and
+        // operation all hold for a qualified copy.
     }
     ASSERT(src.format == dst.format);
     if (aspect_mask == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
@@ -1991,10 +2011,19 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                 vk_copies.emplace_back(
                     TransformBufferImageCopies(copies, offsets_span[index], aspect_mask));
             }
+            // Barrier only over the copied subresource range, matching the upload path: a full
+            // REMAINING_MIP_LEVELS/REMAINING_ARRAY_LAYERS range serializes mips and layers the
+            // copy never touches.
+            RangedBarrierRange range;
+            for (const auto& copies_per_buffer : vk_copies) {
+                for (const auto& copy : copies_per_buffer) {
+                    range.AddLayers(copy.imageSubresource);
+                }
+            }
 
             scheduler->RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageDownload);
             scheduler->Record([buffers = std::move(buffers_vector), image = *temp_wrapper.original_image,
-                               aspect_mask_ = aspect_mask, vk_copies](vk::CommandBuffer cmdbuf) {
+                               aspect_mask_ = aspect_mask, vk_copies, range](vk::CommandBuffer cmdbuf) {
                 const VkImageMemoryBarrier read_barrier{
                     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                     .pNext = nullptr,
@@ -2005,13 +2034,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .image = image,
-                    .subresourceRange{
-                        .aspectMask = aspect_mask_,
-                        .baseMipLevel = 0,
-                        .levelCount = VK_REMAINING_MIP_LEVELS,
-                        .baseArrayLayer = 0,
-                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                    },
+                    .subresourceRange = range.SubresourceRange(aspect_mask_),
                 };
                 cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                        0, read_barrier);
@@ -2037,13 +2060,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .image = image,
-                    .subresourceRange{
-                        .aspectMask = aspect_mask_,
-                        .baseMipLevel = 0,
-                        .levelCount = VK_REMAINING_MIP_LEVELS,
-                        .baseArrayLayer = 0,
-                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                    },
+                    .subresourceRange = range.SubresourceRange(aspect_mask_),
                 };
                 cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
                                        0, memory_write_barrier, nullptr, image_write_barrier);
@@ -2059,9 +2076,18 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
             vk_copies.emplace_back(
                 TransformBufferImageCopies(copies, offsets_span[index], aspect_mask));
         }
+        // Barrier only over the copied subresource range, matching the upload path: a full
+        // REMAINING_MIP_LEVELS/REMAINING_ARRAY_LAYERS range serializes mips and layers the
+        // copy never touches.
+        RangedBarrierRange range;
+        for (const auto& copies_per_buffer : vk_copies) {
+            for (const auto& copy : copies_per_buffer) {
+                range.AddLayers(copy.imageSubresource);
+            }
+        }
         scheduler->RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageDownload);
         scheduler->Record([buffers = std::move(buffers_vector), image = *original_image,
-                           aspect_mask_ = aspect_mask, vk_copies](vk::CommandBuffer cmdbuf) {
+                           aspect_mask_ = aspect_mask, vk_copies, range](vk::CommandBuffer cmdbuf) {
             const VkImageMemoryBarrier read_barrier{
                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                 .pNext = nullptr,
@@ -2072,13 +2098,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .image = image,
-                .subresourceRange{
-                    .aspectMask = aspect_mask_,
-                    .baseMipLevel = 0,
-                    .levelCount = VK_REMAINING_MIP_LEVELS,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                },
+                .subresourceRange = range.SubresourceRange(aspect_mask_),
             };
             cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                    0, read_barrier);
@@ -2104,13 +2124,7 @@ void Image::DownloadMemory(std::span<VkBuffer> buffers_span, std::span<size_t> o
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .image = image,
-                .subresourceRange{
-                    .aspectMask = aspect_mask_,
-                    .baseMipLevel = 0,
-                    .levelCount = VK_REMAINING_MIP_LEVELS,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                },
+                .subresourceRange = range.SubresourceRange(aspect_mask_),
             };
             cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
                                    0, memory_write_barrier, nullptr, image_write_barrier);
