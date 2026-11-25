@@ -73,16 +73,9 @@ if not exist "%ANDROID_DIR%\gradlew.bat" (
     exit /b 1
 )
 
-pushd "%ANDROID_DIR%"
-if errorlevel 1 (
-    echo ERROR: Could not enter the Android project directory.
-    exit /b 1
-)
-
 echo Building the signed Optimized Release APK only...
-call gradlew.bat :app:assembleOptimizedRelease --console=plain
+call "%ANDROID_DIR%\gradlew.bat" -p "%ANDROID_DIR%" :app:assembleOptimizedRelease --console=plain
 set "BUILD_EXIT=%ERRORLEVEL%"
-popd
 
 if not "%BUILD_EXIT%"=="0" (
     echo.
