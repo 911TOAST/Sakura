@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:name="flower"
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.82"
+        android:scaleY="0.82">
+        <!-- Both rings start fully trimmed away (invisible). The animators draw them on like
+             a checkmark, which reads as "loading" without any spinner cliché. -->
+        <group
+            android:name="rings"
+            android:pivotX="256"
+            android:pivotY="256">
+            <path
+                android:name="ring_outer"
+                android:fillColor="#00000000"
+                android:pathData="M256,116 a140,140 0 1 0 0.01,0 Z"
+                android:strokeColor="#F6A6BE"
+                android:strokeLineCap="round"
+                android:strokeWidth="20"
+                android:trimPathEnd="0" />
+            <path
+                android:name="ring_inner"
+                android:fillColor="#00000000"
+                android:pathData="M256,186 a70,70 0 1 0 0.01,0 Z"
+                android:strokeColor="#D1416B"
+                android:strokeLineCap="round"
+                android:strokeWidth="14"
+                android:trimPathEnd="0" />
+        </group>
+        <group
+            android:name="heart"
+            android:pivotX="256"
+            android:pivotY="256"
+            android:scaleX="0"
+            android:scaleY="0">
+            <path android:fillColor="#FCEAF0" android:pathData="M256,196 a60,60 0 1 0 0.01,0 Z" />
+            <path android:fillColor="#61162E" android:pathData="M256,204 a52,52 0 1 0 0.01,0 Z" />
+            <path android:fillColor="#E2874F" android:pathData="M244,226 h24 v22 h22 v24 h-22 v22 h-24 v-22 h-22 v-24 h22 Z" />
+        </group>
+    </group>
+</vector>

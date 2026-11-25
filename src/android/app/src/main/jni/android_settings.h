@@ -90,6 +90,8 @@ namespace AndroidSettings {
                                                   Settings::Category::Android};
         Settings::Setting<bool> ui_haptic_feedback{linkage, true, "ui_haptic_feedback",
                                                    Settings::Category::Android};
+        Settings::Setting<bool> ui_sound_feedback{linkage, false, "ui_sound_feedback",
+                                                  Settings::Category::Android};
         Settings::Setting<bool> ui_entrance_animation{linkage, true, "ui_entrance_animation",
                                                       Settings::Category::Android};
         Settings::Setting<bool> ui_transition_animation{linkage, true, "ui_transition_animation",

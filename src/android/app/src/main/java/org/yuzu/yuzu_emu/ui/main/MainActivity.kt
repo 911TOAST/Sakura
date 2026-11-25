@@ -30,6 +30,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 import androidx.preference.PreferenceManager
+import kotlin.random.Random
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 import org.yuzu.yuzu_emu.NativeLibrary
@@ -79,6 +80,9 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
     override var themeSignature: String = ""
 
     private val CHECKED_DECRYPTION = "CheckedDecryption"
+    private val PREF_SPLASH_VARIANT = "splashVariant"
+    private val SPLASH_VARIANTS =
+        intArrayOf(0, R.style.Theme_Yuzu_Splash_Orbits, R.style.Theme_Yuzu_Splash_Ring)
     private var checkedDecryption = false
 
     override fun attachBaseContext(base: Context) {
@@ -86,6 +90,10 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The splash screen resolves its icon the moment installSplashScreen() reads the theme,
+        // so the variant must be rolled and applied before that call - after super.onCreate is
+        // too late, the boot animation would already be fixed.
+        pickSplashVariant()
         val splashScreen = installSplashScreen()
         // Hold the branded sakura splash only until the storage directories are ready.
         splashScreen.setKeepOnScreenCondition {
@@ -299,6 +307,25 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
         progressMessage = null
     }
 
+    /**
+     * Picks which boot screen this launch shows: the original blooming flower, the counter-
+     * rotating petal orbits or the drawn-on ring. Like console boot logos, the look changes
+     * between runs - a repeat is re-rolled so two launches in a row never show the same one.
+     * Variant 0 keeps the base theme (no overlay needed); each variant is an empty-parent
+     * style that only overrides the splash window attributes.
+     */
+    private fun pickSplashVariant() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(applicationContext)
+        var variant = Random.nextInt(SPLASH_VARIANTS.size)
+        val last = prefs.getInt(PREF_SPLASH_VARIANT, -1)
+        if (variant == last && SPLASH_VARIANTS.size > 1) {
+            variant = (variant + 1 + Random.nextInt(SPLASH_VARIANTS.size - 1)) % SPLASH_VARIANTS.size
+        }
+        prefs.edit().putInt(PREF_SPLASH_VARIANT, variant).apply()
+        if (variant > 0) {
+            theme.applyStyle(SPLASH_VARIANTS[variant], true)
+        }
+    }
 
     fun displayMultiplayerDialog() {
         val dialog = NetPlayDialog(this)

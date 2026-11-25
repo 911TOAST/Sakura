@@ -3,6 +3,7 @@
 
 package org.yuzu.yuzu_emu.fragments
 
+import android.animation.ValueAnimator
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -25,6 +26,7 @@ import org.yuzu.yuzu_emu.databinding.FragmentGameInfoBinding
 import org.yuzu.yuzu_emu.model.GameVerificationResult
 import org.yuzu.yuzu_emu.model.HomeViewModel
 import org.yuzu.yuzu_emu.utils.GameMetadata
+import org.yuzu.yuzu_emu.utils.SuyuMotion
 import org.yuzu.yuzu_emu.utils.ViewUtils.setVisible
 import org.yuzu.yuzu_emu.utils.ViewUtils.updateMargins
 
@@ -57,6 +59,14 @@ class GameInfoFragment : Fragment() {
         homeViewModel.setStatusBarShadeVisibility(false)
 
         binding.apply {
+            // Kinetic press-in on every tappable surface; touch listeners return false so the
+            // existing click handlers run untouched.
+            pathField.let { SuyuMotion.installPressFeedback(it) }
+            programIdField.let { SuyuMotion.installPressFeedback(it) }
+            developerField.let { SuyuMotion.installPressFeedback(it) }
+            buttonCopy.let { SuyuMotion.installPressFeedback(it) }
+            buttonVerifyIntegrity.let { SuyuMotion.installPressFeedback(it) }
+
             toolbarInfo.title = args.game.title
             toolbarInfo.setNavigationOnClickListener {
                 requireActivity().onBackPressedDispatcher.onBackPressed()
@@ -135,10 +145,46 @@ class GameInfoFragment : Fragment() {
             }
         }
 
+        // Play the entrance after the optional fields above decided whether they exist, so empty
+        // rows never flash on their way out.
+        animateContentEntrance()
         setInsets()
     }
 
+    /**
+     * Staggered M3 entrance: every visible info block rises onto the emphasized decelerate curve.
+     * Playable only through the shared motion tokens, so the interface style, speed and entrance
+     * switches (and the system animator-off state) all apply.
+     */
+    private fun animateContentEntrance() {
+        if (!ValueAnimator.areAnimatorsEnabled() || !SuyuMotion.entrancesEnabled()) {
+            return
+        }
+
+        val context = requireContext()
+        val rise = context.resources.getDimensionPixelSize(R.dimen.spacing_large).toFloat()
+        var shown = 0
+        for (index in 0 until binding.contentInfo.childCount) {
+            val child = binding.contentInfo.getChildAt(index)
+            if (child.visibility != View.VISIBLE) {
+                continue
+            }
+            child.animate().cancel()
+            child.alpha = 0f
+            child.translationY = rise
+            child.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay(SuyuMotion.staggerDelay(context, shown))
+                .setDuration(SuyuMotion.durationMedium2(context))
+                .setInterpolator(SuyuMotion.emphasizedDecelerate(context))
+                .start()
+            shown++
+        }
+    }
+
     private fun copyToClipboard(label: String, body: String) {
+        SuyuMotion.performHaptic(binding.root)
         val clipBoard =
             requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText(label, body)

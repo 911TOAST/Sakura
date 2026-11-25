@@ -3,14 +3,17 @@
 
 package org.yuzu.yuzu_emu.utils
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.TimeInterpolator
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.content.Context
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
-import android.view.SoundEffectConstants
+import android.view.ViewGroup
 import android.view.animation.OvershootInterpolator
 import androidx.core.view.animation.PathInterpolatorCompat
 import androidx.dynamicanimation.animation.DynamicAnimation
@@ -242,7 +245,7 @@ object SuyuMotion {
                     val releasedInside = event.x >= 0 && event.x < touched.width &&
                         event.y >= 0 && event.y < touched.height
                     if (releasedInside && soundFeedbackEnabled()) {
-                        touched.playSoundEffect(SoundEffectConstants.CLICK)
+                        ClickSound.play(touched.context)
                     }
                     pressUp(touched)
                 }
@@ -371,6 +374,102 @@ object SuyuMotion {
 
     private fun cancelSprings(view: View) {
         springAnimations.remove(view)?.values?.forEach { it.cancel() }
+    }
+
+    /** In-flight height transition per view so a second tap cancels the first instead of fighting it. */
+    private val expansionAnimators: MutableMap<View, ValueAnimator> = java.util.WeakHashMap()
+
+    /**
+     * Expands or collapses a child section in place by animating its real height, unlike the
+     * common binary GONE/VISIBLE toggle that makes overlaid panels jump and drag their neighbours
+     * with them. The wrap-content height is measured off-screen first, so sections of any content
+     * (or any bottom padding) settle on the emphasized curve with a soft alpha leading the motion.
+     */
+    fun animateExpansion(target: View, expand: Boolean, onFinished: (() -> Unit)? = null) {
+        val parent = target.parent as? ViewGroup
+        val lp = target.layoutParams
+        if (parent == null || lp == null) {
+            target.visibility = if (expand) View.VISIBLE else View.GONE
+            onFinished?.invoke()
+            return
+        }
+
+        expansionAnimators.remove(target)?.cancel()
+
+        val finish = {
+            lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
+            target.layoutParams = lp
+            target.alpha = 1f
+            onFinished?.invoke()
+        }
+
+        if (!animationsEnabled()) {
+            lp.height = if (expand) ViewGroup.LayoutParams.WRAP_CONTENT else 0
+            target.layoutParams = lp
+            target.visibility = if (expand) View.VISIBLE else View.GONE
+            target.alpha = 1f
+            onFinished?.invoke()
+            return
+        }
+
+        val widthSpec =
+            View.MeasureSpec.makeMeasureSpec(parent.width, View.MeasureSpec.EXACTLY)
+        target.measure(widthSpec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val full = target.measuredHeight.coerceAtLeast(1)
+
+        if (expand) {
+            target.visibility = View.VISIBLE
+            lp.height = 0
+            target.layoutParams = lp
+            target.alpha = 0f
+        } else {
+            lp.height = full
+            target.layoutParams = lp
+            target.alpha = 1f
+        }
+
+        val animator = ValueAnimator.ofInt(if (expand) 0 else full, if (expand) full else 0).apply {
+            duration = durationMedium2(target.context)
+            interpolator = if (expand) {
+                emphasizedDecelerate(target.context)
+            } else {
+                emphasizedAccelerate(target.context)
+            }
+            addUpdateListener { animation ->
+                val fraction = animation.animatedFraction
+                // Expanded content fades up slightly ahead of its height, collapsed content
+                // fades out only in the second half so it never blanks to nothing first.
+                val fadeStart = if (expand) 0f else 0.35f
+                target.alpha =
+                    ((fraction - fadeStart) / (1f - fadeStart)).coerceIn(0f, 1f).let {
+                        if (expand) it else 1f - it
+                    }
+                lp.height = animation.animatedValue as Int
+                target.layoutParams = lp
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                private var cancelled = false
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    expansionAnimators.remove(target)
+                    if (cancelled) {
+                        return
+                    }
+                    if (!expand) {
+                        target.visibility = View.GONE
+                        lp.height = 0
+                        target.layoutParams = lp
+                        target.alpha = 1f
+                    }
+                    finish()
+                }
+            })
+        }
+        expansionAnimators[target] = animator
+        animator.start()
     }
 
     private fun animateSpring(

@@ -18,6 +18,7 @@ import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.fragments.EmulationFragment
 import org.yuzu.yuzu_emu.utils.NativeConfig
+import org.yuzu.yuzu_emu.utils.SuyuMotion
 import org.yuzu.yuzu_emu.features.settings.model.AbstractSetting
 import org.yuzu.yuzu_emu.features.settings.model.AbstractShortSetting
 import org.yuzu.yuzu_emu.features.settings.model.AbstractIntSetting
@@ -90,6 +91,8 @@ class QuickSettings(val emulationFragment: EmulationFragment) {
                     setting.setInt(values[index])
                     saveSettings()
                     valueView.text = name
+                    // The chosen value re-settles on the emphasized curve instead of snapping.
+                    SuyuMotion.settleIn(valueView)
                     onValueChanged?.invoke(values[index])
                 }
             }
@@ -98,14 +101,24 @@ class QuickSettings(val emulationFragment: EmulationFragment) {
 
         headerView.setOnClickListener {
             isExpanded = !isExpanded
-            if (isExpanded) {
-                radioGroup.visibility = View.VISIBLE
-                expandIcon.animate().rotation(180f).setDuration(200).start()
-            } else {
-                radioGroup.visibility = View.GONE
-                expandIcon.animate().rotation(0f).setDuration(200).start()
-            }
+            SuyuMotion.performHaptic(headerView)
+            SuyuMotion.animateExpansion(radioGroup, isExpanded)
+            // The chevron rotates on the same emphasized curve as the height, and slightly
+            // overshoots when opening so it feels like it released the options list.
+            expandIcon.animate().cancel()
+            expandIcon.animate()
+                .rotation(if (isExpanded) 180f else 0f)
+                .setDuration(SuyuMotion.durationMedium2(headerView.context))
+                .setInterpolator(
+                    if (isExpanded) {
+                        SuyuMotion.emphasizedDecelerate(headerView.context)
+                    } else {
+                        SuyuMotion.emphasizedAccelerate(headerView.context)
+                    }
+                )
+                .start()
         }
+        SuyuMotion.installPressFeedback(headerView)
 
         container.addView(itemView)
     }
@@ -128,6 +141,7 @@ class QuickSettings(val emulationFragment: EmulationFragment) {
         switchView.isChecked = setting.getBoolean()
 
         switchView.setOnCheckedChangeListener { _, isChecked ->
+            SuyuMotion.performHaptic(switchView)
             setting.setBoolean(isChecked)
             saveSettings()
         }
@@ -135,6 +149,7 @@ class QuickSettings(val emulationFragment: EmulationFragment) {
         switchContainer.setOnClickListener {
             switchView.toggle()
         }
+        SuyuMotion.installPressFeedback(switchContainer)
         container.addView(itemView)
     }
 
@@ -159,6 +174,7 @@ class QuickSettings(val emulationFragment: EmulationFragment) {
         switchView.isChecked = isChecked
 
         switchView.setOnCheckedChangeListener { _, checked ->
+            SuyuMotion.performHaptic(switchView)
             callback(checked)
             saveSettings()
         }
@@ -166,6 +182,7 @@ class QuickSettings(val emulationFragment: EmulationFragment) {
         switchContainer.setOnClickListener {
             switchView.toggle()
         }
+        SuyuMotion.installPressFeedback(switchContainer)
         container.addView(itemView)
 
         return switchView
@@ -213,6 +230,7 @@ class QuickSettings(val emulationFragment: EmulationFragment) {
                 }
                 saveSettings()
                 valueDisplay.text = "$intValue$units"
+                SuyuMotion.settleIn(valueDisplay)
             }
         }
 

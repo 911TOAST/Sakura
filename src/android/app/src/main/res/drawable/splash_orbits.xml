@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/sakura_flower_orbits">
+    <target
+        android:name="orbit_outer"
+        android:animation="@animator/splash_orbit_outer" />
+    <target
+        android:name="orbit_inner"
+        android:animation="@animator/splash_orbit_inner" />
+    <target
+        android:name="flower"
+        android:animation="@animator/splash_orbit_scale" />
+    <target
+        android:name="heart"
+        android:animation="@animator/splash_orbit_heart" />
+</animated-vector>

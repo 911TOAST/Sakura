@@ -433,8 +433,20 @@
         <item name="colorOnSurfaceInverse">@color/yuzu_inverseOnSurface_pink</item>
         <item name="colorSurfaceInverse">@color/yuzu_inverseSurface_pink</item>
         <item name="colorPrimaryInverse">@color/yuzu_inversePrimary_pink</item>
-
         <item name="materialAlertDialogTheme">@style/YuzuMaterialDialog.PINK</item>
+    </style>
+
+    <!-- Boot-screen variants. Empty-parent overlays that only override the splash window
+         attributes; MainActivity applies one at random before installSplashScreen() resolves
+         the icon, so every launch can boot with a different screen. -->
+    <style name="Theme.Yuzu.Splash.Orbits" parent="">
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_orbits</item>
+        <item name="windowSplashScreenAnimationDuration">800</item>
+    </style>
+
+    <style name="Theme.Yuzu.Splash.Ring" parent="">
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_ring</item>
+        <item name="windowSplashScreenAnimationDuration">920</item>
     </style>
 
 </resources>

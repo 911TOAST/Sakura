@@ -37,6 +37,8 @@ import org.yuzu.yuzu_emu.features.settings.model.Settings
 import org.yuzu.yuzu_emu.features.settings.model.view.*
 import org.yuzu.yuzu_emu.features.settings.ui.viewholder.*
 import org.yuzu.yuzu_emu.utils.ParamPackage
+import org.yuzu.yuzu_emu.utils.SuyuMotion
+import org.yuzu.yuzu_emu.viewholder.revealItemOnce
 
 class SettingsAdapter(
     private val fragment: Fragment,
@@ -118,6 +120,16 @@ class SettingsAdapter(
 
     override fun onBindViewHolder(holder: SettingViewHolder, position: Int) {
         holder.bind(currentList[position])
+        // Settings screens open as a slide-over panel: the rows still play the shared staggered
+        // rise so the list settles in instead of popping. Headers and slider rows skip the
+        // press-in scale; a header is not tappable and a slider owns the touch gesture.
+        revealItemOnce(holder.itemView, position)
+        val rowType = getItemViewType(position)
+        if (rowType != SettingsItem.TYPE_HEADER &&
+            rowType != SettingsItem.TYPE_SLIDER
+        ) {
+            SuyuMotion.installPressFeedback(holder.itemView)
+        }
     }
 
     override fun getItemCount(): Int = currentList.size

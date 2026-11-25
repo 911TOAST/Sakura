@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/sakura_flower_rings">
+    <target
+        android:name="ring_outer"
+        android:animation="@animator/splash_ring_trim_outer" />
+    <target
+        android:name="ring_inner"
+        android:animation="@animator/splash_ring_trim_inner" />
+    <target
+        android:name="rings"
+        android:animation="@animator/splash_ring_rotate" />
+    <target
+        android:name="heart"
+        android:animation="@animator/splash_ring_heart" />
+</animated-vector>

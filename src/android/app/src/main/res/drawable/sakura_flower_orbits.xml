@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:name="flower"
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.82"
+        android:scaleY="0.82">
+        <!-- Outer ring: six large petals, rotates clockwise while the inner ring runs the
+             other way, so the flower appears to bloom apart. -->
+        <group
+            android:name="orbit_outer"
+            android:pivotX="256"
+            android:pivotY="256">
+            <group android:rotation="0" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#D1416B" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+            <group android:rotation="60" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#D1416B" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+            <group android:rotation="120" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#D1416B" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+            <group android:rotation="180" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#D1416B" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+            <group android:rotation="240" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#D1416B" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+            <group android:rotation="300" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#D1416B" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+        </group>
+        <!-- Inner ring: smaller pale petals, inset and offset by 30 degrees. The static scale
+             on the group shrinks the shared petal path; its scale animation room stays free. -->
+        <group
+            android:name="orbit_inner"
+            android:pivotX="256"
+            android:pivotY="256"
+            android:scaleX="0.68"
+            android:scaleY="0.68">
+            <group android:rotation="30" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#FCEAF0" android:strokeColor="#F6A6BE" android:strokeWidth="6" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+            <group android:rotation="90" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#FCEAF0" android:strokeColor="#F6A6BE" android:strokeWidth="6" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+            <group android:rotation="150" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#FCEAF0" android:strokeColor="#F6A6BE" android:strokeWidth="6" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+            <group android:rotation="210" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#FCEAF0" android:strokeColor="#F6A6BE" android:strokeWidth="6" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+            <group android:rotation="270" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#FCEAF0" android:strokeColor="#F6A6BE" android:strokeWidth="6" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+            <group android:rotation="330" android:pivotX="256" android:pivotY="256">
+                <path android:fillColor="#FCEAF0" android:strokeColor="#F6A6BE" android:strokeWidth="6" android:pathData="M256,256 C236,220 228,158 258,120 C290,134 302,196 282,242 C274,252 264,256 256,256 Z" />
+            </group>
+        </group>
+        <group
+            android:name="heart"
+            android:pivotX="256"
+            android:pivotY="256"
+            android:scaleX="0"
+            android:scaleY="0">
+            <path android:fillColor="#FCEAF0" android:pathData="M256,196 a60,60 0 1 0 0.01,0 Z" />
+            <path android:fillColor="#61162E" android:pathData="M256,204 a52,52 0 1 0 0.01,0 Z" />
+            <path android:fillColor="#E2874F" android:pathData="M244,226 h24 v22 h22 v24 h-22 v22 h-24 v-22 h-22 v-24 h22 Z" />
+        </group>
+    </group>
+</vector>
