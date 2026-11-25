@@ -8,7 +8,7 @@
 include_directories(.)
 
 # Dynarmic
-if ((ARCHITECTURE_x86_64 OR ARCHITECTURE_arm64 OR ARCHITECTURE_riscv64 OR ARCHITECTURE_loongarch64) AND NOT YUZU_STATIC_ROOM)
+if ((ARCHITECTURE_x86_64 OR ARCHITECTURE_arm64 OR ARCHITECTURE_riscv64 OR ARCHITECTURE_loongarch64) )
     add_subdirectory(dynarmic)
     add_library(dynarmic::dynarmic ALIAS dynarmic)
 endif()
@@ -259,22 +259,6 @@ endif()
 
 add_subdirectory(common)
 add_subdirectory(network)
-
-if (NOT ANDROID)
-    if (YUZU_ROOM)
-        add_subdirectory(dedicated_room)
-    endif()
-
-    if (YUZU_ROOM_STANDALONE)
-        add_subdirectory(yuzu_room_standalone)
-        set_target_properties(yuzu-room PROPERTIES OUTPUT_NAME "suyu-room")
-    endif()
-
-    if (YUZU_STATIC_ROOM)
-        return()
-    endif()
-endif()
-
 add_subdirectory(nintendo_library)
 add_subdirectory(core)
 add_subdirectory(audio_core)
@@ -283,25 +267,6 @@ add_subdirectory(hid_core)
 add_subdirectory(input_common)
 add_subdirectory(frontend_common)
 add_subdirectory(shader_recompiler)
-
-if (NOT ANDROID)
-    if (YUZU_TESTS)
-        add_subdirectory(tests)
-    endif()
-
-    if (YUZU_CMD)
-        add_subdirectory(suyu_cmd)
-    endif()
-
-    if (ENABLE_QT)
-        add_subdirectory(qt_common)
-        add_subdirectory(suyu)
-    endif()
-
-    if (SUYU_BUILD_LIBRETRO_CORE)
-        add_subdirectory(libretro_core)
-    endif()
-endif()
 
 if (ENABLE_WEB_SERVICE)
     add_subdirectory(web_service)

@@ -44,39 +44,7 @@ if (PLATFORM_NETBSD)
     set(ENV{PKG_CONFIG_PATH} "${PKG_CONFIG_PATH}:${CMAKE_SYSROOT}/usr/pkg/lib/ffmpeg7/pkgconfig")
 endif()
 
-cmake_dependent_option(YUZU_STATIC_ROOM "Build a static room executable only (CI only)" OFF "PLATFORM_LINUX" OFF)
-if (YUZU_STATIC_ROOM)
-    set(YUZU_ROOM ON)
-    set(YUZU_ROOM_STANDALONE ON)
-
-    # disable e v e r y t h i n g
-    set(ENABLE_QT OFF)
-    set(YUZU_CMD OFF)
-    set(ENABLE_CUBEB OFF)
-    set(ENABLE_UPDATE_CHECKER OFF)
-    set(USE_DISCORD_PRESENCE OFF)
-    set(BUILD_TESTING OFF)
-    set(ENABLE_WEB_SERVICE OFF)
-    set(ENABLE_LIBUSB OFF)
-
-    # allow static libs for boost though
-    set(Boost_USE_STATIC_LIBS ON)
-    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-    set(OPENSSL_USE_STATIC_LIBS ON)
-    set(OpenSSL_FORCE_SYSTEM ON)
-
-    set(zstd_FORCE_BUNDLED ON)
-    set(fmt_FORCE_BUNDLED ON)
-endif()
-
-# qt stuff (disabled: dedicated to Android)
-option(ENABLE_QT "Enable the Qt frontend" OFF)
-option(ENABLE_QT_TRANSLATION "Enable translations for the Qt frontend" OFF)
 option(ENABLE_UPDATE_CHECKER "Enable update checker (for Qt and Android)" OFF)
-cmake_dependent_option(YUZU_USE_QT_MULTIMEDIA "Use QtMultimedia for Camera"  OFF "NOT YUZU_USE_BUNDLED_QT" OFF)
-cmake_dependent_option(YUZU_USE_QT_WEB_ENGINE "Use QtWebEngine for web applet implementation" OFF "NOT YUZU_USE_BUNDLED_QT" OFF)
-set(YUZU_QT_MIRROR "" CACHE STRING "What mirror to use for downloading the bundled Qt libraries")
-cmake_dependent_option(YUZU_USE_BUNDLED_QT "Download bundled Qt binaries" "${MSVC}" "ENABLE_QT" OFF)
 
 option(ENABLE_DEBUG_TOOLS "Enable debugging tools (maxwell disassembler, SPIRV translator, etc)" OFF)
 
@@ -226,16 +194,7 @@ cmake_dependent_option(ENABLE_LIBUSB "Enable the use of LibUSB" ON "WIN32 OR PLA
 cmake_dependent_option(ENABLE_OPENGL "Enable OpenGL" ON "NOT (WIN32 AND ARCHITECTURE_arm64) AND NOT APPLE" OFF)
 mark_as_advanced(FORCE ENABLE_OPENGL)
 
-option(ENABLE_WEB_SERVICE "Enable web services (telemetry, etc.)" ON)
-option(SUYU_BUILD_LIBRETRO_CORE "Build suyu as a libretro core (suyu_libretro.dll)" OFF)
-if (SUYU_BUILD_LIBRETRO_CORE)
-    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-endif()
 option(ENABLE_WIFI_SCAN "Enable WiFi scanning" OFF)
-
-cmake_dependent_option(USE_DISCORD_PRESENCE "Enables Discord Rich Presence" OFF "ENABLE_QT" OFF)
-
-option(YUZU_TESTS "Compile tests" "${BUILD_TESTING}")
 
 # Install udev rules on Linux (mainly for gyros)
 # Only acts on joysticks and nothing else.
@@ -246,11 +205,6 @@ option(YUZU_DOWNLOAD_ANDROID_VVL "Download validation layer binary for android" 
 option(YUZU_LEGACY "Apply patches that improve compatibility with older GPUs (e.g. Snapdragon 865) at the cost of performance" OFF)
 
 option(NIGHTLY_BUILD "Use Nightly qualifiers in the update checker and build metadata" OFF)
-
-cmake_dependent_option(YUZU_ROOM "Enable dedicated room functionality" OFF "NOT ANDROID" OFF)
-cmake_dependent_option(YUZU_ROOM_STANDALONE "Enable standalone room executable" OFF "YUZU_ROOM" OFF)
-
-cmake_dependent_option(YUZU_CMD "Compile the suyu-cli executable" OFF "NOT ANDROID" OFF)
 
 cmake_dependent_option(YUZU_CRASH_DUMPS "Compile crash dump (Minidump) support" OFF "WIN32 OR PLATFORM_LINUX" OFF)
 
@@ -288,10 +242,6 @@ endif()
 if (ARCHITECTURE_arm64 AND (ANDROID OR PLATFORM_LINUX))
     set(HAS_NCE 1)
     add_compile_definitions(HAS_NCE=1)
-endif()
-
-if (YUZU_ROOM)
-    add_compile_definitions(YUZU_ROOM)
 endif()
 
 if (UNIX AND NOT (PLATFORM_LINUX OR WIN32))
@@ -455,7 +405,7 @@ endif()
 # nlohmann
 AddJsonPackage(nlohmann)
 
-if (NOT YUZU_STATIC_ROOM)
+if (TRUE)
     # zlib
     AddJsonPackage(zlib)
 
@@ -551,7 +501,7 @@ if (ARCHITECTURE_x86 OR ARCHITECTURE_x86_64)
     find_package(xbyak)
 endif()
 
-if (NOT YUZU_STATIC_ROOM)
+if (TRUE)
     find_package(libusb)
     find_package(VulkanMemoryAllocator)
     find_package(VulkanUtilityLibraries)
@@ -584,78 +534,12 @@ if (NOT YUZU_STATIC_ROOM)
         find_package(cubeb)
     endif()
 
-    if (YUZU_TESTS OR DYNARMIC_TESTS)
+    if (DYNARMIC_TESTS)
         find_package(Catch2)
     endif()
 endif()
 
-# Qt stuff
-if (ENABLE_QT)
-    if (YUZU_USE_BUNDLED_QT)
-        AddQt(Eden-CI/Qt 6.11.1)
-    else()
-        message(STATUS "Using system Qt")
-        if (NOT Qt6_DIR)
-            set(Qt6_DIR "" CACHE PATH "Additional path to search for Qt6 libraries like C:/Qt/6.8.3/msvc2022_64/lib/cmake/Qt6")
-        endif()
-        list(APPEND CMAKE_PREFIX_PATH "${Qt6_DIR}")
-    endif()
-
-    find_package(Qt6 REQUIRED COMPONENTS Core)
-
-    if (NOT DEFINED QT_TARGET_PATH)
-        get_target_property(qtcore_path Qt6::Core LOCATION_Release)
-        string(FIND "${qtcore_path}" "/bin/" qtcore_path_bin_pos REVERSE)
-        string(FIND "${qtcore_path}" "/lib/" qtcore_path_lib_pos REVERSE)
-        if (qtcore_path_bin_pos GREATER qtcore_path_lib_pos)
-            string(SUBSTRING "${qtcore_path}" 0 ${qtcore_path_bin_pos} QT_TARGET_PATH)
-        else()
-            string(SUBSTRING "${qtcore_path}" 0 ${qtcore_path_lib_pos} QT_TARGET_PATH)
-        endif()
-    endif()
-
-    if (NOT DEFINED QT_HOST_PATH)
-        set(QT_HOST_PATH "${QT_TARGET_PATH}")
-    endif()
-
-    message(STATUS "Using target Qt at ${QT_TARGET_PATH}")
-    message(STATUS "Using host Qt at ${QT_HOST_PATH}")
-
-    ## Components ##
-
-    # Best practice is to ask for all components at once, so they are from the same version
-    set(YUZU_QT_COMPONENTS Core Widgets Charts Concurrent Gui Network Svg)
-    if (PLATFORM_LINUX OR PLATFORM_FREEBSD)
-        list(APPEND YUZU_QT_COMPONENTS DBus)
-        # yes Qt, we get it
-        set(QT_NO_PRIVATE_MODULE_WARNING ON)
-        list(APPEND YUZU_QT_OPTIONAL GuiPrivate)
-    endif()
-
-    if (YUZU_USE_QT_MULTIMEDIA)
-        list(APPEND YUZU_QT_COMPONENTS Multimedia)
-    endif()
-
-    if (YUZU_USE_QT_WEB_ENGINE)
-        list(APPEND YUZU_QT_COMPONENTS WebEngineCore WebEngineWidgets)
-    endif()
-
-    if (ENABLE_QT_TRANSLATION)
-        list(APPEND YUZU_QT_COMPONENTS LinguistTools)
-    endif()
-
-    find_package(Qt6 REQUIRED COMPONENTS ${YUZU_QT_COMPONENTS} OPTIONAL_COMPONENTS ${YUZU_QT_OPTIONAL})
-    set(QT_MAJOR_VERSION 6)
-    # Qt6 sets cxx_std_17 and we need to undo that
-    set_target_properties(Qt6::Platform PROPERTIES INTERFACE_COMPILE_FEATURES "")
-
-    ## Qt Externals ##
-
-    # QuaZip
-    AddJsonPackage(quazip)
-endif()
-
-if (NOT YUZU_STATIC_ROOM AND NOT (YUZU_USE_BUNDLED_FFMPEG OR YUZU_USE_EXTERNAL_FFMPEG))
+if (NOT (YUZU_USE_BUNDLED_FFMPEG OR YUZU_USE_EXTERNAL_FFMPEG))
     # Use system installed FFmpeg
     find_package(FFmpeg REQUIRED QUIET COMPONENTS ${FFmpeg_COMPONENTS})
 
@@ -718,13 +602,6 @@ if (ENABLE_DEBUG_TOOLS)
     add_subdirectory(tools/maxwell-ir)
 endif()
 
-# Set yuzu project or yuzu-cmd project as default StartUp Project in Visual Studio depending on whether QT is enabled or not
-if(ENABLE_QT)
-    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT yuzu)
-else()
-    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT yuzu-cmd)
-endif()
-
 # Installation instructions
 # =========================
 
@@ -732,21 +609,7 @@ endif()
 # https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html
 # https://specifications.freedesktop.org/icon-theme-spec/icon-theme-spec-latest.html
 # https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html
-# https://www.freedesktop.org/software/appstream/docs/
-
-# TODO: Icon/install handling n such should be put into dist/CMakeLists.txt
-if(ENABLE_QT AND UNIX AND NOT APPLE)
-    install(FILES "dist/dev.suyu_emu.suyu.desktop"
-        DESTINATION "share/applications")
-    install(FILES "dist/sakura.svg"
-        DESTINATION "share/icons/hicolor/scalable/apps"
-        RENAME "dev.suyu_emu.suyu.svg")
-
-    install(FILES "dist/dev.suyu_emu.suyu.xml"
-        DESTINATION "share/mime/packages")
-    install(FILES "dist/dev.suyu_emu.suyu.metainfo.xml"
-        DESTINATION "share/metainfo")
-endif()
+# https://www.freedesktop.org/software/appstream/docs/shared-mime-info-spec-latest.html
 
 if (YUZU_INSTALL_UDEV_RULES)
     include(GNUInstallDirs)
