@@ -606,9 +606,20 @@ void GraphicsPipeline::ConfigureDraw(const RescalingPushConstant& rescaling,
     }
 
     const void* const descriptor_data{guest_descriptor_queue.UpdateData()};
+    const size_t descriptor_data_size{num_descriptor_entries * sizeof(DescriptorUpdateEntry)};
+    const bool bind_descriptors{
+        !scheduler.CanSkipDescriptorBind(this, descriptor_data, descriptor_data_size)};
+    if (!bind_descriptors) {
+        // The identical payload is already bound; reclaim this draw's redundant copy from the
+        // ring so repeated identical draws do not drain FRAME_PAYLOAD_SIZE. Nothing references
+        // this copy: the skipped bind would have read it, and it was not recorded. The last
+        // actually-bound payload lies below this draw's upload_start, untouched.
+        guest_descriptor_queue.RewindToUploadStart();
+    }
     const bool push_rescaling_words{
         scheduler.UpdateRescalingWords(rescaling.Data(), !bind_pipeline)};
-    scheduler.Record([this, descriptor_data, bind_pipeline, push_rescaling_words,
+    scheduler.Record([this, descriptor_data, bind_pipeline, bind_descriptors,
+                      push_rescaling_words,
                       rescaling_data = rescaling.Data(),
                       is_rescaling, update_rescaling,
                       uses_render_area = render_area.uses_render_area,
@@ -636,7 +647,7 @@ void GraphicsPipeline::ConfigureDraw(const RescalingPushConstant& rescaling,
                                  RENDERAREA_LAYOUT_OFFSET, sizeof(render_area_data),
                                  &render_area_data);
         }
-        if (!descriptor_set_layout) {
+        if (!descriptor_set_layout || !bind_descriptors) {
             return;
         }
         if (uses_push_descriptor) {

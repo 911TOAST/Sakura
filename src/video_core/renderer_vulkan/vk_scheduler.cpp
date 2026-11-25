@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -350,6 +351,36 @@ bool Scheduler::UpdateRescalingWords(std::span<const u32, 6> words, bool same_pi
     return true;
 }
 
+bool Scheduler::CanSkipDescriptorBind(const GraphicsPipeline* pipeline, const void* data,
+                                      size_t byte_size) {
+    // A set belongs to the last bind actually recorded into the command stream. The single-entry
+    // cache is sound because every event that can rebind set 0 behind our back also bumps
+    // render_pass_serial first: EndRenderPass (present filters', compute passes'), InvalidateState
+    // (new command buffer, blit rebinds). A serial mismatch therefore forces a real bind, and
+    // within one pass only these draw-path binds can change the graphics bind point.
+    if (pipeline == nullptr || data == nullptr) {
+        return false;
+    }
+    if (byte_size == 0 || byte_size > MAX_DEDUP_DESCRIPTOR_BYTES) {
+        last_descriptor_pipeline = nullptr;
+        last_descriptor_bytes = 0;
+        return false;
+    }
+    if (last_descriptor_pipeline == pipeline &&
+        last_descriptor_serial == render_pass_serial &&
+        last_descriptor_bytes == byte_size &&
+        std::memcmp(last_descriptor_data.data(), data, byte_size) == 0) {
+        // The identical set is already bound in stream; keep the cache untouched.
+        return true;
+    }
+    // Remember what is about to be bound so a later draw with the same payload can skip.
+    std::memcpy(last_descriptor_data.data(), data, byte_size);
+    last_descriptor_pipeline = pipeline;
+    last_descriptor_bytes = byte_size;
+    last_descriptor_serial = render_pass_serial;
+    return false;
+}
+
 void Scheduler::WorkerThread(std::stop_token stop_token) {
     Common::SetCurrentThreadName("VulkanWorker");
 #ifdef __ANDROID__
@@ -553,6 +584,8 @@ void Scheduler::InvalidateState() {
     state.graphics_pipeline = nullptr;
     state.rescaling_defined = false;
     rescaling_words_defined = false;
+    last_descriptor_pipeline = nullptr;
+    last_descriptor_bytes = 0;
     state_tracker.InvalidateCommandBufferState();
 }
 

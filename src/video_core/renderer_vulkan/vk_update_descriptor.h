@@ -17,10 +17,17 @@ class Scheduler;
 
 union DescriptorUpdateEntry {
     DescriptorUpdateEntry() = default;
-    DescriptorUpdateEntry(VkDescriptorImageInfo image_) : image{image_} {}
-    DescriptorUpdateEntry(VkDescriptorBufferInfo buffer_) : buffer{buffer_} {}
-    DescriptorUpdateEntry(VkBufferView texel_buffer_) : texel_buffer{texel_buffer_} {}
-    std::monostate empty{};
+    DescriptorUpdateEntry(VkDescriptorImageInfo image_) : raw{} {
+        image = image_;
+    }
+    DescriptorUpdateEntry(VkDescriptorBufferInfo buffer_) : raw{} {
+        buffer = buffer_;
+    }
+    DescriptorUpdateEntry(VkBufferView texel_buffer_) : raw{} {
+        texel_buffer = texel_buffer_;
+    }
+    std::array<u64, 3> raw{};
+    std::monostate empty;
     VkDescriptorImageInfo image;
     VkDescriptorBufferInfo buffer;
     VkBufferView texel_buffer;
@@ -42,6 +49,10 @@ public:
 
     const DescriptorUpdateEntry* UpdateData() const noexcept {
         return upload_start;
+    }
+
+    void RewindToUploadStart() noexcept {
+        payload_cursor = const_cast<DescriptorUpdateEntry*>(upload_start);
     }
 
     void AddSampledImage(VkImageView image_view, VkSampler sampler) {

@@ -131,6 +131,12 @@ public:
     /// dropped by InvalidateState because push constants are per-command-buffer state.
     bool UpdateRescalingWords(std::span<const u32, 6> words, bool same_pipeline_bound);
 
+    /// Returns true when the descriptor payload for \p pipeline is byte-identical to the one
+    /// already bound in the current command buffer, allowing the caller to skip descriptor
+    /// allocation, template update, and bind/push. Dropped by InvalidateState().
+    bool CanSkipDescriptorBind(const GraphicsPipeline* pipeline, const void* data,
+                               size_t byte_size);
+
     /// Invalidates current command buffer state except for render passes
     void InvalidateState();
 
@@ -372,14 +378,24 @@ private:
     /// final store-op variant. This lets the store op depend on the pass's actual next use instead
     /// of being baked at begin. Atomic because a pass can span command chunks: the worker may
     /// execute the begin (reading the initial storing variant) while the render thread finalizes
-    /// the slot, and reading the storing variant early is always safe.
-    std::shared_ptr<std::atomic<VkRenderPass>> current_pass_slot;
+    /// the slot, and reading the storing variant early is always safe. Owned via shared_ptr so a
+    /// deferred recording lambda that captured the slot keeps it alive after the pass ends.
+    std::shared_ptr<std::atomic<VkRenderPass>> current_pass_slot{};
 
     u64 render_pass_serial = 0;
 
     /// Rescaling push-constant dedup (see UpdateRescalingWords). Only touched on the render thread.
     std::array<u32, 6> last_rescaling_words{};
     bool rescaling_words_defined = false;
+
+    /// Descriptor bind/update dedup (see CanSkipDescriptorBind). Only touched on the render thread.
+    /// Keyed on the render pass serial: present filters and blits rebind the graphics bind point
+    /// after ending a pass (bumping the serial), so a serial mismatch forces a real rebind.
+    static constexpr size_t MAX_DEDUP_DESCRIPTOR_BYTES = 256 * 24;
+    const GraphicsPipeline* last_descriptor_pipeline = nullptr;
+    size_t last_descriptor_bytes = 0;
+    u64 last_descriptor_serial = 0;
+    std::array<u8, MAX_DEDUP_DESCRIPTOR_BYTES> last_descriptor_data{};
 
     std::queue<std::unique_ptr<CommandChunk>> work_queue;
     std::vector<std::unique_ptr<CommandChunk>> chunk_reserve;
