@@ -46,7 +46,11 @@
     <string name="wallpaper_source_catalog">Use catalog</string>
     <string name="wallpaper_provider">Source</string>
     <string name="wallpaper_provider_title">Wallpaper source</string>
-    <string name="wallpaper_safebooru_note">Safe-for-work game and anime art from Safebooru. Short keyword tags work best; Popular sorts by score.</string>
+    <string name="wallpaper_safebooru_note">Safe-for-work game and anime art from Safebooru. Short keyword tags work best.</string>
+    <string name="wallpaper_picsum_note">Curated photography from Picsum. No keyword search; every page is a fresh random set, so Sort does not apply.</string>
+    <string name="wallpaper_wikimedia_note">Free-licensed photography and art from Wikimedia Commons. Keyword search with dimension filters.</string>
+    <string name="wallpaper_nekos_note">SFW neko art from the Nekos API (nekos.best). Random set each load; keyword search and sort do not apply.</string>
+    <string name="wallpaper_waifupics_note">SFW anime images from Waifu.pics. Random picks; keyword search, sort, and dimension filters do not apply.</string>
     <string name="wallpaper_bing_note">Bing’s daily photography, newest first. The query only filters titles; sort and 4K filters do not apply.</string>
     <string name="wallpaper_invalid_url">Enter an HTTPS URL without a username or password.</string>
     <string name="wallpaper_editor_title">Tune your wallpaper</string>
@@ -82,7 +86,7 @@
     <string-array name="wallpaper_orientations"><item>Any</item><item>Landscape</item><item>Portrait</item><item>Square</item></string-array>
     <string-array name="wallpaper_resolutions"><item>Any</item><item>HD (1080p)</item><item>4K (2160p)</item></string-array>
     <string-array name="wallpaper_sorts"><item>Relevance</item><item>Newest</item><item>Popular</item></string-array>
-    <string-array name="wallpaper_provider_names"><item>Wallhaven</item><item>Safebooru</item><item>Bing daily</item></string-array>
+    <string-array name="wallpaper_provider_names"><item>Wallhaven</item><item>Safebooru</item><item>Bing daily</item><item>Picsum</item><item>Wikimedia</item><item>Nekos API</item><item>Waifu.pics</item></string-array>
     <string-array name="wallpaper_topic_names"><item>Space</item><item>Nature</item><item>Abstract</item><item>Architecture</item><item>Games</item></string-array>
     <string-array name="wallpaper_topic_queries" translatable="false"><item>space</item><item>nature</item><item>abstract</item><item>architecture</item><item>video games</item></string-array>
 </resources>

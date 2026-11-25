@@ -34,6 +34,9 @@ data class WallpaperSearchSpec(
 
 data class WallpaperPage(val items: List<OnlineBackground>, val page: Int, val lastPage: Int)
 
+/** waifu.pics answers one image per request, so a grid page is this many parallel-ish calls. */
+private const val WAIFU_PICS_BATCH = 8
+
 @Serializable
 data class WallpaperRecommendation(val game: String, val items: List<OnlineBackground>)
 
@@ -109,6 +112,26 @@ class WallpaperRepository(context: Context) {
                 val bing = parseBingPage(WallpaperHttp.get(bingWallpaperUrl(page).toString(), api = true).decodeToString(), page)
                 bing.copy(items = filterBingResults(bing.items, spec))
             }
+            WallpaperProviders.PICSUM -> parsePicsumPage(
+                WallpaperHttp.get(picsumSearchUrl(page).toString(), api = true).decodeToString(), page
+            )
+            WallpaperProviders.WIKIMEDIA -> parseWikimediaPage(
+                WallpaperHttp.get(wikimediaSearchUrl(spec, page).toString(), api = true).decodeToString(), page
+            )
+            WallpaperProviders.NEKOS -> parseNekosPage(
+                WallpaperHttp.get(nekosSearchUrl(page).toString(), api = true).decodeToString(), page
+            )
+            // waifu.pics returns one random image per call, so a page is a small batch joined
+            // into a synthetic JSON array for the shared parser. The semaphore serializes these.
+            WallpaperProviders.WAIFU_PICS -> {
+                val bodies = StringBuilder("[")
+                repeat(WAIFU_PICS_BATCH) {
+                    if (it > 0) bodies.append(',')
+                    bodies.append(WallpaperHttp.get(waifuPicsSearchUrl().toString(), api = true).decodeToString())
+                }
+                bodies.append(']')
+                parseWaifuPicsPage(bodies.toString(), page)
+            }
             else -> parseWallhavenPage(WallpaperHttp.get(wallhavenSearchUrl(spec, page).toString(), api = true).decodeToString())
         }
         result.copy(items = filterWallpaperResults(result.items, spec))
@@ -151,6 +174,30 @@ class WallpaperRepository(context: Context) {
                     api = true
                 ).decodeToString(), 1
             ).let { it.copy(items = filterWallpaperResults(it.items, spec)) }
+            WallpaperProviders.PICSUM -> parsePicsumPage(
+                // Any page is a random set; picking a random one keeps "surprise me" honest.
+                WallpaperHttp.get(picsumSearchUrl(Random.nextInt(1, 21)).toString(), api = true)
+                    .decodeToString(), 1
+            ).let { it.copy(items = filterWallpaperResults(it.items, spec)) }
+            WallpaperProviders.WIKIMEDIA -> parseWikimediaPage(
+                WallpaperHttp.get(
+                    wikimediaSearchUrl(spec, Random.nextInt(1, 41)).toString(),
+                    api = true
+                ).decodeToString(), 1
+            ).let { it.copy(items = filterWallpaperResults(it.items, spec)) }
+            WallpaperProviders.NEKOS -> parseNekosPage(
+                WallpaperHttp.get(nekosSearchUrl(1).toString(), api = true).decodeToString(), 1
+            ).let { it.copy(items = filterWallpaperResults(it.items, spec)) }
+            WallpaperProviders.WAIFU_PICS -> {
+                val bodies = StringBuilder("[")
+                repeat(WAIFU_PICS_BATCH) {
+                    if (it > 0) bodies.append(',')
+                    bodies.append(WallpaperHttp.get(waifuPicsSearchUrl().toString(), api = true).decodeToString())
+                }
+                bodies.append(']')
+                parseWaifuPicsPage(bodies.toString(), 1)
+                    .let { it.copy(items = it.items.take(1)) }
+            }
             WallpaperProviders.BING -> parseBingPage(
                 WallpaperHttp.get(bingWallpaperUrl(Random.nextInt(1, 3)).toString(), api = true)
                     .decodeToString(), 1

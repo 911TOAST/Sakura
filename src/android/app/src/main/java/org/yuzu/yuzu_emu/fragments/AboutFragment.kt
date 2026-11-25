@@ -164,7 +164,6 @@ class AboutFragment : Fragment() {
         // Width-only breathing and the credit icon's drift can start right away; they do not fight
         // the entrance transform on their own views.
         brandAnimators += BrandAnimation.breathe(binding.aboutWordmark)
-        brandAnimators += BrandAnimation.float(binding.neotronIcon, 3f * density, 1900L)
         brandAnimators += BrandAnimation.nudgeX(binding.neotronChevron, 4f * density, 1100L)
 
         val rise = 18f * density

@@ -5,7 +5,6 @@ package org.yuzu.yuzu_emu.ui.theme
 
 import android.graphics.Typeface
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -213,7 +212,13 @@ private fun suyuTypography(fontFamily: FontFamily): Typography {
 
 @Composable
 fun suyuScheme(artworkSeed: Int? = null): ColorScheme {
-    val darkTheme = isSystemInDarkTheme()
+    // Follow the app's night mode, not the system's. isSystemInDarkTheme() reads the system
+    // setting, but the XML windows follow Settings' THEME_MODE, so switching the app to Light
+    // on a dark phone left every Compose surface rendering the dark scheme inside light
+    // windows. context.resources reflects the AppCompatDelegate override after a mode change.
+    val darkTheme = LocalContext.current.resources.configuration.uiMode and
+        android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+        android.content.res.Configuration.UI_MODE_NIGHT_YES
     // Material You is the only mode allowed to follow the wallpaper. Everything else renders the
     // Sakura Rose expressive palette, which is what ThemeHelper puts on the XML windows: a Compose
     // screen silently turning into stock dynamic colour broke the app's identity on every Pixel.

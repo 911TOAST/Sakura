@@ -46,6 +46,20 @@ class WallpaperSearchFragment : Fragment() {
     private var restoring = false
     private var pendingScroll: android.os.Parcelable? = null
 
+    /**
+     * Material's builder validates the context theme. If the activity is recreated while one of
+     * these dialogs survives (theme/night-mode switch), the re-created dialog can lose the
+     * AppCompat theme and crash the app; fall back to an explicit Material 3 theme.
+     */
+    private fun themedDialogBuilder(): MaterialAlertDialogBuilder =
+        try {
+            MaterialAlertDialogBuilder(requireContext())
+        } catch (_: IllegalArgumentException) {
+            MaterialAlertDialogBuilder(
+                android.view.ContextThemeWrapper(requireContext(), R.style.Theme_Yuzu_Main)
+            )
+        }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
         _binding = FragmentWallpaperSearchBinding.inflate(inflater, container, false)
         return binding.root
@@ -127,7 +141,7 @@ class WallpaperSearchFragment : Fragment() {
     private fun chooseProvider() {
         val spec = viewModel.search.value.spec
         val selected = WallpaperProviders.ids.indexOf(WallpaperProviders.normalize(spec.provider))
-        MaterialAlertDialogBuilder(requireContext())
+        themedDialogBuilder()
             .setTitle(R.string.wallpaper_provider_title)
             .setSingleChoiceItems(R.array.wallpaper_provider_names, selected) { dialog, which ->
                 val provider = WallpaperProviders.ids[which]
@@ -147,7 +161,7 @@ class WallpaperSearchFragment : Fragment() {
             Filter.RESOLUTION -> Triple(R.string.wallpaper_resolution, R.array.wallpaper_resolutions, spec.resolution)
             Filter.SORT -> Triple(R.string.wallpaper_sort, R.array.wallpaper_sorts, spec.sort)
         }
-        MaterialAlertDialogBuilder(requireContext())
+        themedDialogBuilder()
             .setTitle(title)
             .setSingleChoiceItems(values, selected) { dialog, which ->
                 val updated = when (filter) {
@@ -181,7 +195,7 @@ class WallpaperSearchFragment : Fragment() {
         container.addView(notice)
         container.addView(input)
 
-        val dialog = MaterialAlertDialogBuilder(requireContext())
+        val dialog = themedDialogBuilder()
             .setTitle(R.string.wallpaper_advanced)
             .setView(container)
             .setNeutralButton(R.string.wallpaper_source_wallhaven) { _, _ ->
@@ -274,12 +288,27 @@ class WallpaperSearchFragment : Fragment() {
         binding.wallpaperAdvanced.setText(
             if (state.spec.catalogUrl.isBlank()) R.string.wallpaper_advanced else R.string.wallpaper_source_catalog
         )
-        binding.wallpaperSort.isEnabled = state.spec.catalogUrl.isBlank() && provider != WallpaperProviders.BING
+        // Providers without search metadata cannot serve the matching filters: Picsum and
+        // waifu.pics carry no query and no dimensions, which would leave the grid permanently
+        // empty when a dimension filter is active.
+        val noDimensionData = provider == WallpaperProviders.WAIFU_PICS
+        binding.wallpaperOrientation.isEnabled = !noDimensionData
+        binding.wallpaperResolution.isEnabled = !noDimensionData
+        binding.wallpaperSort.isEnabled = state.spec.catalogUrl.isBlank() &&
+            provider != WallpaperProviders.BING &&
+            provider != WallpaperProviders.PICSUM &&
+            provider != WallpaperProviders.WIKIMEDIA &&
+            provider != WallpaperProviders.NEKOS &&
+            provider != WallpaperProviders.WAIFU_PICS
         binding.wallpaperSourceNotice.setText(
             when {
                 state.spec.catalogUrl.isNotBlank() -> R.string.wallpaper_catalog_notice
                 provider == WallpaperProviders.SAFEBOORU -> R.string.wallpaper_safebooru_note
                 provider == WallpaperProviders.BING -> R.string.wallpaper_bing_note
+                provider == WallpaperProviders.PICSUM -> R.string.wallpaper_picsum_note
+                provider == WallpaperProviders.WIKIMEDIA -> R.string.wallpaper_wikimedia_note
+                provider == WallpaperProviders.NEKOS -> R.string.wallpaper_nekos_note
+                provider == WallpaperProviders.WAIFU_PICS -> R.string.wallpaper_waifupics_note
                 else -> R.string.wallpaper_discovery_note
             }
         )

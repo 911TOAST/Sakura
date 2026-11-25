@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Bottom-weighted scrim so the NE0TR0N card text stays readable over any banner frame. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:centerColor="#40000000"
+        android:endColor="#CC000000"
+        android:startColor="#0D000000"
+        android:type="linear" />
+</shape>

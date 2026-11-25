@@ -506,8 +506,7 @@
     <string name="user_data_import_failed_description">Make sure the user data folders are at the root of the zip folder and contain a config file at config/config.ini and try again.</string>
     <string name="reddit_link" translatable="false">https://www.reddit.com/r/suyu/</string>
     <!-- Quiet pointer to a one-developer game made with the same codebase. -->
-    <string name="neotron_credit_title">Also try NE0TR0N!!</string>
-    <string name="neotron_credit">A small game made by one dev.</string>
+    <string name="neotron_credit_title">Also try NE0TR0N</string>
     <string name="neotron_link" translatable="false">https://www.roblox.com/games/78128522742858/NE0TR0N</string>
 
     <!-- General settings strings -->

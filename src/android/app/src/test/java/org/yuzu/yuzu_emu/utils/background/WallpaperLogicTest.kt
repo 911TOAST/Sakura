@@ -24,13 +24,31 @@ class WallpaperLogicTest {
     }
 
     @Test
-    fun safebooruSearchUsesTagQueryAndScoreSort() {
+    fun safebooruSearchUsesTagQueryWithoutUnsupportedSort() {
         val url = safebooruSearchUrl(WallpaperSearchSpec(query = "forest landscape", sort = 2), 3)
         assertEquals("dapi", url.queryParameter("page"))
         assertEquals("1", url.queryParameter("json"))
         assertEquals("2", url.queryParameter("pid"))
-        assertEquals("forest landscape sort:score", url.queryParameter("tags"))
+        // Safebooru's dapi has no sort: meta tag; sending one returns an empty result set.
+        assertEquals("forest landscape", url.queryParameter("tags"))
         assertEquals("", safebooruSearchUrl(WallpaperSearchSpec(), 1).queryParameter("tags"))
+    }
+
+    @Test
+    fun safebooruSinglePostObjectShapeStillParses() {
+        val page = parseSafebooruPage(
+            """{"id":7,"directory":"dd","image":"solo.png","hash":"xyz9","width":800,"height":600,"rating":"s"}""",
+            1
+        )
+        assertEquals(listOf("safebooru-7"), page.items.map { it.id })
+        assertEquals(1, page.lastPage)
+    }
+
+    @Test
+    fun safebooruNonJsonBodyParsesAsEmpty() {
+        val page = parseSafebooruPage("<html>rate limited</html>", 2)
+        assertTrue(page.items.isEmpty())
+        assertEquals(2, page.lastPage)
     }
 
     @Test
@@ -54,6 +72,88 @@ class WallpaperLogicTest {
             """{"id":$it,"directory":"aa","image":"pic$it.jpg","hash":"ab$it","width":100,"height":100}"""
         }
         assertEquals(2, parseSafebooruPage(posts, 1).lastPage)
+    }
+
+    @Test
+    fun picsumPagesBuildFixedDownloadPathsAndRejectBadIds() {
+        val text = """[
+            {"id":"10","author":"A","width":1920,"height":1080},
+            {"id":"../evil","author":"B","width":100,"height":100},
+            {"id":"","author":"C","width":100,"height":100},
+            {"id":"20","author":"D","width":0,"height":0}
+        ]"""
+        val page = parsePicsumPage(text, 2)
+        assertEquals(listOf("picsum-10"), page.items.map { it.id })
+        assertEquals("https://picsum.photos/id/10/1920/1080", page.items[0].full)
+        assertEquals("https://picsum.photos/id/10/400/240", page.items[0].thumb)
+        assertEquals(2, page.lastPage)
+    }
+
+    @Test
+    fun picsumNonJsonBodyParsesAsEmpty() {
+        val page = parsePicsumPage("<html>error</html>", 1)
+        assertTrue(page.items.isEmpty())
+    }
+
+    @Test
+    fun wikimediaPagesKeepOnlyWikimediaBitmaps() {
+        val text = """{"query":{"pages":[
+            {"pageid":1,"title":"File:cat.jpg","imageinfo":[{"url":"https://upload.wikimedia.org/7/cat.jpg","descriptionurl":"https://commons.wikimedia.org/wiki/File:cat.jpg","thumburl":"https://upload.wikimedia.org/t/cat.jpg","width":1600,"height":900}]},
+            {"pageid":2,"title":"File:font.svg","imageinfo":[{"url":"https://upload.wikimedia.org/7/font.svg","thumburl":"","width":100,"height":100}]},
+            {"pageid":3,"title":"File:evil.jpg","imageinfo":[{"url":"https://evil.example/7/evil.jpg","thumburl":"","width":100,"height":100}]}
+        ]}}"""
+        val page = parseWikimediaPage(text, 2)
+        assertEquals(listOf("wikimedia-1"), page.items.map { it.id })
+        assertEquals("cat", page.items[0].title)
+        assertEquals(2, page.lastPage)
+    }
+
+    @Test
+    fun wikimediaQuerySendsSearchAndOffset() {
+        val url = wikimediaSearchUrl(WallpaperSearchSpec(query = "mountain lake"), 3)
+        assertEquals("mountain lake", url.queryParameter("gsrsearch")!!.removePrefix("filetype:bitmap "))
+        assertEquals("48", url.queryParameter("gsroffset"))
+        assertEquals("6", url.queryParameter("gsrnamespace"))
+    }
+
+    @Test
+    fun nekosPagesKeepOnlySameHostBitmaps() {
+        val text = """{"results":[
+            {"id":"a1","url":"https://nekos.best/neko/0001.jpg","artist_name":"kamen","width":1080,"height":1920},
+            {"id":"a2","url":"https://evil.example/0002.jpg","artist_name":"evil"},
+            {"id":"a3","url":"https://nekos.best/neko/0003.svg"}
+        ]}"""
+        val page = parseNekosPage(text, 1)
+        assertEquals(listOf("nekos-a1"), page.items.map { it.id })
+        assertEquals("kamen", page.items[0].author)
+        assertEquals("https://nekos.best/neko/0001.jpg", page.items[0].full)
+        assertEquals(2, page.lastPage)
+    }
+
+    @Test
+    fun nekosNonJsonBodyParsesAsEmpty() {
+        val page = parseNekosPage("<html>error</html>", 1)
+        assertTrue(page.items.isEmpty())
+    }
+
+    @Test
+    fun waifuPicsBatchArrayKeepsOnlyCdnBitmaps() {
+        val text = """[
+            {"url":"https://cdn.waifu.pics/abcd.jpg"},
+            {"url":"http://cdn.waifu.pics/insecure.jpg"},
+            {"url":"https://evil.waifu.pics.evil.example/pwn.jpg"},
+            {"url":"https://cdn.waifu.pics/vector.svg"}
+        ]"""
+        val page = parseWaifuPicsPage(text, 1)
+        assertEquals(listOf("waifupics-${"https://cdn.waifu.pics/abcd.jpg".hashCode().toUInt()}"), page.items.map { it.id })
+        assertEquals(2, page.lastPage)
+    }
+
+    @Test
+    fun waifuPicsSingleObjectShapeStillParses() {
+        val page = parseWaifuPicsPage("""{"url":"https://cdn.waifu.pics/solo.png"}""", 4)
+        assertEquals(1, page.items.size)
+        assertEquals(5, page.lastPage)
     }
 
     @Test
