@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <bit>
+#include <thread>
 
 #include "common/assert.h"
 #include "common/bit_util.h"
@@ -456,6 +457,14 @@ void KScheduler::ScheduleImplFiber(KernelCore& kernel) {
                 // If we do, another core is interfering, and we must start again.
                 goto retry;
             }
+            // Losing contender: yield the core while the winner completes its context switch.
+            // Without a hint, a losing big core spins an LL/SC loop that hammers the guard's
+            // cache line while the holder runs SwitchThread.
+#if defined(__aarch64__)
+            __builtin_arm_yield();
+#else
+            std::this_thread::yield();
+#endif
         }
 
         // It's time to switch the thread.

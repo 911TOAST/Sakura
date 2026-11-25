@@ -81,11 +81,19 @@ private:
                 return false;
             }
         } else if constexpr (Mode == PushMode::Wait) {
-            // Wait until we have free slots to write to.
-            std::unique_lock lock{producer.cv_mutex};
-            producer.cv.wait(lock, [this, write_index] {
-                return (write_index - consumer.index.load(std::memory_order::acquire)) < Capacity;
-            });
+            // Fast path: in the steady state the queue is not full, so skip the producer's
+            // condvar mutex entirely and only take it when the queue is actually full. The
+            // wait predicate re-checks space under the lock, so a "space was freed before we
+            // got the mutex" miss is absorbed by the recheck.
+            if ((write_index - consumer.index.load(std::memory_order::acquire)) == Capacity) {
+                std::unique_lock lock{producer.cv_mutex};
+                producer.waiting.store(true, std::memory_order::release);
+                producer.cv.wait(lock, [this, write_index] {
+                    return (write_index - consumer.index.load(std::memory_order::acquire)) <
+                           Capacity;
+                });
+                producer.waiting.store(false, std::memory_order::relaxed);
+            }
         } else {
             static_assert(Mode < PushMode::Count, "Invalid PushMode.");
         }
@@ -95,9 +103,15 @@ private:
         std::construct_at(std::addressof(m_data[pos]), std::forward<Args>(args)...);
         // Increment the write index.
         ++producer.index;
-        // Notify the consumer that we have pushed into the queue.
-        std::scoped_lock lock{consumer.cv_mutex};
-        consumer.cv.notify_one();
+        // Notify the consumer that we have pushed into the queue — but only when the consumer
+        // is actually parked on it. Pop's predicate re-checks emptiness under its own mutex, so
+        // a notify that races with the consumer's final check is harmless to skip. The common
+        // case (consumer awake, mid-pop) then pays zero mutex round trips, just an atomic load
+        // on the same cache line the indices already live on.
+        if (consumer.waiting.load(std::memory_order::acquire)) {
+            std::scoped_lock lock{consumer.cv_mutex};
+            consumer.cv.notify_one();
+        }
         return true;
     }
 
@@ -110,17 +124,25 @@ private:
                 return false;
             }
         } else if constexpr (Mode == PopMode::Wait) {
-            // Wait until the queue is not empty.
-            std::unique_lock lock{consumer.cv_mutex};
-            consumer.cv.wait(lock, [this, read_index] {
-                return read_index != producer.index.load(std::memory_order::acquire);
-            });
+            // Wait until the queue is not empty. See the Emplace comment: the mutex is only in
+            // the slow path when a first check finds the queue empty, and the parked flag gates
+            // which side pays for the notify.
+            if (read_index == producer.index.load(std::memory_order::acquire)) {
+                std::unique_lock lock{consumer.cv_mutex};
+                consumer.waiting.store(true, std::memory_order::release);
+                consumer.cv.wait(lock, [this, read_index] {
+                    return read_index != producer.index.load(std::memory_order::acquire);
+                });
+                consumer.waiting.store(false, std::memory_order::relaxed);
+            }
         } else if constexpr (Mode == PopMode::WaitWithStopToken) {
             // Wait until the queue is not empty.
             std::unique_lock lock{consumer.cv_mutex};
+            consumer.waiting.store(true, std::memory_order::release);
             consumer.cv.wait(lock, stop_token, [this, read_index] {
                 return read_index != producer.index.load(std::memory_order::acquire);
             });
+            consumer.waiting.store(false, std::memory_order::relaxed);
             if (stop_token.stop_requested()) {
                 return false;
             }
@@ -133,9 +155,12 @@ private:
         t = std::move(m_data[pos]);
         // Increment the read index.
         ++consumer.index;
-        // Notify the producer that we have popped off the queue.
-        std::scoped_lock lock{producer.cv_mutex};
-        producer.cv.notify_one();
+        // Notify the producer that we have popped off the queue — only if the producer is
+        // parked waiting for space (see the Emplace comment for why the race is benign).
+        if (producer.waiting.load(std::memory_order::acquire)) {
+            std::scoped_lock lock{producer.cv_mutex};
+            producer.cv.notify_one();
+        }
         return true;
     }
 
@@ -144,11 +169,15 @@ private:
         std::atomic_size_t index{0};
         std::condition_variable_any cv;
         std::mutex cv_mutex;
+        // Set while a thread is parked on cv; gates the other side's mutex + notify. SPSC lets
+        // only one thread touch each side at a time.
+        std::atomic<bool> waiting{false};
     } producer;
     alignas(64) struct {
         std::atomic_size_t index{0};
         std::condition_variable_any cv;
         std::mutex cv_mutex;
+        std::atomic<bool> waiting{false};
     } consumer;
 };
 

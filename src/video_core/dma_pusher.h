@@ -109,6 +109,11 @@ inline CommandHeader BuildCommandHeader(BufferMethods method, u32 arg_count, Sub
 struct CommandList final {
     CommandList() = default;
     explicit CommandList(std::size_t size) : command_lists(size) {}
+    // Constructs the header list by copying [first, last) without value-initializing each
+    // element first. For callers that just copy headers in (GPFIFO submit), the value-init
+    // pass of CommandList(size) is a second full walk over the buffer before the real copy.
+    template <typename InputIt>
+    CommandList(InputIt first, InputIt last) : command_lists(first, last) {}
     explicit CommandList(boost::container::small_vector<CommandHeader, 64>&& prefetch_command_list_)
         : prefetch_command_list{std::move(prefetch_command_list_)} {}
 

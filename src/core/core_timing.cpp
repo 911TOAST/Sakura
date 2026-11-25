@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <tuple>
 
 #include <boost/container/small_vector.hpp>
@@ -116,7 +117,7 @@ void CoreTiming::SyncPause(bool is_paused) {
         }
         event.Set();
         while (paused_set != is_paused)
-            ;
+            std::this_thread::yield();
     }
 
     if (!is_paused) {
@@ -170,7 +171,11 @@ void CoreTiming::UnscheduleEvent(const std::shared_ptr<EventType>& event_type,
         boost::container::small_vector<heap_t::handle_type, 1> to_remove;
         for (auto itr = event_queue.begin(); itr != event_queue.end(); itr++) {
             const Event& e = *itr;
-            if (e.type.lock().get() == event_type.get()) {
+            // Compare weak_ptr identity through the control blocks instead of resolving to a
+            // temporary shared_ptr: lock() would pay an acquire/release refcount pair per
+            // queued event just to compare a pointer. Same result, including for expired
+            // entries (an expired control block never matches a live shared_ptr's).
+            if (!e.type.owner_before(event_type) && !event_type.owner_before(e.type)) {
                 to_remove.push_back(itr->handle);
             }
         }

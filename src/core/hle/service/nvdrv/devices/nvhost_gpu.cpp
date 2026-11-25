@@ -394,16 +394,17 @@ NvResult nvhost_gpu::SubmitGPFIFOBase1(IoctlSubmitGpfifo& params,
         return NvResult::InvalidSize;
     }
 
-    Tegra::CommandList entries(params.num_entries);
     if (kickoff) {
+        Tegra::CommandList entries(params.num_entries);
         system.ApplicationMemory().ReadBlock(params.address, entries.command_lists.data(),
                                              params.num_entries * sizeof(Tegra::CommandListHeader));
-    } else {
-        std::memcpy(entries.command_lists.data(), commands.data(),
-                    params.num_entries * sizeof(Tegra::CommandListHeader));
+        return SubmitGPFIFOImpl(params, std::move(entries));
     }
-
-    return SubmitGPFIFOImpl(params, std::move(entries));
+    // Copy-construct straight from the submit span: skips the value-initialization pass a sized
+    // CommandList does before the copy overwrites every header anyway.
+    Tegra::CommandList span_entries(
+        commands.begin(), commands.begin() + static_cast<std::ptrdiff_t>(params.num_entries));
+    return SubmitGPFIFOImpl(params, std::move(span_entries));
 }
 
 NvResult nvhost_gpu::SubmitGPFIFOBase2(IoctlSubmitGpfifo& params,
@@ -413,10 +414,11 @@ NvResult nvhost_gpu::SubmitGPFIFOBase2(IoctlSubmitGpfifo& params,
         return NvResult::InvalidSize;
     }
 
-    Tegra::CommandList entries(params.num_entries);
-    std::memcpy(entries.command_lists.data(), commands.data(),
-                params.num_entries * sizeof(Tegra::CommandListHeader));
-    return SubmitGPFIFOImpl(params, std::move(entries));
+    // Copy-construct straight from the submit span: skips the value-initialization pass a sized
+    // CommandList does before the memcpy overwrites every header anyway.
+    Tegra::CommandList span_entries(
+        commands.begin(), commands.begin() + static_cast<std::ptrdiff_t>(params.num_entries));
+    return SubmitGPFIFOImpl(params, std::move(span_entries));
 }
 
 NvResult nvhost_gpu::GetWaitbase(IoctlGetWaitbase& params) {
