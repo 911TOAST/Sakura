@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
@@ -63,6 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.model.Game
+import org.yuzu.yuzu_emu.ui.theme.SakuraActivity
 import org.yuzu.yuzu_emu.ui.theme.SuyuM3Theme
 import org.yuzu.yuzu_emu.utils.ArtworkColors
 import org.yuzu.yuzu_emu.utils.GameHelper
@@ -74,7 +74,7 @@ import org.yuzu.yuzu_emu.utils.applyPanelWindowMotion
  * "Your story": playtime, streaks, and most played games, coloured by the library's artwork.
  * The share summary carries aggregates only — never game titles — so it is safe to post.
  */
-class PlaytimeStatsActivity : ComponentActivity() {
+class PlaytimeStatsActivity : SakuraActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

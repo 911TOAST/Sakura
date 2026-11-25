@@ -8,7 +8,7 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup.MarginLayoutParams
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AppCompatActivity
+import org.yuzu.yuzu_emu.ui.theme.SakuraActivity
 import androidx.core.os.bundleOf
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -41,17 +41,12 @@ enum class SettingsSubscreen {
     WALLPAPERS,
 }
 
-class SettingsSubscreenActivity : AppCompatActivity() {
+class SettingsSubscreenActivity : SakuraActivity() {
     private lateinit var binding: ActivitySettingsBinding
 
     private val args by navArgs<SettingsSubscreenActivityArgs>()
 
-    override fun attachBaseContext(base: Context) {
-        super.attachBaseContext(YuzuApplication.applyLanguage(base))
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        ThemeHelper.setTheme(this)
 
         super.onCreate(savedInstanceState)
         applyPanelWindowMotion()

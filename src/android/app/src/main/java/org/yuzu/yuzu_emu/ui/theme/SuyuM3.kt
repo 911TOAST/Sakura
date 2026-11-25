@@ -4,7 +4,6 @@
 package org.yuzu.yuzu_emu.ui.theme
 
 import android.graphics.Typeface
-import android.os.Build
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -24,10 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.yuzu.yuzu_emu.R
-import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.utils.ArtworkColors
 import org.yuzu.yuzu_emu.utils.FontManager
-import org.yuzu.yuzu_emu.utils.Theme
 
 // =============================================================================
 // Sakura Rose — Material 3 Expressive palette
@@ -212,23 +209,14 @@ private fun suyuTypography(fontFamily: FontFamily): Typography {
 
 @Composable
 fun suyuScheme(artworkSeed: Int? = null): ColorScheme {
-    // Follow the app's night mode, not the system's. isSystemInDarkTheme() reads the system
-    // setting, but the XML windows follow Settings' THEME_MODE, so switching the app to Light
-    // on a dark phone left every Compose surface rendering the dark scheme inside light
-    // windows. context.resources reflects the AppCompatDelegate override after a mode change.
-    val darkTheme = LocalContext.current.resources.configuration.uiMode and
-        android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
-        android.content.res.Configuration.UI_MODE_NIGHT_YES
-    // Material You is the only mode allowed to follow the wallpaper. Everything else renders the
-    // Sakura Rose expressive palette, which is what ThemeHelper puts on the XML windows: a Compose
-    // screen silently turning into stock dynamic colour broke the app's identity on every Pixel.
-    // Cached for this composition: the theme is applied when the activity is created, and the
-    // dashboard recomposes every frame, so this must not reach into the native config each time.
-    val materialYou = remember {
-        runCatching { Theme.from(IntSetting.THEME.getInt()) == Theme.MaterialYou }
-            .getOrDefault(false)
-    }
-    if (materialYou && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    // The one darkness decision comes from ThemeSpec via the same activity configuration the
+    // View windows branch on: after a night-mode change AppCompatDelegate recreates the hosts,
+    // so resources reflect the app's forced mode. Re-deriving this per composition — or from the
+    // raw system setting, which isSystemInDarkTheme() reads — is how Compose ended up
+    // disagreeing with the XML windows around it.
+    val spec = ThemeController.current()
+    val darkTheme = spec.isDark(LocalContext.current.resources.configuration.uiMode)
+    if (spec.usesDynamicColor()) {
         val context = LocalContext.current
         return runCatching {
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

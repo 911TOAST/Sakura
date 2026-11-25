@@ -32,7 +32,7 @@ import org.yuzu.yuzu_emu.utils.GpuDriverHelper
 import org.yuzu.yuzu_emu.utils.InputHandler
 import org.yuzu.yuzu_emu.utils.NativeConfig
 import org.yuzu.yuzu_emu.utils.DirectoryInitialization
-import org.yuzu.yuzu_emu.utils.ThemeHelper
+import org.yuzu.yuzu_emu.ui.theme.ThemeController
 import org.yuzu.yuzu_emu.utils.FullscreenHelper
 import org.yuzu.yuzu_emu.utils.FontManager
 import org.yuzu.yuzu_emu.utils.IconHelper
@@ -1234,6 +1234,7 @@ class SettingsFragmentPresenter(
                 override fun getInt(needsGlobal: Boolean): Int = IntSetting.THEME.getInt()
                 override fun setInt(value: Int) {
                     IntSetting.THEME.setInt(value)
+                    ThemeController.refresh()
                     settingsViewModel.setShouldRecreate(true)
                 }
 
@@ -1245,6 +1246,7 @@ class SettingsFragmentPresenter(
                 override val defaultValue: Int = IntSetting.THEME.defaultValue
                 override fun reset() {
                     IntSetting.THEME.setInt(defaultValue)
+                    ThemeController.refresh()
                     settingsViewModel.setShouldRecreate(true)
                 }
             }
@@ -1299,7 +1301,7 @@ class SettingsFragmentPresenter(
                 override fun getInt(needsGlobal: Boolean): Int = IntSetting.THEME_MODE.getInt()
                 override fun setInt(value: Int) {
                     IntSetting.THEME_MODE.setInt(value)
-                    ThemeHelper.setDefaultNightMode(value)
+                    ThemeController.refresh()
                 }
 
                 override val key: String = IntSetting.THEME_MODE.key
@@ -1312,7 +1314,7 @@ class SettingsFragmentPresenter(
                 override val defaultValue: Int = IntSetting.THEME_MODE.defaultValue
                 override fun reset() {
                     IntSetting.THEME_MODE.setInt(defaultValue)
-                    ThemeHelper.setDefaultNightMode(defaultValue)
+                    ThemeController.refresh()
                 }
             }
 
@@ -1351,6 +1353,7 @@ class SettingsFragmentPresenter(
 
                 override fun setInt(value: Int) {
                     IntSetting.STATIC_THEME_COLOR.setInt(value)
+                    ThemeController.refresh()
                     settingsViewModel.setShouldRecreate(true)
                 }
 
@@ -1364,6 +1367,7 @@ class SettingsFragmentPresenter(
 
                 override fun reset() {
                     IntSetting.STATIC_THEME_COLOR.reset()
+                    ThemeController.refresh()
                     settingsViewModel.setShouldRecreate(true)
                 }
             }
@@ -1443,6 +1447,7 @@ class SettingsFragmentPresenter(
 
                 override fun setBoolean(value: Boolean) {
                     BooleanSetting.BLACK_BACKGROUNDS.setBoolean(value)
+                    ThemeController.refresh()
                     settingsViewModel.setShouldRecreate(true)
                 }
 
@@ -1457,6 +1462,7 @@ class SettingsFragmentPresenter(
                 override fun reset() {
                     BooleanSetting.BLACK_BACKGROUNDS
                         .setBoolean(BooleanSetting.BLACK_BACKGROUNDS.defaultValue)
+                    ThemeController.refresh()
                     settingsViewModel.setShouldRecreate(true)
                 }
             }
