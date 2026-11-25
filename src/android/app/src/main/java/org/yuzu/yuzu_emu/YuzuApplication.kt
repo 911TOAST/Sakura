@@ -76,6 +76,7 @@ class YuzuApplication : Application() {
         GpuDriverHelper.initializeFreedrenoConfigEarly()
 
         NativeLibrary.playTimeManagerInit()
+        GpuDriverHelper.validateOrResetInstalledDriver()
         GpuDriverHelper.initializeDriverParameters()
         NativeInput.reloadInputDevices()
         NativeLibrary.logDeviceInfo()

@@ -697,6 +697,8 @@
     <string name="renderer_reactive_flushing_description">Improves rendering accuracy in some games at the cost of performance.</string>
     <string name="shadow_compare_bypass">Bypass shadow map compare (experiments)</string>
     <string name="shadow_compare_bypass_description">Makes all shadow-map samples return "lit". Diagnostic: turns black, unlit 3D objects textured. Do not expect correct shadows while on.</string>
+    <string name="shadow_compare_manual_flip">Shadow compare: flip direction (experiments)</string>
+    <string name="shadow_compare_manual_flip_description">With "Bypass shadow map compare" on, flips the in-shader depth comparison (depth &gt;= ref instead of depth &lt;= ref). Toggle if shadows/shading appear inverted.</string>
     <string name="force_static_vertex_input">Force static vertex input (experiments)</string>
     <string name="force_static_vertex_input_description">Never use VK_EXT_vertex_input_dynamic_state, even in Malikan/Native modes. Diagnostic for suspected ARM driver vertex-binding stride bugs. Increases pipeline variants.</string>
 

@@ -63,10 +63,26 @@ class SettingsDialogFragment : DialogFragment(), DialogInterface.OnClickListener
         if (settingsViewModel.clickedItem == null) dismiss()
     }
 
+    /**
+     * Material's builder validates the context theme. After a theme or night-mode change the
+     * activity is recreated while a settings dialog is still attached; re-inflating that dialog
+     * in the torn-down window can yield a context that lost its AppCompat theme, and the
+     * convolution then throws IllegalArgumentException and kills the app. Falling back to an
+     * explicit Material 3 theme keeps the switch alive.
+     */
+    private fun dialogBuilder(): MaterialAlertDialogBuilder =
+        try {
+            MaterialAlertDialogBuilder(requireContext())
+        } catch (_: IllegalArgumentException) {
+            MaterialAlertDialogBuilder(
+                android.view.ContextThemeWrapper(requireContext(), R.style.Theme_Yuzu_Main)
+            )
+        }
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         return when (type) {
             TYPE_RESET_SETTING -> {
-                MaterialAlertDialogBuilder(requireContext())
+                dialogBuilder()
                     .setMessage(R.string.reset_setting_confirmation)
                     .setPositiveButton(android.R.string.ok) { _: DialogInterface, _: Int ->
                         val item = settingsViewModel.clickedItem ?: return@setPositiveButton
@@ -128,7 +144,7 @@ class SettingsDialogFragment : DialogFragment(), DialogInterface.OnClickListener
                 val item = settingsViewModel.clickedItem as SingleChoiceSetting
                 val value = getSelectionForSingleChoiceValue(item)
 
-                MaterialAlertDialogBuilder(requireContext())
+                dialogBuilder()
                     .setTitle(item.title)
                     .setSingleChoiceItems(item.choicesId, value, this)
                     .create()
@@ -149,7 +165,7 @@ class SettingsDialogFragment : DialogFragment(), DialogInterface.OnClickListener
                     }
                 }
 
-                MaterialAlertDialogBuilder(requireContext())
+                dialogBuilder()
                     .setTitle(item.title)
                     .setView(sliderBinding.root)
                     .setPositiveButton(android.R.string.ok, this)
@@ -165,7 +181,7 @@ class SettingsDialogFragment : DialogFragment(), DialogInterface.OnClickListener
                 spinboxBinding.editValue.setText(currentValue.toString())
                 spinboxBinding.textInputLayout.hint = getString(item.valueHint)
 
-                val dialog = MaterialAlertDialogBuilder(requireContext())
+                val dialog = dialogBuilder()
                     .setTitle(item.title)
                     .setView(spinboxBinding.root)
                     .setPositiveButton(android.R.string.ok, this)
@@ -312,7 +328,7 @@ class SettingsDialogFragment : DialogFragment(), DialogInterface.OnClickListener
                     watcher.afterTextChanged(stringInputBinding.editText.text)
                 }
 
-                MaterialAlertDialogBuilder(requireContext())
+                dialogBuilder()
                     .setTitle(item.title)
                     .setView(stringInputBinding.root)
                     .setPositiveButton(android.R.string.ok, this)
@@ -322,7 +338,7 @@ class SettingsDialogFragment : DialogFragment(), DialogInterface.OnClickListener
 
             SettingsItem.TYPE_STRING_SINGLE_CHOICE -> {
                 val item = settingsViewModel.clickedItem as StringSingleChoiceSetting
-                MaterialAlertDialogBuilder(requireContext())
+                dialogBuilder()
                     .setTitle(item.title)
                     .setSingleChoiceItems(item.choices, item.selectedValueIndex, this)
                     .create()
@@ -330,7 +346,7 @@ class SettingsDialogFragment : DialogFragment(), DialogInterface.OnClickListener
 
             SettingsItem.TYPE_INT_SINGLE_CHOICE -> {
                 val item = settingsViewModel.clickedItem as IntSingleChoiceSetting
-                MaterialAlertDialogBuilder(requireContext())
+                dialogBuilder()
                     .setTitle(item.title)
                     .setSingleChoiceItems(item.choices, item.selectedValueIndex, this)
                     .create()
@@ -373,7 +389,7 @@ class SettingsDialogFragment : DialogFragment(), DialogInterface.OnClickListener
                 val value = getValueForSingleChoiceSelection(scSetting, which)
 
                 if (value in scSetting.warnChoices) {
-                    MaterialAlertDialogBuilder(requireContext())
+                    dialogBuilder()
                         .setTitle(R.string.warning)
                         .setMessage(scSetting.warningMessage)
                         .setPositiveButton(R.string.ok, null)

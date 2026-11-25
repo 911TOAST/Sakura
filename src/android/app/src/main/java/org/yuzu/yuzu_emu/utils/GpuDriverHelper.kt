@@ -266,6 +266,76 @@ object GpuDriverHelper {
         hookLibPath: String
     ): String?
 
+    /**
+     * Startup self-heal for a broken or incompatible custom driver.
+     *
+     * A driver whose zip was deleted, or that was extracted from a package this device cannot
+     * run, leaves an unusable library inside the private installation dir. Because
+     * initializeDriverParameters() hooks that library on every launch, the emulator then crashes
+     * natively on the first driver query (e.g. opening Settings) and no amount of editing
+     * config.ini or deleting the visible gpu_drivers folder repairs it - only clearing app data
+     * did, which meant reinstalling the app.
+     *
+     * Called from Application.onCreate before the hook is installed: fall back to the system
+     * driver whenever the installed metadata is unreadable or its library is missing.
+     */
+    fun validateOrResetInstalledDriver(): Boolean {
+        val metadata = installedCustomDriverData
+        val libraryName = metadata.libraryName?.takeIf {
+            it.isNotBlank() && it == File(it).name && it != "." && it != ".."
+        }
+        if (metadata.name != null && libraryName != null) {
+            if (File(driverInstallationPath, libraryName).isFile) {
+                return true
+            }
+            Log.error(
+                "[GpuDriverHelper] Installed driver '${metadata.name}' is missing library " +
+                    "$libraryName; reverting to the system driver"
+            )
+        } else {
+            Log.info(
+                "[GpuDriverHelper] No valid custom driver installed; using the system driver"
+            )
+        }
+        if (libraryName != null || File(driverInstallationPath + META_JSON_FILENAME).isFile) {
+            installDefaultDriver()
+        } else {
+            initializeDriverParameters()
+        }
+        // Also drop the dangling pointer to a driver zip that no longer exists, so the next
+        // launch install doesn't fall back silently on a missing file.
+        val selectedPath = StringSetting.DRIVER_PATH.getString()
+        if (selectedPath.isNotBlank() && !File(selectedPath).exists()) {
+            StringSetting.DRIVER_PATH.setString("")
+            NativeConfig.saveGlobalConfig()
+        }
+        return false
+    }
+
+    /**
+     * The driver packages the fetcher surfaces include Adreno-only builds (Turnip, Freedreno).
+     * Extracting and hooking one of those on a Mali device produced the "settings crash" reports:
+     * the library is structurally valid, so it installs and hooks fine, then dies natively the
+     * first time a Vulkan instance is created. Refuse those packages instead of installing them.
+     */
+    private val ADRENO_ONLY_DRIVER_TOKENS = listOf(
+        "turnip", "freedreno", "adreno", "msm", "kgsl", "qcom", "qualcomm"
+    )
+
+    fun isDriverCompatibleWithDevice(metadata: GpuDriverMetadata): Boolean {
+        if (metadata.name.isNullOrBlank()) {
+            return false
+        }
+        if (!isAdrenoGpu()) {
+            val haystack = listOf(metadata.name ?: "", metadata.vendor ?: "", metadata.description ?: "")
+                .joinToString(" ").lowercase()
+            if (ADRENO_ONLY_DRIVER_TOKENS.any { haystack.contains(it) }) {
+                return false
+            }
+        }
+        return true
+    }
+
     fun isAdrenoGpu(): Boolean {
         // The adrenotools hook loads an ICD on any 64-bit device, so "supports custom driver
         // loading" is true on Mali too and used to show the Adreno/Freedreno surfaces there.

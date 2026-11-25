@@ -21,6 +21,7 @@ import org.yuzu.yuzu_emu.features.settings.model.StringSetting
 import org.yuzu.yuzu_emu.features.settings.utils.SettingsFile
 import org.yuzu.yuzu_emu.model.Driver.Companion.toDriver
 import org.yuzu.yuzu_emu.utils.GpuDriverHelper
+import org.yuzu.yuzu_emu.utils.Log
 import org.yuzu.yuzu_emu.NativeLibrary
 import org.yuzu.yuzu_emu.utils.GpuDriverMetadata
 import org.yuzu.yuzu_emu.utils.NativeConfig
@@ -244,6 +245,21 @@ class DriverViewModel : ViewModel() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 if (selectedDriverMetadata.name == null) {
+                    GpuDriverHelper.installDefaultDriver()
+                    setDriverReady()
+                    return@withContext
+                }
+
+                // An Adreno-only package (Turnip/Freedreno etc.) on a Mali device extracts and
+                // hooks fine but crashes natively the first time a Vulkan instance is created.
+                // Reverting to the system driver during the launch flow is visible instead of a
+                // silent crash after the loading screen.
+                if (!GpuDriverHelper.isDriverCompatibleWithDevice(selectedDriverMetadata)) {
+                    Log.error(
+                        "[DriverViewModel] Driver '${selectedDriverMetadata.name}' is not " +
+                            "compatible with this GPU; using the system driver"
+                    )
+                    StringSetting.DRIVER_PATH.setString("")
                     GpuDriverHelper.installDefaultDriver()
                     setDriverReady()
                     return@withContext

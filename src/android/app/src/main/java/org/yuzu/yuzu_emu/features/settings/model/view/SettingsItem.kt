@@ -978,6 +978,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.SHADOW_COMPARE_MANUAL_FLIP,
+                    titleId = R.string.shadow_compare_manual_flip,
+                    descriptionId = R.string.shadow_compare_manual_flip_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.FORCE_STATIC_VERTEX_INPUT,
                     titleId = R.string.force_static_vertex_input,
                     descriptionId = R.string.force_static_vertex_input_description
@@ -1053,13 +1060,18 @@ abstract class SettingsItem(
 
                 override fun reset() = setBoolean(defaultValue)
             }
-            put(
-                SwitchSetting(
-                    panvkDriver,
-                    titleId = R.string.panvk_driver,
-                    descriptionId = R.string.panvk_driver_description
+            // PanVK builds need a patched vendor driver; hooking one of these packages on an
+            // Adreno device (or without the patch) crashes on the first Vulkan instance. Only
+            // expose the toggle on Mali hardware.
+            if (!GpuDriverHelper.isAdrenoGpu()) {
+                put(
+                    SwitchSetting(
+                        panvkDriver,
+                        titleId = R.string.panvk_driver,
+                        descriptionId = R.string.panvk_driver_description
+                    )
                 )
-            )
+            }
             put(
                 SwitchSetting(
                     BooleanSetting.ENABLE_BUFFER_HISTORY,
