@@ -484,6 +484,14 @@ void BufferCacheRuntime::CopyBuffer(VkBuffer dst_buffer, VkBuffer src_buffer,
     }
     copy_regions.fetch_add(copies.size(), std::memory_order_relaxed);
     copy_batches.fetch_add((copies.size() + 7) / 8, std::memory_order_relaxed);
+    // Destination scope for the copy's write barrier. Consumers of buffer data in this renderer
+    // are the graphics/compute/transfer stages and indirect draws; on Mali the scheduler's own
+    // upload-completion barrier already uses exactly this narrower mask, so non-upload copies
+    // match it instead of syncing every driver stream.
+    const VkPipelineStageFlags write_dst_stage =
+        device.IsMali() ? (vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER |
+                           VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT)
+                        : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     for (size_t i = 0; i < copies.size(); i += 8) {
         std::array<VkBufferCopy, 8> q{};
         const size_t n = std::min(q.size(), copies.size() - i);
@@ -497,15 +505,16 @@ void BufferCacheRuntime::CopyBuffer(VkBuffer dst_buffer, VkBuffer src_buffer,
         } else {
             const bool first = barrier && i == 0;
             const bool last = barrier && i + n == copies.size();
-            scheduler.Record([src_buffer, dst_buffer, q, n, first, last](vk::CommandBuffer cmdbuf) {
+            scheduler.Record([src_buffer, dst_buffer, q, n, first, last, write_dst_stage](
+                                 vk::CommandBuffer cmdbuf) {
                 if (first) {
                     cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER,
                                            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, READ_BARRIER);
                 }
                 cmdbuf.CopyBuffer(src_buffer, dst_buffer, std::span{q}.first(n));
                 if (last) {
-                    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                           VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
+                    cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, write_dst_stage, 0,
+                                           WRITE_BARRIER);
                 }
             });
         }
@@ -541,9 +550,13 @@ void BufferCacheRuntime::PostCopyBarrier() {
     };
     // Transfer stages are not legal in an in-render-pass pipeline barrier (VUID 07892).
     scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::BufferCopy);
-    scheduler.Record([](vk::CommandBuffer cmdbuf) {
-        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
-                               VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, WRITE_BARRIER);
+    // Same destination scope as the CopyBuffer write barrier (see above).
+    const VkPipelineStageFlags write_dst_stage =
+        device.IsMali() ? (vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER |
+                           VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT)
+                        : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    scheduler.Record([write_dst_stage](vk::CommandBuffer cmdbuf) {
+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, write_dst_stage, 0, WRITE_BARRIER);
     });
 }
 
