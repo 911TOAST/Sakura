@@ -14,7 +14,7 @@ import android.view.ViewGroup.MarginLayoutParams
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
+import org.yuzu.yuzu_emu.ui.theme.SakuraActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -31,19 +31,15 @@ import org.yuzu.yuzu_emu.fragments.ResetSettingsDialogFragment
 import org.yuzu.yuzu_emu.utils.*
 import org.yuzu.yuzu_emu.utils.collect
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : SakuraActivity() {
     private lateinit var binding: ActivitySettingsBinding
 
     private val args by navArgs<SettingsActivityArgs>()
 
     private val settingsViewModel: SettingsViewModel by viewModels()
 
-    override fun attachBaseContext(base: Context) {
-        super.attachBaseContext(YuzuApplication.applyLanguage(base))
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        ThemeHelper.setTheme(this)
 
         super.onCreate(savedInstanceState)
         applyPanelWindowMotion()

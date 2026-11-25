@@ -13,7 +13,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Debug
 import android.os.PowerManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.LinearEasing
@@ -83,6 +82,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.yuzu.yuzu_emu.NativeLibrary
 import org.yuzu.yuzu_emu.R
+import org.yuzu.yuzu_emu.ui.theme.SakuraActivity
 import org.yuzu.yuzu_emu.ui.theme.SuyuM3Theme
 import org.yuzu.yuzu_emu.utils.ArtworkColors
 import org.yuzu.yuzu_emu.utils.applyPanelCloseMotion
@@ -180,7 +180,7 @@ private fun sampleSystem(context: Context): SystemStats {
     )
 }
 
-class PerfDashboardActivity : ComponentActivity() {
+class PerfDashboardActivity : SakuraActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

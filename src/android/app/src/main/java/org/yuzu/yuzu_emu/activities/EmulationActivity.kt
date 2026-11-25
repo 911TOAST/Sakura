@@ -43,6 +43,8 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import org.yuzu.yuzu_emu.ui.theme.SakuraActivity
+
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -70,13 +72,15 @@ import org.yuzu.yuzu_emu.utils.NativeConfig
 import org.yuzu.yuzu_emu.utils.NfcReader
 import org.yuzu.yuzu_emu.utils.ParamPackage
 import org.yuzu.yuzu_emu.utils.SuyuMotion
-import org.yuzu.yuzu_emu.utils.ThemeHelper
 import java.text.NumberFormat
 import kotlin.math.roundToInt
 import org.yuzu.yuzu_emu.utils.ForegroundService
 import androidx.core.os.BundleCompat
 
-class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager.InputDeviceListener {
+class EmulationActivity : SakuraActivity(),
+    SensorEventListener, InputManager.InputDeviceListener {
+    /** A running game must never be torn down to recolour chrome. */
+    override val recreateOnThemeChange = false
     private lateinit var binding: ActivityEmulationBinding
 
     var isActivityRecreated = false
@@ -128,13 +132,8 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
         mainHandler.postDelayed(romSwapStopTimeoutRunnable, ROM_SWAP_STOP_TIMEOUT_MS)
     }
 
-    override fun attachBaseContext(base: Context) {
-        super.attachBaseContext(YuzuApplication.applyLanguage(base))
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.gameLaunched = true
-        ThemeHelper.setTheme(this)
 
         super.onCreate(savedInstanceState)
 

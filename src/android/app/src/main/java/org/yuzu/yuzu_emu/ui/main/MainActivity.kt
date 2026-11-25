@@ -21,7 +21,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
+import org.yuzu.yuzu_emu.ui.theme.SakuraActivity
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
@@ -64,7 +64,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.documentfile.provider.DocumentFile
 
-class MainActivity : AppCompatActivity(), ThemeProvider {
+class MainActivity : SakuraActivity() {
     private lateinit var binding: ActivityMainBinding
 
 
@@ -76,14 +76,8 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
     private val driverViewModel: DriverViewModel by viewModels()
     private val updateViewModel: UpdateViewModel by viewModels()
 
-    override var themeSignature: String = ""
-
     private val CHECKED_DECRYPTION = "CheckedDecryption"
     private var checkedDecryption = false
-
-    override fun attachBaseContext(base: Context) {
-        super.attachBaseContext(YuzuApplication.applyLanguage(base))
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
@@ -92,7 +86,6 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
             !DirectoryInitialization.areDirectoriesReady
         }
 
-        ThemeHelper.setTheme(this)
         super.onCreate(savedInstanceState)
         NativeLibrary.initMultiplayer()
 
@@ -355,9 +348,6 @@ class MainActivity : AppCompatActivity(), ThemeProvider {
 
     override fun onResume() {
         super.onResume()
-        // After super.onResume: a theme change relaunches the activity, and asking for that while
-        // the activity is still half-resumed is what made switching the Sakura theme crash.
-        ThemeHelper.setCorrectTheme(this)
         applyFullscreenPreference()
     }
 

@@ -10,6 +10,7 @@ import org.yuzu.yuzu_emu.YuzuApplication
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.features.settings.model.Settings
+import org.yuzu.yuzu_emu.ui.theme.ThemeController
 import org.yuzu.yuzu_emu.overlay.model.OverlayControlData
 import org.yuzu.yuzu_emu.overlay.model.OverlayControl
 import org.yuzu.yuzu_emu.overlay.model.OverlayLayout
@@ -27,7 +28,7 @@ object DirectoryInitialization {
             NativeLibrary.initializeSystem(false)
             NativeLibrary.reloadProfiles()
             migrateSettings()
-            ThemeHelper.applyDefaultNightMode()
+            ThemeController.refresh()
             areDirectoriesReady = true
         }
     }
