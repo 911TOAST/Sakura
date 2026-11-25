@@ -35,7 +35,6 @@ import androidx.preference.PreferenceManager
  *     "the theme you had" instead of defaults or a crash.
  */
 object ThemeController {
-    private const val TAG = "ThemeController"
     private const val CACHE_KEY = "theme_spec_cache"
 
     private val _spec = MutableStateFlow(cachedSpec())
@@ -49,7 +48,7 @@ object ThemeController {
         val next = readSpecOrDefault()
         if (next != _spec.value) {
             // Log.* is a JNI call; failure to log must never fail the theme update.
-            runCatching { Log.info(TAG, "Theme decision updated: $next") }
+            runCatching { Log.info("Theme decision updated: $next") }
             _spec.value = next
         }
         syncNightMode()
@@ -102,7 +101,7 @@ object ThemeController {
     private fun readSpecOrDefault(): ThemeSpec = try {
         readSpecFromConfig().also { cacheSpec(it) }
     } catch (t: Throwable) {
-        runCatching { Log.warning(TAG, "Falling back to cached theme spec: ${t.message}") }
+        runCatching { Log.warning("Falling back to cached theme spec: ${t.message}") }
         cachedSpec()
     }
 
@@ -126,14 +125,19 @@ object ThemeController {
     private fun cachedSpec(): ThemeSpec = try {
         val json = PreferenceManager
             .getDefaultSharedPreferences(YuzuApplication.appContext)
-            .getString(CACHE_KEY, null) ?: return ThemeSpec.DEFAULT
-        ThemeSpec(
-            nightMode = json.optInt("nightMode", ThemeSpec.DEFAULT.nightMode),
-            materialYou = json.optBoolean("materialYou", false),
-            paletteIndex = json.optInt("palette", 0),
-            blackBackgrounds = json.optBoolean("blackBackgrounds", false),
-            layoutOverlay = json.optInt("layoutOverlay", 0),
-        )
+            .getString(CACHE_KEY, null)
+        if (json == null) {
+            ThemeSpec.DEFAULT
+        } else {
+            val cached = JSONObject(json)
+            ThemeSpec(
+                nightMode = cached.optInt("nightMode", ThemeSpec.DEFAULT.nightMode),
+                materialYou = cached.optBoolean("materialYou", false),
+                paletteIndex = cached.optInt("palette", 0),
+                blackBackgrounds = cached.optBoolean("blackBackgrounds", false),
+                layoutOverlay = cached.optInt("layoutOverlay", 0),
+            )
+        }
     } catch (t: Throwable) {
         ThemeSpec.DEFAULT
     }
