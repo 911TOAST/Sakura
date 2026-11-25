@@ -33,7 +33,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Brand row: logo, wordmark, and the two primary actions. -->
+    <!-- Brand row: wordmark text and the two primary actions. -->
     <LinearLayout
         android:id="@+id/header"
         android:layout_width="match_parent"
@@ -46,24 +46,9 @@
         android:paddingBottom="2dp"
         app:layout_constraintTop_toTopOf="parent">
 
-        <FrameLayout
-            android:id="@+id/brand_mark"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/sakura_icon_tile">
-
-            <ImageView
-                android:layout_width="27dp"
-                android:layout_height="27dp"
-                android:layout_gravity="center"
-                android:contentDescription="@null"
-                android:src="@drawable/sakura_flower" />
-        </FrameLayout>
-
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
             android:orientation="vertical">
 
             <TextView
