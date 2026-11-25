@@ -39,6 +39,7 @@ import org.yuzu.yuzu_emu.features.settings.model.view.SliderSetting
 import org.yuzu.yuzu_emu.features.settings.model.view.SpinBoxSetting
 import org.yuzu.yuzu_emu.features.settings.model.view.StringInputSetting
 import org.yuzu.yuzu_emu.features.settings.model.view.StringSingleChoiceSetting
+import org.yuzu.yuzu_emu.ui.theme.ThemeController
 import org.yuzu.yuzu_emu.utils.ParamPackage
 import org.yuzu.yuzu_emu.utils.collect
 
@@ -74,8 +75,13 @@ class SettingsDialogFragment : DialogFragment(), DialogInterface.OnClickListener
         try {
             MaterialAlertDialogBuilder(requireContext())
         } catch (_: IllegalArgumentException) {
+            // Wrap in the full resolved palette theme, not the activity (possibly an
+            // overlay-only theme mid-recreation), so the dialog keeps the user's palette.
             MaterialAlertDialogBuilder(
-                android.view.ContextThemeWrapper(requireContext(), R.style.Theme_Yuzu_Main)
+                android.view.ContextThemeWrapper(
+                    requireContext(),
+                    ThemeController.current().xmlTheme()
+                )
             )
         }
 
