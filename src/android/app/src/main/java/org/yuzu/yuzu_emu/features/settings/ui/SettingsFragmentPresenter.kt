@@ -401,6 +401,7 @@ class SettingsFragmentPresenter(
     private val experimentSettings = listOf(
         BooleanSetting.RENDERER_MAXWELL_BYPASS,
         BooleanSetting.RENDERER_DRAW_STATE_CACHE,
+        BooleanSetting.RENDERER_DRAW_BURST,
         BooleanSetting.RENDERER_CLEAR_LOADOP,
         BooleanSetting.RENDERER_STORE_ELISION,
         BooleanSetting.RENDERER_RELAXED_PRECISION,
@@ -444,6 +445,7 @@ class SettingsFragmentPresenter(
             add(HeaderSetting(R.string.experiments_group_draw))
             add(BooleanSetting.RENDERER_MAXWELL_BYPASS.key)
             add(BooleanSetting.RENDERER_DRAW_STATE_CACHE.key)
+            add(BooleanSetting.RENDERER_DRAW_BURST.key)
             add(BooleanSetting.RENDERER_CLEAR_LOADOP.key)
             add(BooleanSetting.RENDERER_CLEAR_LOADOP_PARTIAL.key)
             add(BooleanSetting.RENDERER_STORE_ELISION.key)

@@ -253,6 +253,12 @@ void ApplyPerformanceProfile() {
     values.dyna_state.SetValue(ExtendedDynamicState::EDS2);
     values.vertex_input_dynamic_state.SetValue(true);
 
+    // Draw-burst fast path: fold consecutive steady-state draws into one scheduler packet.
+    // Reordering is impossible by construction (the packet flushes ahead of every other recorded
+    // command), and it is off in the config so a user can A/B it; the profile just enables the
+    // default.
+    values.renderer_draw_burst.SetValue(true);
+
     // Native guest resolution, no supersampling: the profile never pays for extra shaded pixels,
     // and FSR's extra full-screen taps cost more than the 0.75x fill saving on this GPU.
     if (values.resolution_setup.GetValue() > ResolutionSetup::Res1X) {

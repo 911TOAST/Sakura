@@ -75,6 +75,7 @@ private val graphicsToggles = listOf(
     OverlayToggle(BooleanSetting.RENDERER_FEEDBACK_LOOP_LAYOUT, R.string.tweaks_feedback_loop_layout),
     OverlayToggle(BooleanSetting.RENDERER_MAXWELL_BYPASS, R.string.tweaks_maxwell_bypass),
     OverlayToggle(BooleanSetting.RENDERER_DRAW_STATE_CACHE, R.string.tweaks_draw_state_cache),
+    OverlayToggle(BooleanSetting.RENDERER_DRAW_BURST, R.string.tweaks_draw_burst),
     OverlayToggle(BooleanSetting.RENDERER_CORE_PINNING, R.string.tweaks_core_pinning),
     OverlayToggle(BooleanSetting.RENDERER_ASYNC_DIRECT_PRESENT, R.string.tweaks_async_present),
 )

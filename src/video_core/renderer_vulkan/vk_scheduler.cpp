@@ -105,6 +105,50 @@ Scheduler::Scheduler(const Device& device_, StateTracker& state_tracker_)
 
 Scheduler::~Scheduler() = default;
 
+namespace {
+constexpr size_t MAX_DRAW_BURST = 8192;
+} // Anonymous namespace
+
+void Scheduler::RecordDraw(const BurstDrawParams& draw) {
+    if (!draw_burst.empty() && draw_burst_indexed != draw.indexed) {
+        FlushDrawBurst();
+    }
+    draw_burst.push_back(draw);
+    draw_burst_indexed = draw.indexed;
+    stats.draw_burst_draws.fetch_add(1, std::memory_order_relaxed);
+    // Bound the packet so a pathological run of identical-state draws cannot pile up an
+    // unbounded draw-burst vector before something else flushes it.
+    if (draw_burst.size() >= MAX_DRAW_BURST) {
+        FlushDrawBurst();
+    }
+}
+
+void Scheduler::FlushDrawBurst() {
+    if (draw_burst.empty()) {
+        return;
+    }
+    std::vector<BurstDrawParams> burst = std::move(draw_burst);
+    draw_burst.clear();
+    const bool indexed = draw_burst_indexed;
+    auto run = [draws = std::move(burst), indexed](vk::CommandBuffer cmdbuf) {
+        for (const BurstDrawParams& draw : draws) {
+            if (indexed) {
+                cmdbuf.DrawIndexed(draw.num_vertices, draw.num_instances, draw.first_index,
+                                   draw.base_vertex, draw.base_instance);
+            } else {
+                cmdbuf.Draw(draw.num_vertices, draw.num_instances, draw.base_vertex,
+                            draw.base_instance);
+            }
+        }
+    };
+    if (chunk->Record(run)) {
+        stats.draw_burst_groups.fetch_add(1, std::memory_order_relaxed);
+    } else {
+        DispatchWork();
+        (void)chunk->Record(run);
+    }
+}
+
 u64 Scheduler::Flush(VkSemaphore signal_semaphore, VkSemaphore wait_semaphore) {
     // When flushing, we only send data to the worker thread; no waiting is necessary.
     const u64 signal_value = SubmitExecution(signal_semaphore, wait_semaphore);
@@ -145,6 +189,10 @@ void Scheduler::WaitSerial(u64 serial) {
 }
 
 void Scheduler::DispatchWork() {
+    // Nothing pending may be stranded outside the chunk that is about to be handed over: fold
+    // the open draw burst into it first. FlushDrawBurst re-enters DispatchWork only after it has
+    // emptied the packet, so this cannot recurse past one level.
+    FlushDrawBurst();
     if (chunk && !chunk->Empty()) {
         {
             std::scoped_lock ql{queue_mutex};

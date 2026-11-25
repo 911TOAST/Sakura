@@ -41,6 +41,8 @@ struct TileFlowStats {
     std::atomic<u64> clear_loadop_misses{0};       // guest clears that fell back to a clear command
     std::atomic<u64> store_elide_passes{0};        // passes whose store ops were elided
     std::atomic<u64> store_elided_attachments{0};  // sum of elided attachment stores (popcount)
+    std::atomic<u64> draw_burst_groups{0};         // draw bursts emitted as single commands
+    std::atomic<u64> draw_burst_draws{0};          // draws that went through the burst path
 
     void AddBreak(TileFlowBreak reason) {
         pass_breaks.fetch_add(1, std::memory_order_relaxed);
@@ -70,14 +72,17 @@ struct TileFlowStats {
         LOG_INFO(Render_Vulkan,
                  "[TileFlow] totals: frames={} pass_begins={} pass_breaks={} "
                  "breaks[other={} upload={} download={} layout={} compute={} blit={} bufcopy={} "
-                 "present={}] clear_loadop[{} hits / {} misses] store_elide[{} passes / {} atts]",
+                 "present={}] clear_loadop[{} hits / {} misses] store_elide[{} passes / {} atts] "
+                 "draw_burst[{} groups / {} draws]",
                  tick_frames, pass_begins.load(std::memory_order_relaxed),
                  pass_breaks.load(std::memory_order_relaxed), reasons[0], reasons[1], reasons[2],
                  reasons[3], reasons[4], reasons[5], reasons[6], reasons[7],
                  clear_loadop_hits.load(std::memory_order_relaxed),
                  clear_loadop_misses.load(std::memory_order_relaxed),
                  store_elide_passes.load(std::memory_order_relaxed),
-                 store_elided_attachments.load(std::memory_order_relaxed));
+                 store_elided_attachments.load(std::memory_order_relaxed),
+                 draw_burst_groups.load(std::memory_order_relaxed),
+                 draw_burst_draws.load(std::memory_order_relaxed));
     }
 
 private:

@@ -370,17 +370,6 @@ void RasterizerVulkan::Draw(bool is_indexed, u32 instance_count) {
         const u32 num_instances{instance_count};
         const DrawParams draw_params{MakeDrawParams(draw_state, num_instances, is_indexed)};
 
-        scheduler.Record([draw_params](vk::CommandBuffer cmdbuf) {
-            if (draw_params.is_indexed) {
-                cmdbuf.DrawIndexed(draw_params.num_vertices, draw_params.num_instances,
-                                   draw_params.first_index, draw_params.base_vertex,
-                                   draw_params.base_instance);
-            } else {
-                cmdbuf.Draw(draw_params.num_vertices, draw_params.num_instances,
-                            draw_params.base_vertex, draw_params.base_instance);
-            }
-        });
-
         // Log draw call
         if (GPU::Logging::IsActive() &&
             Settings::values.gpu_log_vulkan_calls.GetValue()) {
@@ -393,7 +382,48 @@ void RasterizerVulkan::Draw(bool is_indexed, u32 instance_count) {
                     draw_params.base_vertex, draw_params.base_instance);
             GPU::Logging::GPULogger::GetInstance().LogVulkanCall(
                 is_indexed ? "vkCmdDrawIndexed" : "vkCmdDraw", params, VK_SUCCESS);
+
+            scheduler.Record([draw_params, is_indexed](vk::CommandBuffer cmdbuf) {
+                if (is_indexed) {
+                    cmdbuf.DrawIndexed(draw_params.num_vertices, draw_params.num_instances,
+                                       draw_params.first_index, draw_params.base_vertex,
+                                       draw_params.base_instance);
+                } else {
+                    cmdbuf.Draw(draw_params.num_vertices, draw_params.num_instances,
+                                draw_params.base_vertex, draw_params.base_instance);
+                }
+            });
+            return;
         }
+
+        // Draw-burst fast path: instead of allocating and recording one command object per guest
+        // draw, append the bare draw parameters to the scheduler's open burst packet. The packet
+        // is emitted as a single recorded command at the next state change or submission, in the
+        // same command-stream position this draw would have taken. Only reaches here when
+        // PrepareDraw either reused the cached steady state or configured fresh bindings, so
+        // every draw in one burst runs under identical pipeline, descriptor and dynamic state.
+        if (Settings::values.renderer_draw_burst.GetValue()) {
+            scheduler.RecordDraw(BurstDrawParams{
+                .indexed = draw_params.is_indexed,
+                .num_vertices = draw_params.num_vertices,
+                .num_instances = draw_params.num_instances,
+                .first_index = draw_params.first_index,
+                .base_vertex = draw_params.base_vertex,
+                .base_instance = draw_params.base_instance,
+            });
+            return;
+        }
+
+        scheduler.Record([draw_params](vk::CommandBuffer cmdbuf) {
+            if (draw_params.is_indexed) {
+                cmdbuf.DrawIndexed(draw_params.num_vertices, draw_params.num_instances,
+                                   draw_params.first_index, draw_params.base_vertex,
+                                   draw_params.base_instance);
+            } else {
+                cmdbuf.Draw(draw_params.num_vertices, draw_params.num_instances,
+                            draw_params.base_vertex, draw_params.base_instance);
+            }
+        });
     });
 }
 

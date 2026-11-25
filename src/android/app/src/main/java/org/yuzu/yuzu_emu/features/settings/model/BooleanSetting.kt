@@ -48,6 +48,7 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     SKIP_CPU_READBACK("skip_cpu_readback"),
     APPROX_OCCLUSION_QUERIES("approx_occlusion_queries"),
     RENDERER_DRAW_STATE_CACHE("renderer_draw_state_cache"),
+    RENDERER_DRAW_BURST("renderer_draw_burst"),
     RENDERER_STATIC_FRAME_SKIP("renderer_static_frame_skip"),
     RENDERER_CORE_PINNING("renderer_core_pinning"),
     RENDERER_ASYNC_PRESENTATION("async_presentation"),

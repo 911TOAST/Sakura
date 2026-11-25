@@ -560,6 +560,17 @@ struct Values {
     SwitchableSetting<bool> renderer_draw_state_cache{linkage, false, "renderer_draw_state_cache",
                                                       Category::RendererDebug,
                                                       Specialization::Default, true, true};
+    // Draw-burst fast path: consecutive steady-state draws that resolve to identical
+    // command-stream state (pipeline, descriptor sets, dynamic state) are collected into one
+    // burst packet by the scheduler and emitted as a single recorded command, instead of one
+    // command object per draw. Command-stream order is preserved exactly (see Scheduler::
+    // RecordDraw); this only removes per-draw recording overhead, so correctness does not
+    // depend on it. Draws are only eligible after the draw-state cache has confirmed nothing
+    // changed, which is why it is listed as an experimental A/B toggle here rather than a
+    // measured default.
+    SwitchableSetting<bool> renderer_draw_burst{linkage, false, "renderer_draw_burst",
+                                                Category::RendererDebug,
+                                                Specialization::Default, true, true};
     // Marks every FP32 arithmetic result in a fragment shader RelaxedPrecision, which tells the
     // driver it may evaluate that chain at reduced precision. Mali and Adreno run 16-bit float math
     // at twice the rate of FP32 and with lower register pressure, so a driver that honours the

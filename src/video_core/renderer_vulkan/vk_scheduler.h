@@ -42,6 +42,19 @@ class StateTracker;
 
 struct QueryCacheParams;
 
+/// One guest draw in the form the draw-burst fast path stores it: the bare vkCmdDraw(Indexed)
+/// arguments. A burst groups consecutive draws that resolved to the identical command-stream
+/// state (pipeline, descriptor sets, dynamic state — identical because they were steady-state
+/// draws, see RasterizerVulkan::PrepareDraw), so only these parameters differ between them.
+struct BurstDrawParams {
+    bool indexed;
+    u32 num_vertices;
+    u32 num_instances;
+    u32 first_index;
+    u32 base_vertex;
+    u32 base_instance;
+};
+
 /// The scheduler abstracts command buffer and fence management with an interface that's able to do
 /// OpenGL-like operations on Vulkan command buffers.
 class Scheduler {
@@ -155,12 +168,27 @@ public:
         requires std::is_invocable_v<T, vk::CommandBuffer, vk::CommandBuffer> ||
                  std::is_invocable_v<T, vk::CommandBuffer>
     void RecordWithUploadBuffer(T&& command) {
+        // Any other command in the stream breaks the burst: flush the pending draws first so
+        // they keep their recorded position, then record the new command.
+        FlushDrawBurst();
         if (chunk->Record(command)) {
             return;
         }
         DispatchWork();
         (void)chunk->Record(command);
     }
+
+    /// Adds a draw to the open draw burst (draw-burst fast path). The draw is not recorded
+    /// immediately: it joins the packet of consecutive steady-state draws and is emitted as one
+    /// recorded command when something else enters the command stream or the chunk is handed to
+    /// the worker. Every other Record call, and every submission, goes through a flush of this
+    /// packet first, so command-stream order is exactly what an unbatched recording would have
+    /// produced; the saved work is the per-draw command-object allocation and recording call.
+    /// Must be called on the render thread with a render pass open.
+    void RecordDraw(const BurstDrawParams& draw);
+
+    /// Records the open draw burst into the current chunk now. No-op when nothing is pending.
+    void FlushDrawBurst();
 
     template <typename T>
         requires std::is_invocable_v<T, vk::CommandBuffer, vk::CommandBuffer>
@@ -399,6 +427,15 @@ private:
 
     std::queue<std::unique_ptr<CommandChunk>> work_queue;
     std::vector<std::unique_ptr<CommandChunk>> chunk_reserve;
+
+    /// Draw-burst fast path packet (see RecordDraw). Render thread only; empty whenever nothing
+    /// is pending. A packet never survives a chunk handover (DispatchWork flushes it) or another
+    /// recorded command (RecordWithUploadBuffer flushes it), so its draws always execute exactly
+    /// in the order the guest issued them.
+    std::vector<BurstDrawParams> draw_burst;
+    /// vkCmdDrawIndexed (true) or vkCmdDraw (false) for the open packet. Splitting by command form
+    /// keeps the executed packet loop branch-free per draw.
+    bool draw_burst_indexed = false;
     // Written and consumed only on the scheduler worker thread. These let Mali use
     // resource-scoped barriers instead of flushing unrelated memory after each submit.
     static constexpr size_t MAX_TRACKED_UPLOAD_BUFFERS = 8;

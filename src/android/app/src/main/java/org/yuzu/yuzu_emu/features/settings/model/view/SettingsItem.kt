@@ -814,6 +814,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.RENDERER_DRAW_BURST,
+                    titleId = R.string.renderer_draw_burst,
+                    descriptionId = R.string.renderer_draw_burst_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_STATIC_FRAME_SKIP,
                     titleId = R.string.renderer_static_frame_skip,
                     descriptionId = R.string.renderer_static_frame_skip_description
