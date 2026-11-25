@@ -1,6 +1,25 @@
 # Sakura optimized build — performance reports
 
-Date: 2026-10-24 (CPU pass), updated 2026-11-25 (hot-path micro pass), updated 2026-11-14 (memory budget pass), updated 2026-11-12 (Mali layout experiments + BCn→ASTC)
+Date: 2026-10-24 (CPU pass), updated 2026-11-25 (hot-path micro pass + flush governor), updated 2026-11-14 (memory budget pass), updated 2026-11-12 (Mali layout experiments + BCn→ASTC)
+
+## 2026-11-25 pass — texture flush governor (learning-based download reduction)
+
+Branch: `perf/malikan-hostpass`. Full design, safety proof and limits live in
+`FLUSH_GOVERNOR.md`. Summary: an **opt-in** toggle (`renderer_flush_governor`,
+Graphics → Advanced) that learns, per image, which guest byte ranges were
+already read back from the GPU at the current modification tick, and then
+
+- answers repeat flush polls inside a learned span from guest memory at zero
+  GPU cost, and
+- downloads pitch-linear images polled in sub-regions by the affected row
+  group instead of the whole image.
+
+Every reduction is backed by a download this very image already performed, so
+served bytes are bit-exact; any GPU write expires the learned state. Off by
+default; also skips the garbage-collector eviction download only when a
+learned span provably covers the whole image at the current tick. **Not
+measured** — no device number exists; see FLUSH_GOVERNOR.md for the on-device
+A/B checklist before quoting any expected saving.
 
 ## 2026-11-25 pass — hot-path micro pass (batched downloads, transfer-engine blits, sync churn)
 

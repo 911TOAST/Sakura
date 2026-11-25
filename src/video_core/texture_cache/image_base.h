@@ -42,6 +42,10 @@ enum class ImageFlagBits : u32 {
 
     AsynchronousDecode = 1 << 16,
     IsDecoding = 1 << 17, ///< Is currently being decoded asynchronously.
+
+    // Flush governor (renderer_flush_governor, see FLUSH_GOVERNOR.md)
+    GpuPartialSync = 1 << 18, ///< Some gpu-modified contents of this image are already
+                              ///< present in guest memory, as recorded in synced_spans.
 };
 DECLARE_ENUM_FLAG_OPERATORS(ImageFlagBits)
 
@@ -65,6 +69,21 @@ struct ImageBase {
     void InsertView(const ImageViewInfo& view_info, ImageViewId image_view_id);
 
     [[nodiscard]] bool IsSafeDownload() const noexcept;
+
+    /// True when a flush request for [l, r) can be answered straight from guest memory:
+    /// a learned span records that those exact bytes were already downloaded from this
+    /// image while the current modification_tick was in effect. Only meaningful when the
+    /// GPU has not modified the image since (tick compare inside).
+    [[nodiscard]] bool CanSkipDownload(u64 l, u64 r) noexcept;
+
+    /// True when a learned span covers the whole image at `tick`, in which case the
+    /// garbage collector may drop the image without a final download.
+    [[nodiscard]] bool IsFullySyncedAt(u64 tick) const noexcept;
+
+    /// Record that [l, r) was downloaded while the modification tick was `tick`. A request
+    /// that escapes an existing span of the same tick fuses into it, so the span learning
+    /// grows to the image's local CPU read pattern; the span count is bounded.
+    void RecordSyncedSpan(u64 l, u64 r, u64 tick) noexcept;
 
     [[nodiscard]] bool Overlaps(VAddr overlap_cpu_addr, size_t overlap_size) const noexcept {
         const VAddr overlap_end = overlap_cpu_addr + overlap_size;
@@ -102,6 +121,20 @@ struct ImageBase {
     VAddr cpu_addr_end = 0;
 
     u64 modification_tick = 0;
+
+    // Flush-governor state (renderer_flush_governor, see FLUSH_GOVERNOR.md). Each entry
+    // records that the guest bytes [begin, end) of this image were downloaded from the GPU
+    // image while modification_tick was SyncedSpan::modification_tick, and how often that
+    // span served a later flush request without a new download (hits).
+    struct SyncedSpan {
+        u64 modification_tick;
+        u64 begin;
+        u64 end;
+        u32 hits;
+    };
+    static constexpr size_t MaxSyncedSpans = 8;
+    boost::container::small_vector<SyncedSpan, 2> synced_spans;
+
     size_t lru_index = SIZE_MAX;
 
     std::array<u32, MAX_MIP_LEVELS> mip_level_offsets{};

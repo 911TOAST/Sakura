@@ -151,7 +151,17 @@ void TextureCache<P>::RunGarbageCollector() {
         if (True(image.flags & ImageFlagBits::IsDecoding)) {
             return false;
         }
-        const bool must_download = image.IsSafeDownload() && False(image.flags & ImageFlagBits::BadOverlap);
+        // Flush-governor: a partially synced image whose learned span covers the whole
+        // image at the current modification tick has every byte it ever emitted already in
+        // guest memory, so the eviction download would repurchase contents the game can
+        // already read. Any GPU write clears GpuPartialSync (MarkModification) and any CPU
+        // write sets CpuModified, which IsSafeDownload rejects, so this can only occur
+        // while the guest-visible memory is provably up to date.
+        const bool fully_synced = True(image.flags & ImageFlagBits::GpuPartialSync) &&
+                                  image.IsFullySyncedAt(image.modification_tick);
+        const bool must_download =
+            image.IsSafeDownload() && False(image.flags & ImageFlagBits::BadOverlap) &&
+            !fully_synced;
         if ((!aggressive_mode && True(image.flags & ImageFlagBits::CostlyLoad)) || (!high_priority_mode && must_download)) {
             return false;
         }
@@ -663,12 +673,23 @@ void TextureCache<P>::WriteMemory(DAddr cpu_addr, size_t size) {
 
 template <class P>
 void TextureCache<P>::DownloadMemory(DAddr cpu_addr, size_t size) {
+    const bool governor_enabled = Settings::values.renderer_flush_governor.GetValue();
+    const u64 req_begin = static_cast<u64>(cpu_addr);
+    const u64 req_end = req_begin + size;
     boost::container::small_vector<ImageId, 16> images;
-    ForEachImageInRegion(cpu_addr, size, [&images](ImageId image_id, ImageBase& image) {
+    ForEachImageInRegion(cpu_addr, size,
+                         [&](ImageId image_id, ImageBase& image) {
         if (!image.IsSafeDownload()) {
             return;
         }
-        image.flags &= ~ImageFlagBits::GpuModified;
+        if (governor_enabled && image.CanSkipDownload(req_begin, req_end)) {
+            // Learning governor: a previous download already placed these exact bytes into
+            // guest memory at this modification tick, so another GPU -> CPU copy would
+            // repurchase state the caller already has. The GpuModified flag deliberately
+            // stays set for partially synced images (see below); the tick compare inside
+            // CanSkipDownload expires the span the moment the GPU writes the image again.
+            return;
+        }
         images.push_back(image_id);
     });
     if (images.empty()) {
@@ -696,6 +717,14 @@ void TextureCache<P>::DownloadMemory(DAddr cpu_addr, size_t size) {
         ImageId image_id;
         DownloadStagingRef map;
         DownloadCopiesList copies;
+        // Flush-governor bookkeeping: when synced=true the download covered exactly
+        // [sync_begin, sync_end) at sync_tick instead of the whole image, so those guest
+        // bytes are up to date now but the rest of the image may still be gpu-dirty
+        // (GpuModified stays set and a span is recorded after the bytes land).
+        u64 sync_begin = 0;
+        u64 sync_end = 0;
+        u64 sync_tick = 0;
+        bool synced = false;
     };
     boost::container::small_vector<PendingDownload, 4> pending;
     u64 pending_bytes = 0;
@@ -705,16 +734,42 @@ void TextureCache<P>::DownloadMemory(DAddr cpu_addr, size_t size) {
             Image& image = slot_images[entry.image_id];
             SwizzleImage(*gpu_memory, image.gpu_addr, image.info, entry.copies,
                          entry.map.mapped_span, swizzle_data_buffer);
+            if (entry.synced) {
+                image.flags |= ImageFlagBits::GpuPartialSync;
+                image.RecordSyncedSpan(entry.sync_begin, entry.sync_end, entry.sync_tick);
+            }
         }
         pending.clear();
         pending_bytes = 0;
     };
     for (const ImageId image_id : images) {
         Image& image = slot_images[image_id];
+        std::optional<VideoCommon::BufferImageCopy> partial_copy;
+        if (governor_enabled) {
+            partial_copy = PartialRowCopy(image, req_begin, req_end);
+        }
         auto map = runtime.DownloadStagingBuffer(image.unswizzled_size_bytes);
-        const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
-        image.DownloadMemory(map, copies);
-        pending.push_back(PendingDownload{image_id, map, copies});
+        // Same tick-capture point as the legacy GpuModified clear below: any GPU write the
+        // cache learns about after this line raises modification_tick above the captured
+        // value and expires the recorded span, keeping the skip envelope identical to the
+        // flag-clearing envelope the legacy path relies on.
+        const u64 sync_tick = image.modification_tick;
+        if (partial_copy) {
+            // Partial, row-group download: only the requested rows of a pitch-linear
+            // image cross the bus; the rest of the image stays dirty and the image
+            // remains GpuModified so later reads of other spans still trigger downloads.
+            DownloadCopiesList copies;
+            copies.push_back(*partial_copy);
+            image.DownloadMemory(map, copies);
+            pending.push_back(PendingDownload{image_id, map, std::move(copies), req_begin,
+                                              req_end, sync_tick, true});
+        } else {
+            const auto copies = FixSmallVectorADL(FullDownloadCopies(image.info));
+            image.flags &= ~ImageFlagBits::GpuModified;
+            image.DownloadMemory(map, copies);
+            pending.push_back(
+                PendingDownload{image_id, map, std::move(copies), 0, 0, sync_tick, false});
+        }
         pending_bytes += image.unswizzled_size_bytes;
         if (pending.size() >= DownloadBatchImages || pending_bytes >= DownloadBatchBytes) {
             DrainPending();
@@ -749,6 +804,76 @@ std::optional<VideoCore::RasterizerDownloadArea> TextureCache<P>::GetFlushArea(D
         image.info.forced_flushed = true;
     });
     return area;
+}
+
+template <class P>
+std::optional<VideoCommon::BufferImageCopy> TextureCache<P>::PartialRowCopy(
+    const Image& image, u64 req_begin, u64 req_end) const {
+    const ImageBase& base = image;
+    if (True(base.flags & ImageFlagBits::Converted) || True(base.flags & ImageFlagBits::Rescaled)) {
+        return std::nullopt;
+    }
+    const ImageInfo& info = base.info;
+    // Only single-layer, single-level, single-sample pitch-linear colour targets have a
+    // byte-exact guest layout this helper can invert; everything else stays on the legacy
+    // full-image download.
+    if (info.type != ImageType::Linear || info.num_samples != 1 || info.resources.levels != 1 ||
+        info.resources.layers != 1 || info.size.depth != 1 || info.format == PixelFormat::Invalid ||
+        GetFormatType(info.format) != SurfaceType::ColorTexture) {
+        return std::nullopt;
+    }
+    const u32 bytes_per_block = VideoCore::Surface::BytesPerBlock(info.format);
+    if (info.pitch == 0 || bytes_per_block == 0 || info.pitch % bytes_per_block != 0) {
+        return std::nullopt;
+    }
+    // Block-compressed colour formats express offsets in texel blocks, not texels; the
+    // guest side of a linear compressed image is handled through conversion instead.
+    if (VideoCore::Surface::DefaultBlockWidth(info.format) != 1 ||
+        VideoCore::Surface::DefaultBlockHeight(info.format) != 1) {
+        return std::nullopt;
+    }
+    // The request must land entirely inside this image; images that the flush region only
+    // clips keep the legacy full behaviour (they may be needed for neighbouring bytes the
+    // caller reads beyond what the region filter can see).
+    if (req_begin < static_cast<u64>(base.cpu_addr) ||
+        req_end > static_cast<u64>(base.cpu_addr_end)) {
+        return std::nullopt;
+    }
+    // Requests that already cover most of the image are not worth a partial span: the
+    // legacy path clears GpuModified, which lets eviction skip further work.
+    const u64 span_bytes = req_end - req_begin;
+    if (span_bytes * 8 >= static_cast<u64>(base.guest_size_bytes) * 7) {
+        return std::nullopt;
+    }
+    const u32 pitch = info.pitch;
+    const u64 offset = req_begin - static_cast<u64>(base.cpu_addr);
+    const u32 row = static_cast<u32>(offset / pitch);
+    const u32 row_end = static_cast<u32>(
+        (std::min<u64>)(offset + span_bytes + pitch - 1,
+                        static_cast<u64>(pitch) * info.size.height) /
+        pitch);
+    const u32 rows = row_end - row;
+    if (rows == 0) {
+        return std::nullopt;
+    }
+    // Whole-row copies only: the copy starts at column 0 of each row, so the buffer
+    // layout the GPU writes (rows are addressed relative to imageOffset, per the Vulkan
+    // copy addressing formula) matches exactly what SwizzlePitchLinearImage reads back
+    // into guest memory.
+    return VideoCommon::BufferImageCopy{
+        .buffer_offset = 0,
+        .buffer_size = static_cast<size_t>(rows) * pitch,
+        .buffer_row_length = pitch / bytes_per_block,
+        .buffer_image_height = info.size.height,
+        .image_subresource =
+            {
+                .base_level = 0,
+                .base_layer = 0,
+                .num_layers = 1,
+            },
+        .image_offset = {0, static_cast<s32>(row), 0},
+        .image_extent = {info.size.width, rows, 1},
+    };
 }
 
 template <class P>
@@ -2655,6 +2780,10 @@ void TextureCache<P>::RemoveFramebuffers(std::span<const ImageViewId> removed_vi
 template <class P>
 void TextureCache<P>::MarkModification(ImageBase& image) noexcept {
     image.flags |= ImageFlagBits::GpuModified;
+    // Any GPU write invalidates the flush governor's learned sync spans (their tick
+    // compare expires them automatically) and revokes the partial-sync guarantee the
+    // garbage collector relies on.
+    image.flags &= ~ImageFlagBits::GpuPartialSync;
     image.modification_tick = ++modification_tick;
 }
 
@@ -2689,6 +2818,11 @@ void TextureCache<P>::SynchronizeAliases(ImageId image_id) {
     if (any_modified) {
         image.flags |= ImageFlagBits::GpuModified;
     }
+    // The tick was inherited from an alias chain and the image gained foreign contents,
+    // so everything the flush governor learned about this image refers to a state the
+    // image no longer has. Drop the learned spans and the partial-sync guarantee.
+    image.flags &= ~ImageFlagBits::GpuPartialSync;
+    image.synced_spans.clear();
     std::ranges::sort(aliased_images, [this](const AliasedImage* lhs, const AliasedImage* rhs) {
         const ImageBase& lhs_image = slot_images[lhs->id];
         const ImageBase& rhs_image = slot_images[rhs->id];

@@ -215,6 +215,15 @@ public:
 
     std::optional<VideoCore::RasterizerDownloadArea> GetFlushArea(DAddr cpu_addr, u64 size);
 
+    /// Flush-governor helper (renderer_flush_governor, see FLUSH_GOVERNOR.md): build a
+    /// download of whole guest rows of a pitch-linear image covering the flush request,
+    /// instead of the whole image. Returns std::nullopt when the image is not eligible
+    /// (wrong type, converted, multi-sampled, rescaled, a depth target) or when the
+    /// request already covers most of the image, in which case the caller keeps the
+    /// legacy full-image download.
+    [[nodiscard]] std::optional<VideoCommon::BufferImageCopy> PartialRowCopy(
+        const Image& image, u64 req_begin, u64 req_end) const;
+
     /// Remove images in a region
     void UnmapMemory(DAddr cpu_addr, size_t size);
 

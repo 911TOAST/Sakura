@@ -821,6 +821,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.RENDERER_FLUSH_GOVERNOR,
+                    titleId = R.string.renderer_flush_governor,
+                    descriptionId = R.string.renderer_flush_governor_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_STATIC_FRAME_SKIP,
                     titleId = R.string.renderer_static_frame_skip,
                     descriptionId = R.string.renderer_static_frame_skip_description

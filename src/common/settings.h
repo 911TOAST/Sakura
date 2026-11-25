@@ -571,6 +571,18 @@ struct Values {
     SwitchableSetting<bool> renderer_draw_burst{linkage, false, "renderer_draw_burst",
                                                 Category::RendererDebug,
                                                 Specialization::Default, true, true};
+    // Learning flush governor (see FLUSH_GOVERNOR.md): the texture cache learns, per image,
+    // which guest byte ranges it already read back from the GPU and at which modification
+    // tick. A flush request fully inside a learned span while the tick is unchanged is
+    // answered straight from guest memory instead of triggering another GPU -> CPU download,
+    // and pitch-linear images polled in sub-regions are downloaded by full row groups
+    // instead of whole images. Every reduction is backed by data a previous download of
+    // this very image already produced, so the bytes the CPU observes are bit-exact; any
+    // GPU modification bumps the image's modification tick and expires the learned spans.
+    // Experimental A/B toggle, off by default, mirroring the flush path exactly when off.
+    SwitchableSetting<bool> renderer_flush_governor{linkage, false, "renderer_flush_governor",
+                                                    Category::RendererDebug,
+                                                    Specialization::Default, true, true};
     // Marks every FP32 arithmetic result in a fragment shader RelaxedPrecision, which tells the
     // driver it may evaluate that chain at reduced precision. Mali and Adreno run 16-bit float math
     // at twice the rate of FP32 and with lower register pressure, so a driver that honours the

@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -136,6 +137,72 @@ bool ImageBase::IsSafeDownload() const noexcept {
         return false;
     }
     return true;
+}
+
+bool ImageBase::CanSkipDownload(u64 l, u64 r) noexcept {
+    // A learned span says these guest bytes are an exact copy of the GPU image's contents
+    // at the current modification tick; serving the request again would download state
+    // that guest memory already holds. Any GPU modification bumped modification_tick (see
+    // MarkModification) and expired every span taken at an older tick, and a CPU write
+    // sets CpuModified, which IsSafeDownload rejects long before this is asked, so the
+    // bytes served from guest memory are always the ones the GPU last produced.
+    for (SyncedSpan& span : synced_spans) {
+        if (span.modification_tick != modification_tick) {
+            continue;
+        }
+        if (span.begin <= l && r <= span.end) {
+            ++span.hits;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ImageBase::IsFullySyncedAt(u64 tick) const noexcept {
+    if (synced_spans.empty() || True(flags & ImageFlagBits::CpuModified)) {
+        return false;
+    }
+    for (const SyncedSpan& span : synced_spans) {
+        if (span.modification_tick == tick && span.begin <= static_cast<u64>(cpu_addr) &&
+            static_cast<u64>(cpu_addr_end) <= span.end) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void ImageBase::RecordSyncedSpan(u64 l, u64 r, u64 tick) noexcept {
+    // Learning step: a request that escapes a learned span grows it to the union (the
+    // caller clips to the image bounds), so the span adapts to where the CPU actually
+    // reads, without any pre-tuned geometry.
+    for (SyncedSpan& span : synced_spans) {
+        if (span.modification_tick == tick && span.begin <= r && l <= span.end) {
+            span.begin = (std::min)(span.begin, l);
+            span.end = (std::max)(span.end, r);
+            ++span.hits;
+            return;
+        }
+    }
+    while (synced_spans.size() >= MaxSyncedSpans) {
+        // Evict the least useful span: one taken at an older tick (proven stale) first,
+        // otherwise the least served one.
+        size_t victim = synced_spans.size();
+        u32 victim_hits = (std::numeric_limits<u32>::max)();
+        for (size_t i = 0; i < synced_spans.size(); ++i) {
+            const u32 hits = synced_spans[i].modification_tick == modification_tick
+                                 ? synced_spans[i].hits
+                                 : 0U;
+            if (hits < victim_hits) {
+                victim_hits = hits;
+                victim = i;
+            }
+        }
+        if (victim == synced_spans.size()) {
+            break;
+        }
+        synced_spans.erase(synced_spans.begin() + static_cast<std::ptrdiff_t>(victim));
+    }
+    synced_spans.push_back(SyncedSpan{tick, l, r, 1U});
 }
 
 void ImageBase::CheckBadOverlapState() {
