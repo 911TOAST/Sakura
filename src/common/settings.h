@@ -1156,9 +1156,10 @@ struct Values {
     /// services. Those are unreachable and are otherwise refused; pointing this
     /// at a replacement network - Nextendo and similar, which reimplement
     /// identity and matchmaking and which a modded console reaches by
-    /// redirecting its DNS - turns the refusal into a redirect. Empty keeps the
-    /// refuse-everything behaviour.
-    Setting<std::string> network_replacement_host{linkage, "", "network_replacement_host",
+    /// redirecting its DNS - turns the refusal into a redirect. Defaults to
+    /// nextendo.network; set to empty for the refuse-everything behaviour.
+    Setting<std::string> network_replacement_host{linkage, "nextendo.network",
+                                                  "network_replacement_host",
                                                   Category::Network};
 
     // WebService
