@@ -88,6 +88,7 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     UI_SOUND_FEEDBACK("ui_sound_feedback"),
     UI_ENTRANCE_ANIMATION("ui_entrance_animation"),
     UI_TRANSITION_ANIMATION("ui_transition_animation"),
+    UI_LAUNCH_SPRING("ui_launch_spring"),
     JOYSTICK_REL_CENTER("joystick_rel_center"),
     DPAD_SLIDE("dpad_slide"),
     HAPTIC_FEEDBACK("haptic_feedback"),

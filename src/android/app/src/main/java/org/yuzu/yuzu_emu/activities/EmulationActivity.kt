@@ -180,6 +180,11 @@ class EmulationActivity : AppCompatActivity(), SensorEventListener, InputManager
 
         // Launch is a fade-through: the game surface grows out of the library and the library
         // recedes behind it, instead of the window appearing in a single frame.
+        // With the optional springy launch the window cross-fade is bare and the emulation
+        // content itself settles in with a real spring (bounce follows the motion setting).
+        if (savedInstanceState == null && SuyuMotion.launchSpringEnabled()) {
+            binding.root.post { SuyuMotion.springIn(binding.root, fromScale = 0.9f) }
+        }
         SuyuMotion.applyEnterTransition(this)
 
         val launchIntent = Intent(intent)

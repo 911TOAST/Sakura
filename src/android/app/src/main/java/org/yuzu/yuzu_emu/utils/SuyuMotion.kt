@@ -70,6 +70,15 @@ object SuyuMotion {
         BooleanSetting.UI_TRANSITION_ANIMATION.getBoolean()
     }.getOrDefault(true)
 
+    /**
+     * Optional springy game launch: the window cross-fades quickly while the emulation content
+     * itself settles in with a real spring (bounce follows the UI motion bounce setting). Off
+     * keeps the default tween fade-through zoom.
+     */
+    fun launchSpringEnabled(): Boolean = transitionsEnabled() && runCatching {
+        BooleanSetting.UI_LAUNCH_SPRING.getBoolean()
+    }.getOrDefault(false)
+
     private fun motionScale(): Float = runCatching {
         IntSetting.UI_MOTION_SCALE.getInt()
     }.getOrDefault(100).coerceIn(50, 200) / 100f
@@ -396,13 +405,24 @@ object SuyuMotion {
      */
     fun applyEnterTransition(activity: Activity) {
         val enabled = transitionsEnabled()
+        // Spring mode wants a bare cross-fade at the window level: the physics zoom comes from
+        // springIn() on the emulation content in EmulationActivity, so a second window-scale
+        // would compound with it.
         val enter = if (enabled) {
-            org.yuzu.yuzu_emu.R.anim.launch_open_in
+            if (launchSpringEnabled()) {
+                org.yuzu.yuzu_emu.R.anim.launch_open_in_spring
+            } else {
+                org.yuzu.yuzu_emu.R.anim.launch_open_in
+            }
         } else {
             org.yuzu.yuzu_emu.R.anim.sakura_no_animation
         }
         val exit = if (enabled) {
-            org.yuzu.yuzu_emu.R.anim.launch_open_out
+            if (launchSpringEnabled()) {
+                org.yuzu.yuzu_emu.R.anim.launch_open_out_spring
+            } else {
+                org.yuzu.yuzu_emu.R.anim.launch_open_out
+            }
         } else {
             org.yuzu.yuzu_emu.R.anim.sakura_no_animation
         }

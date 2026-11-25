@@ -94,6 +94,8 @@ namespace AndroidSettings {
                                                       Settings::Category::Android};
         Settings::Setting<bool> ui_transition_animation{linkage, true, "ui_transition_animation",
                                                         Settings::Category::Android};
+        Settings::Setting<bool> ui_launch_spring{linkage, false, "ui_launch_spring",
+                                                 Settings::Category::Android};
 
         Settings::Setting<bool> enable_folder_button{linkage, true, "enable_folder_button",
                                                   Settings::Category::Android};

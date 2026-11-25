@@ -1223,6 +1223,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.UI_LAUNCH_SPRING,
+                    titleId = R.string.ui_launch_spring,
+                    descriptionId = R.string.ui_launch_spring_description,
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.HIDE_GAME_TITLES,
                     titleId = R.string.library_hide_titles,
                     descriptionId = R.string.library_hide_titles_description,

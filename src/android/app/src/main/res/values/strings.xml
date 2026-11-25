@@ -1486,6 +1486,8 @@
     <string name="ui_entrance_animation_description">Rise and fade list rows the first time they scroll into view.</string>
     <string name="ui_transition_animation">Screen transitions</string>
     <string name="ui_transition_animation_description">Animate the window when launching a game or switching screens.</string>
+    <string name="ui_launch_spring">Springy game launch</string>
+    <string name="ui_launch_spring_description">Settle into the game with a spring physics animation when you open it. Best with the Kinetic animation style.</string>
     <string name="fullscreen_mode">Fullscreen mode</string>
     <string name="fullscreen_mode_description">Hide Android system bars across app screens. Swipe from an edge to reveal them temporarily.</string>
     <string name="change_app_icon">App Icon</string>
