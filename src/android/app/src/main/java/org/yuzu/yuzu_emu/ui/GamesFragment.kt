@@ -387,16 +387,14 @@ class GamesFragment : Fragment() {
                 .start()
         }
 
-        binding.brandMark.animate().cancel()
-        binding.brandMark.alpha = 0f
-        binding.brandMark.scaleX = 0.55f
-        binding.brandMark.scaleY = 0.55f
-        binding.brandMark.rotation = -72f
-        binding.brandMark.animate()
+        binding.brandWordmarkText.animate().cancel()
+        binding.brandWordmarkText.alpha = 0f
+        binding.brandWordmarkText.scaleX = 0.55f
+        binding.brandWordmarkText.scaleY = 0.55f
+        binding.brandWordmarkText.animate()
             .alpha(1f)
             .scaleX(1f)
             .scaleY(1f)
-            .rotation(0f)
             .setStartDelay(60L)
             .setDuration(700L)
             .setInterpolator(decelerate)
@@ -414,7 +412,6 @@ class GamesFragment : Fragment() {
         brandAnimators.clear()
         BrandAnimation.startShimmer(binding.brandWordmarkText, 3000L)
         brandAnimators += BrandAnimation.breathe(binding.brandWordmarkText, 1.025f)
-        brandAnimators += BrandAnimation.sway(binding.brandMark, 3f, 4200L)
     }
 
     /**

@@ -45,25 +45,10 @@
         android:paddingBottom="2dp"
         app:layout_constraintTop_toTopOf="parent">
 
-        <FrameLayout
-            android:id="@+id/brand_mark"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="@drawable/sakura_icon_tile">
-
-            <ImageView
-                android:layout_width="33dp"
-                android:layout_height="33dp"
-                android:layout_gravity="center"
-                android:contentDescription="@null"
-                android:src="@drawable/sakura_flower" />
-        </FrameLayout>
-
         <TextView
             android:id="@+id/brand_wordmark_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
             android:includeFontPadding="false"
             android:text="@string/home_library"
             android:textAppearance="?attr/textAppearanceHeadlineSmall"
