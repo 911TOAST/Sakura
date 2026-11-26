@@ -13,9 +13,6 @@
 #ifdef HAVE_OBOE
 #include "audio_core/sink/oboe_sink.h"
 #endif
-#ifdef HAVE_AAUDIO
-#include "audio_core/sink/aaudio_sink.h"
-#endif
 #ifdef HAVE_CUBEB
 #include "audio_core/sink/cubeb_sink.h"
 #endif
@@ -60,16 +57,6 @@ constexpr SinkDetails sink_details[] = {
         Settings::AudioEngine::Oboe,
         [](std::string_view device_id) -> std::unique_ptr<Sink> {
             return std::make_unique<OboeSink>();
-        },
-        [](bool capture) { return std::vector<std::string>{"Default"}; },
-        []() { return 0u; },
-    },
-#endif
-#ifdef HAVE_AAUDIO
-    SinkDetails{
-        Settings::AudioEngine::Aaudio,
-        [](std::string_view device_id) -> std::unique_ptr<Sink> {
-            return std::make_unique<AAudioSink>();
         },
         [](bool capture) { return std::vector<std::string>{"Default"}; },
         []() { return 0u; },
