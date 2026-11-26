@@ -564,32 +564,16 @@
     <string name="discord_signed_in_as">Signed in as %1$s</string>
     <string name="discord_authorization_success">Signed in — presence is ready</string>
     <string name="discord_authorization_failed">Sign-in failed</string>
-    <string name="discord_oauth_note">Everything below is optional: the game name and cover art go to Discord automatically. Use another transport only if sign-in is not an option.</string>
+    <string name="discord_oauth_note">Nothing to set up: the game's title, cover art and timer go to Discord automatically.</string>
 
-    <string name="discord_rich_presence_page_description">Sign in once and you are done — the game, its cover art and the timer go to Discord automatically. Everything below fine-tunes that.</string>
+    <string name="discord_rich_presence_page_description">Sign in once and you are done — the game, its cover art and the timer go to Discord automatically.</string>
     <string name="discord_enable">Enable Rich Presence</string>
-    <string name="discord_transport">Transport</string>
-    <string name="discord_mode_oauth">Discord account (recommended)</string>
-    <string name="discord_mode_oauth_summary">Signing in above is all this needs: the browser asks you to authorise once, and the status lands on your own profile. Game name and cover art are filled in automatically.</string>
-    <string name="discord_mode_social_sdk">Social SDK (official)</string>
-    <string name="discord_mode_social_sdk_summary">Uses the installed Discord app. Only the public Application ID is needed, nothing secret is stored, and the status appears on your own profile. Requires the Discord app to be installed and signed in.</string>
-    <string name="discord_mode_account">Account token</string>
-    <string name="discord_mode_account_summary">Connects to the gateway as your own account, so no Discord app is needed. This is a self-bot, which Discord terms forbid; the risk to the account is yours to accept.</string>
-    <string name="discord_mode_bot">Bot token</string>
-    <string name="discord_mode_bot_summary">Connects as a bot account. Allowed by Discord, but the status belongs to the bot and is only visible to members of a server the bot has been invited to.</string>
-    <string name="discord_application_id">Application ID</string>
-    <string name="discord_application_id_hint">Empty uses the built-in Sakura application</string>
-    <string name="discord_token">Token</string>
-    <string name="discord_token_hint">Pasted here only, never sent anywhere else</string>
-    <string name="discord_account_warning">Self-bot mode: this can put your Discord account at risk. Switch to Social SDK to avoid it.</string>
-    <string name="discord_social_sdk_missing">Social SDK is not bundled in this build. Add discord_partner_sdk.aar to app/libs and enable the Social SDK for the application.</string>
-    <string name="discord_advanced_header">Advanced</string>
     <string name="discord_status_idle">Idle</string>
+    <string name="discord_preview">What Discord shows</string>
+    <string name="discord_preview_no_game">Start a game and its title appears here</string>
+    <string name="discord_preview_signed_out">Sign in to publish this presence</string>
 
     <string name="discord_rich_presence">Rich Presence</string>
-    <string name="discord_rich_presence_description">Publish the running game as this app presence on Discord. Android has no Discord client connection, so the presence is published through a bot account using the token below.</string>
-    <string name="discord_bot_token">Bot Token</string>
-    <string name="discord_bot_token_description">Token of the bot account whose presence shows the running game. Only that bot status is affected, not your own. Kept locally in config.ini, never logged, and never sent anywhere except the Discord gateway.</string>
 
     <!-- Graphics settings strings -->
     <string name="renderer_resolution">Resolution (Handheld/Docked)</string>

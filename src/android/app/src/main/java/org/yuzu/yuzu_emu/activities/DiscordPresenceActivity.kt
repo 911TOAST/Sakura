@@ -5,29 +5,24 @@ package org.yuzu.yuzu_emu.activities
 
 import android.content.Intent
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.View
-import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
+import coil.load
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.imageview.ShapeableImageView
 import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
-import org.yuzu.yuzu_emu.features.settings.model.IntSetting
-import org.yuzu.yuzu_emu.features.settings.model.StringSetting
 import org.yuzu.yuzu_emu.network.DiscordAuthCoordinator
 import org.yuzu.yuzu_emu.network.DiscordOAuth
 import org.yuzu.yuzu_emu.network.DiscordPresence
@@ -36,29 +31,20 @@ import org.yuzu.yuzu_emu.utils.NativeConfig
 /**
  * Discord Rich Presence, built around "sign in once, never touch it again".
  *
- * The whole page is the switch and the sign-in card. The presence itself is never configured
- * here: it is always the running game's title and cover art, published by the signed-in
- * account. Transport and credentials — only relevant when sign-in is not an option — are
- * collapsed under "Advanced". Every edit anywhere is saved automatically a moment after typing
- * stops and reconnects, so there is no save button to forget.
+ * The whole page is a switch, a sign-in card and a live preview of what the presence says right
+ * now. There is nothing to configure: the presence is always the running game's title and cover
+ * art, published by the signed-in account. The switch saves itself; there is no save button.
  */
 class DiscordPresenceActivity : AppCompatActivity() {
 
     private lateinit var switchEnable: MaterialSwitch
-    private lateinit var groupMode: RadioGroup
     private lateinit var buttonSignIn: MaterialButton
     private lateinit var cardSignedIn: MaterialCardView
     private lateinit var buttonSignOut: MaterialButton
     private lateinit var textSignedIn: TextView
-    private lateinit var headerAdvanced: TextView
-    private lateinit var containerAdvanced: View
-    private lateinit var textModeSummary: TextView
-    private lateinit var textSocialSdkMissing: TextView
-    private lateinit var textWarning: TextView
-    private lateinit var layoutApplicationId: TextInputLayout
-    private lateinit var inputApplicationId: TextInputEditText
-    private lateinit var layoutToken: TextInputLayout
-    private lateinit var inputToken: TextInputEditText
+    private lateinit var imagePreviewLarge: ShapeableImageView
+    private lateinit var textPreviewHeadline: TextView
+    private lateinit var textPreviewState: TextView
     private lateinit var textStatus: TextView
 
     private val statusListener: (String) -> Unit = { message ->
@@ -68,7 +54,7 @@ class DiscordPresenceActivity : AppCompatActivity() {
     /** The authorisation currently in flight in the browser, or null between attempts. */
     private var authorizationSession: DiscordOAuth.Session? = null
 
-    /** True while the views are being filled from settings, so loading does not auto-save. */
+    /** True while the switch is being set from settings, so loading does not auto-save. */
     private var restoringViews = true
 
     private var saveJob: kotlinx.coroutines.Job? = null
@@ -85,36 +71,22 @@ class DiscordPresenceActivity : AppCompatActivity() {
         ViewCompat.requestApplyInsets(root)
 
         bindViews()
-        (findViewById<MaterialToolbar>(R.id.toolbar)).setNavigationOnClickListener { finish() }
+        findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener { finish() }
 
         loadFromSettings()
-        wireModeSelection()
-        wireSectionToggles()
-        wireAutoSave()
-        wireAutoSaveFields()
         refreshSignInCard()
+        refreshPreview()
 
         buttonSignIn.setOnClickListener { launchSignIn() }
         buttonSignOut.setOnClickListener {
             DiscordPresence.onSignedOut()
             NativeConfig.saveGlobalConfig()
             refreshSignInCard()
+            refreshPreview()
         }
-    }
 
-    /** Collapsed sections keep the default view to two controls; the header is the toggle. */
-    private fun wireSectionToggles() {
-        headerAdvanced.setOnClickListener {
-            containerAdvanced.visibility =
-                if (containerAdvanced.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-        }
-    }
-
-    /**
-     * Every edit saves itself. A short debounce groups a paste or a burst of keystrokes into one
-     * write and one reconnect; the job dies with the lifecycle, so no save outlives the page.
-     */
-    private fun wireAutoSave() {
+        // The switch saves itself the same way: a short debounce, then the change applies and
+        // the presence follows. The job dies with the lifecycle, so no save outlives the page.
         switchEnable.setOnCheckedChangeListener { _, _ -> scheduleSave() }
     }
 
@@ -124,16 +96,12 @@ class DiscordPresenceActivity : AppCompatActivity() {
         }
         saveJob?.cancel()
         saveJob = lifecycleScope.launch {
-            kotlinx.coroutines.delay(800)
-            saveAndReconnect()
+            kotlinx.coroutines.delay(300)
+            save()
+            // Reconnecting reads the settings back, so the switch takes effect now instead of at
+            // the next game launch; with no game running it is a no-op that just reports state.
+            DiscordPresence.reconnectWithCurrentSettings()
         }
-    }
-
-    private fun saveAndReconnect() {
-        save()
-        // Reconnecting reads the settings back, so an edit takes effect now instead of at the
-        // next game launch; with no game running it is a no-op that just reports state.
-        DiscordPresence.reconnectWithCurrentSettings()
     }
 
     override fun onStart() {
@@ -143,6 +111,7 @@ class DiscordPresenceActivity : AppCompatActivity() {
             getString(R.string.discord_status_idle)
         }
         refreshSignInCard()
+        refreshPreview()
 
         // The browser comes back through DiscordOAuthCallbackActivity, which emits its redirect
         // here; completing it does a network call, so that part leaves the main thread.
@@ -158,13 +127,13 @@ class DiscordPresenceActivity : AppCompatActivity() {
                 result.onSuccess { authSession ->
                     authorizationSession = null
                     DiscordOAuth.saveSession(authSession)
-                    // Signing in IS choosing the transport and enabling presence: no second
-                    // switch to find. onSignedIn sets the mode, saves the config and connects.
+                    // Signing in IS enabling presence: no second switch to find. onSignedIn
+                    // saves the config and connects.
                     switchEnable.isChecked = true
                     DiscordPresence.onSignedIn()
                     NativeConfig.saveGlobalConfig()
-                    groupMode.check(R.id.mode_oauth)
                     refreshSignInCard()
+                    refreshPreview()
                     textStatus.text = authSession.account?.displayName?.takeIf { it.isNotBlank() }
                         ?.let { getString(R.string.discord_signed_in_as, it) }
                         ?: getString(R.string.discord_authorization_success)
@@ -205,6 +174,27 @@ class DiscordPresenceActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Mirrors what Discord is showing, or would show: running game's title and cover art beside
+     * the signed-in account's name. Missing pieces degrade to placeholders rather than hiding —
+     * a blank card reads as breakage, a placeholder reads as "waiting for a game".
+     */
+    private fun refreshPreview() {
+        val preview = DiscordPresence.livePreview()
+        textPreviewHeadline.text = preview.title
+            ?: getString(R.string.discord_preview_no_game)
+        textPreviewState.text = preview.accountName
+            ?: getString(R.string.discord_preview_signed_out)
+
+        val artwork = preview.titleId?.takeIf { it.length >= 14 }
+            ?.let { "https://tinfoil.media/ti/${it.lowercase()}/" }
+        if (artwork != null) {
+            imagePreviewLarge.load(artwork) { crossfade(true) }
+        } else {
+            imagePreviewLarge.setImageDrawable(null)
+        }
+    }
+
     override fun onStop() {
         // The listener holds this activity; leaving it registered would leak the whole view tree
         // for as long as presence outlives the page.
@@ -216,107 +206,24 @@ class DiscordPresenceActivity : AppCompatActivity() {
 
     private fun bindViews() {
         switchEnable = findViewById(R.id.switch_enable)
-        groupMode = findViewById(R.id.group_mode)
         buttonSignIn = findViewById(R.id.button_sign_in)
         cardSignedIn = findViewById(R.id.card_signed_in)
         buttonSignOut = findViewById(R.id.button_sign_out)
         textSignedIn = findViewById(R.id.text_signed_in)
-        headerAdvanced = findViewById(R.id.header_advanced)
-        containerAdvanced = findViewById(R.id.container_advanced)
-        textModeSummary = findViewById(R.id.text_mode_summary)
-        textSocialSdkMissing = findViewById(R.id.text_social_sdk_missing)
-        textWarning = findViewById(R.id.text_warning)
-        layoutApplicationId = findViewById(R.id.layout_application_id)
-        inputApplicationId = findViewById(R.id.input_application_id)
-        layoutToken = findViewById(R.id.layout_token)
-        inputToken = findViewById(R.id.input_token)
+        imagePreviewLarge = findViewById(R.id.image_preview_large)
+        textPreviewHeadline = findViewById(R.id.text_preview_headline)
+        textPreviewState = findViewById(R.id.text_preview_state)
         textStatus = findViewById(R.id.text_status)
     }
 
     private fun loadFromSettings() {
         restoringViews = true
         switchEnable.isChecked = BooleanSetting.DISCORD_RICH_PRESENCE.getBoolean()
-
-        when (DiscordPresence.Mode.fromStored(IntSetting.DISCORD_PRESENCE_MODE.getInt())) {
-            DiscordPresence.Mode.OAUTH -> R.id.mode_oauth
-            DiscordPresence.Mode.SOCIAL_SDK -> R.id.mode_social
-            DiscordPresence.Mode.ACCOUNT_TOKEN -> R.id.mode_account
-            DiscordPresence.Mode.BOT_TOKEN -> R.id.mode_bot
-        }.let { groupMode.check(it) }
-
-        inputApplicationId.setText(StringSetting.DISCORD_APPLICATION_ID.getString())
-        inputToken.setText(StringSetting.DISCORD_TOKEN.getString())
-
-        applyModeVisibility(selectedMode())
         restoringViews = false
-    }
-
-    private fun selectedMode(): DiscordPresence.Mode = when (groupMode.checkedRadioButtonId) {
-        R.id.mode_oauth -> DiscordPresence.Mode.OAUTH
-        R.id.mode_account -> DiscordPresence.Mode.ACCOUNT_TOKEN
-        R.id.mode_bot -> DiscordPresence.Mode.BOT_TOKEN
-        else -> DiscordPresence.Mode.SOCIAL_SDK
-    }
-
-    private fun wireModeSelection() {
-        groupMode.setOnCheckedChangeListener { _, _ ->
-            applyModeVisibility(selectedMode())
-            scheduleSave()
-        }
-    }
-
-    /**
-     * Shows only the fields the selected transport actually uses.
-     *
-     * Leaving the Application ID visible in token mode invited the paste that then did nothing,
-     * which is exactly the confusion this page exists to remove.
-     */
-    private fun applyModeVisibility(mode: DiscordPresence.Mode) {
-        val isOAuth = mode == DiscordPresence.Mode.OAUTH
-        val isSocial = mode == DiscordPresence.Mode.SOCIAL_SDK
-        val isAccount = mode == DiscordPresence.Mode.ACCOUNT_TOKEN
-
-        // OAuth has no credential field at all: the browser authorisation IS the credential.
-        layoutApplicationId.visibility = if (isSocial) View.VISIBLE else View.GONE
-        layoutToken.visibility = if (isSocial || isOAuth) View.GONE else View.VISIBLE
-
-        textModeSummary.setText(
-            when (mode) {
-                DiscordPresence.Mode.OAUTH -> R.string.discord_mode_oauth_summary
-                DiscordPresence.Mode.SOCIAL_SDK -> R.string.discord_mode_social_sdk_summary
-                DiscordPresence.Mode.ACCOUNT_TOKEN -> R.string.discord_mode_account_summary
-                DiscordPresence.Mode.BOT_TOKEN -> R.string.discord_mode_bot_summary
-            }
-        )
-
-        // The warning belongs to account-token mode only: bot mode is lawful and the OAuth and
-        // Social SDK paths involve no credential at all.
-        textWarning.visibility = if (isAccount) View.VISIBLE else View.GONE
-        textSocialSdkMissing.visibility =
-            if (isSocial && !DiscordPresence.isSocialSdkAvailable()) View.VISIBLE else View.GONE
-    }
-
-    private fun wireAutoSaveFields() {
-        // Nothing on the page is configurable any more; the only text edits left are the
-        // advanced credential fields, and those auto-save through the same debounce as every
-        // switch.
-        val watcher = object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
-            override fun afterTextChanged(s: Editable?) = scheduleSave()
-        }
-        listOf(inputApplicationId, inputToken).forEach { it.addTextChangedListener(watcher) }
     }
 
     private fun save() {
         BooleanSetting.DISCORD_RICH_PRESENCE.setBoolean(switchEnable.isChecked)
-        IntSetting.DISCORD_PRESENCE_MODE.setInt(selectedMode().stored)
-        StringSetting.DISCORD_APPLICATION_ID.setString(
-            inputApplicationId.text?.toString().orEmpty().trim()
-        )
-        // Stored trimmed so a trailing newline from a paste cannot fail the shape check.
-        StringSetting.DISCORD_TOKEN.setString(inputToken.text?.toString().orEmpty().trim())
-
         // Nothing survives a restart without this; the settings registry only owns the values.
         NativeConfig.saveGlobalConfig()
     }

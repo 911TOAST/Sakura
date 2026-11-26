@@ -11,7 +11,6 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
-import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.features.settings.model.StringSetting
 import org.yuzu.yuzu_emu.utils.Log
 import java.util.concurrent.Executors
@@ -19,67 +18,33 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
 /**
- * Discord Rich Presence for Android, over three transports.
+ * Discord Rich Presence for Android, over the Discord account (OAuth) transport.
  *
- * There is no single "right" way to publish presence from Android, so the transport is a choice,
- * though one of them needs no choice made at all:
+ * There is no single "right" way to publish presence from Android; the one chosen here is the
+ * only one that is both lawful and needs nothing from the user: a one-tap authorisation in the
+ * browser (PKCE, scopes `openid identify sdk.social_layer_presence`) returns an access token
+ * with which the gateway is authenticated as "Bearer <token>". The presence lands on the
+ * player's own profile with no pasted credential, and any public image URL is registered on the
+ * fly as an application asset. See [DiscordOAuth].
  *
- * [Mode.OAUTH] is the easy, default path — "Sign in with Discord", as ArchiveTune does. A
- * one-tap authorisation in the browser (PKCE, scopes `openid identify sdk.social_layer_presence`)
- * returns an access token with which the gateway is authenticated as "Bearer <token>". The
- * presence lands on the player's own profile with no pasted credential, and any public image URL
- * is registered on the fly as an application asset. See [DiscordOAuth].
- *
- * [Mode.SOCIAL_SDK] is Discord's official partner path. Only the public Application ID is needed
- * and the presence lands on the player's own profile, because the Discord app installed on the
- * device does the publishing. It requires `discord_partner_sdk.aar` and the app to be registered
- * with the Social SDK enabled, so it is negotiated at runtime rather than compiled against.
- *
- * [Mode.ACCOUNT_TOKEN] authenticates the gateway as the player's own account. This is what
- * Kizzy-style apps do; it also sets the player's own presence, needs no Discord app, and is a
- * self-bot, which Discord's Terms forbid. The user is warned in the UI and chooses it anyway.
- *
- * [Mode.BOT_TOKEN] is lawful but publishes on a bot account, visible only to members of a guild
- * the bot has been invited to.
+ * The presence itself is not configurable: it is always the running game — title, cover art and
+ * an elapsed timer — published by the signed-in account.
  *
  * The token is read from settings on connect and is never logged, stored here, or written
  * anywhere else.
  */
 object DiscordPresence {
-    enum class Mode(val stored: Int) {
-        SOCIAL_SDK(0),
-        ACCOUNT_TOKEN(1),
-        BOT_TOKEN(2),
-        OAUTH(3);
-
-        companion object {
-            fun fromStored(value: Int): Mode = values().firstOrNull { it.stored == value } ?: SOCIAL_SDK
-        }
-    }
-
-    private const val GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json"
-
-    // The OAuth/social-layer session emulates the embedded Discord client, which pins version 9
-    // and identifies with a richer properties block than a plain self-bot session.
-    private const val GATEWAY_URL_OAUTH = "wss://gateway.discord.gg/?v=9&encoding=json"
+    private const val GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
 
     /**
      * The project's own registered Discord application ("Sakura").
      *
      * An Application ID is a public identifier, not a credential: it is the value that appears in
-     * every invite and OAuth link. Baking it in means Social SDK mode works out of the box, and the
+     * every invite and OAuth link. Baking it in means the presence carries the right application
+     * context with no setup, and
      * settings field stays as an override for anyone who wants their own app and its assets.
      */
     const val DEFAULT_APPLICATION_ID = "1568619623023255604"
-
-    // Bot and account tokens are both three dot-separated segments. Checking the shape keeps an
-    // obviously wrong paste (a client secret is a single 32-character segment) from producing an
-    // authentication loop the user cannot read.
-    private const val MIN_TOKEN_LENGTH = 50
-
-    // User-account identify requires a capability bitfield; 16381 is the set every self-bot client
-    // sends and is what the gateway expects for a plain presence-only session.
-    private const val ACCOUNT_CAPABILITIES = 16381
 
     // The OAuth session identifies as the embedded client; these are its capability and intent
     // bitfields (dedupe user objects, prioritised ready, auto call/lobby connect).
@@ -134,9 +99,6 @@ object DiscordPresence {
     @Volatile
     private var customisation: PresenceCustomization = PresenceCustomization.DEFAULT
 
-    @Volatile
-    private var mode: Mode = Mode.SOCIAL_SDK
-
     // ---- gateway state -----------------------------------------------------
 
     @Volatile
@@ -161,8 +123,6 @@ object DiscordPresence {
     @Volatile
     private var awaitingHeartbeatAck = false
 
-    private val socialSdk = SocialSdkBridge()
-
     // Access token for the current OAuth session, held only in memory so the gateway listener can
     // authenticate and assets can be registered. Cleared with the connection.
     @Volatile
@@ -170,14 +130,22 @@ object DiscordPresence {
 
     // ---- public surface ----------------------------------------------------
 
+    /** What the presence would say right now, for the page's live preview. */
+    data class Preview(
+        val title: String?,
+        val titleId: String?,
+        val accountName: String?
+    )
+
+    fun livePreview(): Preview = Preview(
+        title = sessionTitle,
+        titleId = sessionTitleId,
+        accountName = DiscordOAuth.account()?.displayName?.takeIf { it.isNotBlank() }
+    )
+
     fun status(): String = lastStatus
 
     fun isEnabled(): Boolean = BooleanSetting.DISCORD_RICH_PRESENCE.getBoolean()
-
-    fun currentMode(): Mode = Mode.fromStored(IntSetting.DISCORD_PRESENCE_MODE.getInt())
-
-    /** True when the official transport can actually run on this build/device. */
-    fun isSocialSdkAvailable(): Boolean = socialSdk.isAvailable
 
     /**
      * Called when the emulated session starts or stops. [title] is the game's display name, or
@@ -235,21 +203,17 @@ object DiscordPresence {
 
     /**
      * One-tap setup: called by the Discord page once the browser authorisation round-trip has
-     * produced tokens. Switches the transport to it — signing in *is* choosing the transport —
-     * and connects immediately, so the user never visits a mode selector.
+     * produced tokens. Connects immediately, so the presence starts without any further step.
      */
     fun onSignedIn() {
-        IntSetting.DISCORD_PRESENCE_MODE.setInt(Mode.OAUTH.stored)
         reconnectWithCurrentSettings()
     }
 
-    /** Removes the stored authorisation and clears the presence if it was publishing via it. */
+    /** Removes the stored authorisation and clears the presence. */
     fun onSignedOut() {
         DiscordOAuth.clearSession()
-        if (currentMode() == Mode.OAUTH) {
-            disconnectInternal(keepTitle = true)
-            publish("Signed out of Discord")
-        }
+        disconnectInternal(keepTitle = true)
+        publish("Signed out of Discord")
     }
 
     // ---- dispatch ---------------------------------------------------------
@@ -261,7 +225,6 @@ object DiscordPresence {
         if (title.isNullOrBlank() || !isEnabled()) {
             return
         }
-        mode = currentMode()
         // The presence is never user-configured: it is always the running game. The headline is
         // the game title, the large image falls back to the game's cover art, and where an
         // account is signed in, its display name fills the state line.
@@ -275,11 +238,7 @@ object DiscordPresence {
             state = DiscordOAuth.account()?.displayName.orEmpty()
         )
 
-        when (mode) {
-            Mode.SOCIAL_SDK -> connectSocialSdk()
-            Mode.OAUTH -> connectOAuth()
-            Mode.ACCOUNT_TOKEN, Mode.BOT_TOKEN -> connectGateway()
-        }
+        connectOAuth()
     }
 
     private fun connectOAuth() {
@@ -290,65 +249,20 @@ object DiscordPresence {
         }
         oauthToken = token
         connectGateway()
-        // connectGateway publishes "Connecting…" from here; the sign-in identity is shown in the
-        // READY message, once the gateway confirms the session really works.
-    }
-
-    private fun connectSocialSdk() {
-        // Empty field means "use the built-in application", not "misconfigured".
-        val applicationId =
-            StringSetting.DISCORD_APPLICATION_ID.getString().trim().ifEmpty { DEFAULT_APPLICATION_ID }
-        if (!socialSdk.isAvailable) {
-            // Not an error the user can fix from the UI, so say exactly what is missing.
-            publish("Social SDK unavailable: bundle discord_partner_sdk.aar")
-            return
-        }
-        val ok = socialSdk.connect(applicationId)
-        if (!ok) {
-            publish("Social SDK: could not reach the Discord app")
-            return
-        }
-        refreshSocialSdkPresence()
-        publish("Publishing via Social SDK (official)")
+        // connectGateway publishes "Connecting…"; the sign-in identity is shown in the READY
+        // message, once the gateway confirms the session really works.
     }
 
     private fun connectGateway() {
-        val isOAuth = mode == Mode.OAUTH
-        val token: String
-        if (isOAuth) {
-            token = oauthToken ?: run {
-                publish("Discord session expired; sign in again")
-                return
-            }
-        } else {
-            token = StringSetting.DISCORD_TOKEN.getString()
-            if (token.isBlank()) {
-                publish(
-                    if (mode == Mode.BOT_TOKEN) "Bot mode: token missing" else "Account mode: token missing"
-                )
-                return
-            }
-            if (token.length < MIN_TOKEN_LENGTH || token.count { it == '.' } != 2) {
-                // Says nothing about the value: a partially pasted or wrong-kind token must not be
-                // echoed into a log the user may share.
-                publish("Token is not shaped like a Discord token")
-                Log.error("[DiscordPresence] token rejected by shape check")
-                return
-            }
+        val token = oauthToken ?: run {
+            publish("Discord session expired; sign in again")
+            return
         }
 
         closedByUs = false
-        // The embedded-client session pins gateway version 9; plain tokens stay on v10.
-        val url = if (isOAuth) GATEWAY_URL_OAUTH else GATEWAY_URL
-        val request = Request.Builder().url(url).build()
-        socket = httpClient.newWebSocket(request, GatewayListener(token, isOAuth))
-        publish(
-            when {
-                isOAuth -> "Connecting via Discord account…"
-                mode == Mode.BOT_TOKEN -> "Connecting as bot…"
-                else -> "Connecting as account (self-bot)…"
-            }
-        )
+        val request = Request.Builder().url(GATEWAY_URL).build()
+        socket = httpClient.newWebSocket(request, GatewayListener(token))
+        publish("Connecting via Discord account…")
     }
 
     private fun disconnectInternal(keepTitle: Boolean) {
@@ -383,7 +297,6 @@ object DiscordPresence {
         }
         oauthToken = null
         DiscordAssetRegistrar.clearCache()
-        socialSdk.disconnect()
     }
 
     private fun publish(message: String) {
@@ -391,112 +304,12 @@ object DiscordPresence {
         statusListener?.invoke(message)
     }
 
-    // ---- Social SDK (reflective) ------------------------------------------
-
-    /**
-     * Adapter for `discord_partner_sdk.aar`.
-     *
-     * The SDK is a native library shipped as an AAR and cannot be vendored here, so it is looked
-     * up reflectively: with the AAR in `app/libs` these calls reach the real bindings, and without
-     * it every entry point reports unavailable instead of failing the build or crashing. Method
-     * names are matched case- and underscore-insensitively because the Java binding has shipped
-     * with both `SetApplicationId` and `setApplicationId` spellings.
-     */
-    private class SocialSdkBridge {
-        private var client: Any? = null
-        private var activityClass: Class<*>? = null
-
-        val isAvailable: Boolean
-            get() = runCatching { Class.forName(CLIENT_CLASS) }.isSuccess
-
-        fun connect(applicationId: String): Boolean {
-            return runCatching {
-                if (client == null) {
-                    val clazz = Class.forName(CLIENT_CLASS)
-                    client = clazz.getDeclaredConstructor().newInstance()
-                    activityClass = Class.forName(ACTIVITY_CLASS)
-                }
-                val idValue: Any = applicationId.toLongOrNull() ?: applicationId
-                invoke(client, arrayOf("setApplicationId"), arrayOf(idValue))
-                true
-            }.getOrElse {
-                Log.error("[DiscordPresence] Social SDK connect failed: ${it.javaClass.simpleName}")
-                false
-            }
-        }
-
-        fun update(customisation: PresenceCustomization, title: String, startedAt: Long) {
-            runCatching {
-                val target = client ?: return
-                val activity = activityClass?.getDeclaredConstructor()?.newInstance() ?: return
-
-                customisation.name.ifBlank { title }.let { name ->
-                    if (name.isNotEmpty()) {
-                        invoke(activity, arrayOf("setName"), arrayOf(name))
-                    }
-                }
-                if (customisation.details.isNotBlank()) {
-                    invoke(activity, arrayOf("setDetails"), arrayOf(customisation.details))
-                }
-                if (customisation.state.isNotBlank()) {
-                    invoke(activity, arrayOf("setState"), arrayOf(customisation.state))
-                }
-                if (customisation.showTimestamps) {
-                    invoke(activity, arrayOf("setStartTimestamp"), arrayOf(startedAt))
-                }
-                if (customisation.largeImage.isNotBlank()) {
-                    invoke(activity, arrayOf("setLargeImage"), arrayOf(customisation.largeImage))
-                }
-                if (customisation.smallImage.isNotBlank()) {
-                    invoke(activity, arrayOf("setSmallImage"), arrayOf(customisation.smallImage))
-                }
-
-                // One-argument form first; the two-argument form needs a callback proxy whose
-                // interface cannot be named without the AAR, so it is left to the SDK's default.
-                val updated = invoke(target, arrayOf("updateRichPresence"), arrayOf(activity))
-                if (updated == null) {
-                    Log.warning("[DiscordPresence] Social SDK updateRichPresence not found")
-                }
-            }.onFailure {
-                Log.error("[DiscordPresence] Social SDK update failed: ${it.javaClass.simpleName}")
-            }
-        }
-
-        fun disconnect() {
-            runCatching { invoke(client, arrayOf("disconnect", "clearRichPresence"), emptyArray()) }
-            client = null
-        }
-
-        private fun invoke(target: Any?, names: Array<String>, args: Array<out Any?>): Any? {
-            if (target == null) {
-                return null
-            }
-            val wanted = names.map { it.lowercase().replace("_", "") }
-            val method = target.javaClass.methods.firstOrNull { candidate ->
-                candidate.parameterCount == args.size &&
-                    wanted.contains(candidate.name.lowercase().replace("_", ""))
-            } ?: return null
-            return method.invoke(target, *args)
-        }
-
-        private companion object {
-            const val CLIENT_CLASS = "discordpp.Client"
-            const val ACTIVITY_CLASS = "discordpp.Activity"
-        }
-    }
-
-    private fun refreshSocialSdkPresence() {
-        val title = desiredTitle ?: return
-        socialSdk.update(customisation, title, startedAt)
-    }
-
     // ---- Gateway ----------------------------------------------------------
 
     // Not 'inner': this object is a singleton, so there is no outer instance to capture. Every
     // state access is qualified back through DiscordPresence instead.
     private class GatewayListener(
-        private val token: String,
-        private val oauth: Boolean
+        private val token: String
     ) : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             Log.info("[DiscordPresence] gateway connected")
@@ -511,7 +324,7 @@ object DiscordPresence {
                     val interval =
                         message.optJSONObject("d")?.optLong("heartbeat_interval", 0L) ?: 0L
                     DiscordPresence.startHeartbeat(webSocket, interval)
-                    DiscordPresence.sendIdentify(webSocket, token, oauth)
+                    DiscordPresence.sendIdentify(webSocket, token)
                 }
 
                 OP_HEARTBEAT_ACK -> {
@@ -525,20 +338,10 @@ object DiscordPresence {
                         DiscordPresence.reconnectAttempt = 0
                         DiscordPresence.sendPresenceUpdate(webSocket)
                         DiscordPresence.publish(
-                            when {
-                                oauth -> {
-                                    val name = DiscordOAuth.account()?.displayName
-                                        ?.takeIf { it.isNotBlank() }
-                                    if (name != null) {
-                                        "Connected as $name"
-                                    } else {
-                                        "Connected as your Discord account"
-                                    }
-                                }
-                                DiscordPresence.mode == Mode.BOT_TOKEN ->
-                                    "Connected as bot (visible only in its own servers)"
-                                else -> "Connected as your account (self-bot)"
-                            }
+                            DiscordOAuth.account()?.displayName
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { name -> "Connected as $name" }
+                                ?: "Connected as your Discord account"
                         )
                     }
                 }
@@ -604,89 +407,63 @@ object DiscordPresence {
         }
     }
 
-    private fun sendIdentify(webSocket: WebSocket, token: String, oauth: Boolean) {
+    private fun sendIdentify(webSocket: WebSocket, token: String) {
         val data = JSONObject()
 
-        if (oauth) {
-            // The access token authenticates as "Bearer", not raw: the gateway resolves an OAuth
-            // token through the authorisation it came from (this is what the embedded client does).
-            data.put("token", "Bearer $token")
-            data.put("capabilities", OAUTH_CAPABILITIES)
-            data.put("intents", OAUTH_INTENTS)
-            data.put(
-                "properties",
-                JSONObject()
-                    .put("os", "Android")
-                    .put("browser", "Discord Embedded")
-                    .put("device", "Android")
-                    .put("browser_user_agent", "Discord Embedded")
-                    .put("browser_version", "1.0")
-                    .put("client_version", "1.0")
-            )
-        } else {
-            // Bot and account tokens both go in raw here; the "Bot " prefix belongs to the REST
-            // API only.
-            data.put("token", token)
-            data.put(
-                "properties",
-                JSONObject()
-                    .put("os", "Android")
-                    .put("browser", "suyu")
-                    .put("device", "suyu")
-            )
-            data.put("presence", JSONObject().put("status", "online").put("afk", false))
-
-            if (mode == Mode.ACCOUNT_TOKEN) {
-                data.put("capabilities", ACCOUNT_CAPABILITIES)
-                data.put("compress", false)
-            } else {
-                // Intents stay at zero: a bot needs none to set its own presence, and asking for
-                // privileged intents it has not enabled would close the connection.
-                data.put("intents", 0)
-            }
-        }
+        // The access token authenticates as "Bearer", not raw: the gateway resolves an OAuth
+        // token through the authorisation it came from (this is what the embedded client does).
+        data.put("token", "Bearer $token")
+        data.put("capabilities", OAUTH_CAPABILITIES)
+        data.put("intents", OAUTH_INTENTS)
+        data.put(
+            "properties",
+            JSONObject()
+                .put("os", "Android")
+                .put("browser", "Discord Embedded")
+                .put("device", "Android")
+                .put("browser_user_agent", "Discord Embedded")
+                .put("browser_version", "1.0")
+                .put("client_version", "1.0")
+        )
 
         webSocket.send(JSONObject().put("op", OP_IDENTIFY).put("d", data).toString())
     }
 
     private fun sendPresenceUpdate(webSocket: WebSocket) {
+        val token = oauthToken ?: return
         val title = desiredTitle ?: return
         val activities = JSONArray()
         if (title.isNotEmpty()) {
             val activity = PresenceCustomization.buildActivity(customisation, title, startedAt)
 
-            if (mode == Mode.OAUTH) {
-                val token = oauthToken ?: return
-                // With the authorisation comes the application context: the activity carries the
-                // app id, large/small images can be any public URL (registered on the fly), and
-                // minified button placement is the canonical label + metadata form.
-                activity.put(
-                    "application_id",
-                    StringSetting.DISCORD_APPLICATION_ID.getString().trim().ifEmpty {
-                        DEFAULT_APPLICATION_ID
-                    }
-                )
-                var large = customisation.largeImage
-                var small = customisation.smallImage
-                if (large.isBlank()) {
-                    // Zero-config art: the URL is built locally from the title id and fetched by
-                    // Discord's servers during registration, so the user never picks or pastes
-                    // anything. A missing cover simply means no image, never a failed presence.
-                    sessionTitleId?.takeIf { it.length >= 14 }?.let { id ->
-                        large = "https://tinfoil.media/ti/${id.lowercase()}/"
-                    }
+            // The authorisation carries the application context: the activity carries the
+            // app id, the large image falls back to the game's cover art (registered on the
+            // fly if it is a plain URL), and buttons use the canonical label + metadata form.
+            activity.put(
+                "application_id",
+                StringSetting.DISCORD_APPLICATION_ID.getString().trim().ifEmpty {
+                    DEFAULT_APPLICATION_ID
                 }
-                val resolved = DiscordAssetRegistrar.resolveImages(token, large, small)
-                val assets = JSONObject()
-                if (resolved.first.isNotEmpty()) {
-                    assets.put("large_image", resolved.first.take(256))
+            )
+            var large = customisation.largeImage
+            if (large.isBlank()) {
+                // Zero-config art: the URL is built locally from the title id and fetched by
+                // Discord's servers during registration, so the user never picks or pastes
+                // anything. A missing cover simply means no image, never a failed presence.
+                sessionTitleId?.takeIf { it.length >= 14 }?.let { id ->
+                    large = "https://tinfoil.media/ti/${id.lowercase()}/"
                 }
-                if (resolved.second.isNotEmpty()) {
-                    assets.put("small_image", resolved.second.take(256))
-                }
-                if (assets.length() > 0) {
-                    activity.put("assets", assets)
-                }
+            }
+            val resolved = DiscordAssetRegistrar.resolveImages(token, large, "")
+            val assets = JSONObject()
+            if (resolved.first.isNotEmpty()) {
+                assets.put("large_image", resolved.first.take(256))
+            }
+            if (resolved.second.isNotEmpty()) {
+                assets.put("small_image", resolved.second.take(256))
+            }
+            if (assets.length() > 0) {
+                activity.put("assets", assets)
             }
 
             activities.put(activity)

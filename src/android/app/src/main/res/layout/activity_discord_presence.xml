@@ -3,10 +3,9 @@
   Discord Rich Presence, designed around "sign in once, never touch it again".
 
   The whole setup is the switch and the sign-in card. The presence itself is never configured:
-  it is always the running game's title and cover art, published as the signed-in account.
-  Transport and credentials — which only matter when sign-in is not an option — live collapsed
-  under "Advanced". Every edit is saved automatically a moment after typing stops; there is no
-  save button.
+  it is always the running game's title and cover art, published as the signed-in account, and
+  the preview card shows exactly that. Every edit is saved automatically a moment after typing
+  stops; there is no save button.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -105,127 +104,59 @@
                 android:textAppearance="?attr/textAppearanceBodySmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
-            <!-- Advanced: transport and credentials. Only for when sign-in is not an option. -->
+            <!-- Live preview of exactly what the presence says: the running game's title and
+                 cover art beside the signed-in account's name. Read-only; updated whenever the
+                 page appears or the account changes. -->
             <TextView
-                android:id="@+id/header_advanced"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:minHeight="48dp"
-                android:gravity="center_vertical"
-                android:text="@string/discord_advanced_header"
+                android:text="@string/discord_preview"
                 android:textAppearance="?attr/textAppearanceTitleMedium" />
 
-            <LinearLayout
-                android:id="@+id/container_advanced"
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
+                android:layout_marginTop="8dp"
+                app:cardCornerRadius="16dp">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/discord_transport"
-                    android:textAppearance="?attr/textAppearanceTitleSmall" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="16dp">
 
-                <RadioGroup
-                    android:id="@+id/group_mode"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:orientation="vertical">
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/image_preview_large"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:scaleType="centerCrop"
+                        app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Medium" />
 
-                    <RadioButton
-                        android:id="@+id/mode_oauth"
-                        android:layout_width="match_parent"
+                    <LinearLayout
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:minHeight="48dp"
-                        android:text="@string/discord_mode_oauth" />
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
-                    <RadioButton
-                        android:id="@+id/mode_social"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:minHeight="48dp"
-                        android:text="@string/discord_mode_social_sdk" />
+                        <TextView
+                            android:id="@+id/text_preview_headline"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="?attr/textAppearanceTitleSmall" />
 
-                    <RadioButton
-                        android:id="@+id/mode_account"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:minHeight="48dp"
-                        android:text="@string/discord_mode_account" />
-
-                    <RadioButton
-                        android:id="@+id/mode_bot"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:minHeight="48dp"
-                        android:text="@string/discord_mode_bot" />
-                </RadioGroup>
-
-                <TextView
-                    android:id="@+id/text_mode_summary"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-
-                <TextView
-                    android:id="@+id/text_social_sdk_missing"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/discord_social_sdk_missing"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="?attr/colorError"
-                    android:visibility="gone" />
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/layout_application_id"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:hint="@string/discord_application_id"
-                    app:helperText="@string/discord_application_id_hint">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/input_application_id"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="number" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/layout_token"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:hint="@string/discord_token"
-                    app:endIconMode="password_toggle"
-                    app:helperText="@string/discord_token_hint">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/input_token"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="textPassword" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <TextView
-                    android:id="@+id/text_warning"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/discord_account_warning"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="?attr/colorError"
-                    android:visibility="gone" />
-            </LinearLayout>
+                        <TextView
+                            android:id="@+id/text_preview_state"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>
