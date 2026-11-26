@@ -129,17 +129,23 @@ object DiscordAssetRegistrar {
             val response = httpClient.newCall(request).execute()
             response.use {
                 if (!response.isSuccessful) {
+                    Log.warning(
+                        "[DiscordAssetRegistrar] external-assets HTTP ${response.code}"
+                    )
                     throw IllegalStateException("external-assets returned HTTP ${response.code}")
                 }
-                val json = JSONObject(response.body?.string().orEmpty())
-                val array = json.optJSONArray("assets")
+                // The response is a top-level array of {"external_asset_path": "..."} objects,
+                // one per requested URL, in order.
+                val array = JSONArray(response.body?.string().orEmpty())
                 urls.indices.map { index ->
-                    array?.optString(index, "")?.takeIf { it.isNotBlank() }
+                    array.optJSONObject(index)
+                        ?.optString("external_asset_path", "")
+                        ?.takeIf { it.isNotBlank() }
                 }
             }
         }.onFailure {
             Log.warning(
-                "[DiscordAssetRegistrar] external-assets registration failed: ${it.javaClass.simpleName}"
+                "[DiscordAssetRegistrar] external-assets registration failed: ${it.message ?: it.javaClass.simpleName}"
             )
         }.getOrDefault(urls.map { null })
     }
