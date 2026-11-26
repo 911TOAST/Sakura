@@ -60,10 +60,10 @@ class WallpaperContributionActivity : AppCompatActivity() {
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         val author = intent.getStringExtra(EXTRA_AUTHOR).orEmpty()
         val source = intent.getStringExtra(EXTRA_SOURCE).orEmpty()
-            .takeIf { runCatching { it.toUri().isHttps }.getOrDefault(false) }
+            .takeIf { runCatching { it.toUri().scheme == "https" }.getOrDefault(false) }
             ?: runCatching { intent.data?.toString() }
                 .getOrNull()
-                ?.takeIf { it.toUri().isHttps }
+                ?.takeIf { it.toUri().scheme == "https" }
                 .orEmpty()
         val applyLive = intent.getBooleanExtra(EXTRA_APPLY, false)
 
@@ -150,7 +150,7 @@ class WallpaperContributionActivity : AppCompatActivity() {
     private fun Intent.getParcelableExtraCompat(name: String): Uri? =
         runCatching {
             @Suppress("DEPRECATION")
-            getParcelableExtra(name)
+            getParcelableExtra(name) as? Uri
         }.getOrNull()
 
     private fun String.toUri(): Uri = Uri.parse(this)
