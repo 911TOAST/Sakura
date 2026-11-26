@@ -240,9 +240,14 @@ object DiscordPresence {
     // ---- dispatch ---------------------------------------------------------
 
     private fun connect(title: String) {
-        customisation = PresenceCustomization.load()
         mode = currentMode()
-        desiredTitle = customisation.name.ifBlank { title }.take(128)
+        // The presence is never user-configured: it is always the running game. The headline is
+        // the game title, the large image falls back to the game's cover art, and where an
+        // account is signed in, its display name fills the state line.
+        desiredTitle = title.take(128)
+        customisation = PresenceCustomization(
+            state = DiscordOAuth.account()?.displayName.orEmpty()
+        )
         startedAt = System.currentTimeMillis()
 
         when (mode) {
@@ -323,6 +328,22 @@ object DiscordPresence {
 
     private fun disconnectInternal(keepTitle: Boolean) {
         synchronized(lock) {
+            // Closing the socket alone leaves the last activity showing until Discord times the
+            // session out; an explicit empty presence clears it while the connection is still
+            // there, so "always disconnect" means now, not in a minute.
+            socket?.takeIf { ready }?.send(
+                JSONObject()
+                    .put("op", OP_PRESENCE_UPDATE)
+                    .put(
+                        "d",
+                        JSONObject()
+                            .put("since", JSONObject.NULL)
+                            .put("activities", JSONArray())
+                            .put("status", "invisible")
+                            .put("afk", false)
+                    )
+                    .toString()
+            )
             if (!keepTitle) {
                 desiredTitle = null
                 sessionTitle = null

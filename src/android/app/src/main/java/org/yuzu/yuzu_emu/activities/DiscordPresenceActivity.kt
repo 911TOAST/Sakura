@@ -15,11 +15,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
-import coil.load
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
-import com.google.android.material.imageview.ShapeableImageView
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -33,17 +31,16 @@ import org.yuzu.yuzu_emu.features.settings.model.StringSetting
 import org.yuzu.yuzu_emu.network.DiscordAuthCoordinator
 import org.yuzu.yuzu_emu.network.DiscordOAuth
 import org.yuzu.yuzu_emu.network.DiscordPresence
-import org.yuzu.yuzu_emu.network.PresenceCustomization
 import org.yuzu.yuzu_emu.utils.NativeConfig
 
 /**
  * Discord Rich Presence, built around "sign in once, never touch it again".
  *
- * The top of the page is the whole setup: the switch and the sign-in card. Every edit anywhere on
- * the page is saved automatically a moment after typing stops and reconnects, so there is no save
- * button to forget. Customisation (text, images, buttons) is collapsed under "Customise";
- * transports and credentials — only relevant when sign-in is not an option — are collapsed under
- * "Advanced", so the default view never asks a question the user does not have to answer.
+ * The whole page is the switch and the sign-in card. The presence itself is never configured
+ * here: it is always the running game's title and cover art, published by the signed-in
+ * account. Transport and credentials — only relevant when sign-in is not an option — are
+ * collapsed under "Advanced". Every edit anywhere is saved automatically a moment after typing
+ * stops and reconnects, so there is no save button to forget.
  */
 class DiscordPresenceActivity : AppCompatActivity() {
 
@@ -53,10 +50,6 @@ class DiscordPresenceActivity : AppCompatActivity() {
     private lateinit var cardSignedIn: MaterialCardView
     private lateinit var buttonSignOut: MaterialButton
     private lateinit var textSignedIn: TextView
-    private lateinit var imagePreviewLarge: ShapeableImageView
-    private lateinit var imagePreviewSmall: ShapeableImageView
-    private lateinit var headerCustomise: TextView
-    private lateinit var containerCustomise: View
     private lateinit var headerAdvanced: TextView
     private lateinit var containerAdvanced: View
     private lateinit var textModeSummary: TextView
@@ -66,19 +59,6 @@ class DiscordPresenceActivity : AppCompatActivity() {
     private lateinit var inputApplicationId: TextInputEditText
     private lateinit var layoutToken: TextInputLayout
     private lateinit var inputToken: TextInputEditText
-    private lateinit var inputName: TextInputEditText
-    private lateinit var inputDetails: TextInputEditText
-    private lateinit var inputState: TextInputEditText
-    private lateinit var inputLargeImage: TextInputEditText
-    private lateinit var inputSmallImage: TextInputEditText
-    private lateinit var inputButton1Label: TextInputEditText
-    private lateinit var inputButton1Url: TextInputEditText
-    private lateinit var inputButton2Label: TextInputEditText
-    private lateinit var inputButton2Url: TextInputEditText
-    private lateinit var switchTimestamps: MaterialSwitch
-    private lateinit var textPreviewHeadline: TextView
-    private lateinit var textPreviewDetails: TextView
-    private lateinit var textPreviewState: TextView
     private lateinit var textStatus: TextView
 
     private val statusListener: (String) -> Unit = { message ->
@@ -109,9 +89,9 @@ class DiscordPresenceActivity : AppCompatActivity() {
 
         loadFromSettings()
         wireModeSelection()
-        wirePreview()
         wireSectionToggles()
         wireAutoSave()
+        wireAutoSaveFields()
         refreshSignInCard()
 
         buttonSignIn.setOnClickListener { launchSignIn() }
@@ -122,16 +102,11 @@ class DiscordPresenceActivity : AppCompatActivity() {
         }
     }
 
-    /** Collapsed sections keep the default view to two controls; headers are the toggles. */
+    /** Collapsed sections keep the default view to two controls; the header is the toggle. */
     private fun wireSectionToggles() {
-        val toggle = { expanded: Boolean, container: View ->
-            container.visibility = if (expanded) View.VISIBLE else View.GONE
-        }
-        headerCustomise.setOnClickListener {
-            toggle(containerCustomise.visibility != View.VISIBLE, containerCustomise)
-        }
         headerAdvanced.setOnClickListener {
-            toggle(containerAdvanced.visibility != View.VISIBLE, containerAdvanced)
+            containerAdvanced.visibility =
+                if (containerAdvanced.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
     }
 
@@ -141,7 +116,6 @@ class DiscordPresenceActivity : AppCompatActivity() {
      */
     private fun wireAutoSave() {
         switchEnable.setOnCheckedChangeListener { _, _ -> scheduleSave() }
-        switchTimestamps.setOnCheckedChangeListener { _, _ -> scheduleSave() }
     }
 
     private fun scheduleSave() {
@@ -247,10 +221,6 @@ class DiscordPresenceActivity : AppCompatActivity() {
         cardSignedIn = findViewById(R.id.card_signed_in)
         buttonSignOut = findViewById(R.id.button_sign_out)
         textSignedIn = findViewById(R.id.text_signed_in)
-        imagePreviewLarge = findViewById(R.id.image_preview_large)
-        imagePreviewSmall = findViewById(R.id.image_preview_small)
-        headerCustomise = findViewById(R.id.header_customise)
-        containerCustomise = findViewById(R.id.container_customise)
         headerAdvanced = findViewById(R.id.header_advanced)
         containerAdvanced = findViewById(R.id.container_advanced)
         textModeSummary = findViewById(R.id.text_mode_summary)
@@ -260,19 +230,6 @@ class DiscordPresenceActivity : AppCompatActivity() {
         inputApplicationId = findViewById(R.id.input_application_id)
         layoutToken = findViewById(R.id.layout_token)
         inputToken = findViewById(R.id.input_token)
-        inputName = findViewById(R.id.input_name)
-        inputDetails = findViewById(R.id.input_details)
-        inputState = findViewById(R.id.input_state)
-        inputLargeImage = findViewById(R.id.input_large_image)
-        inputSmallImage = findViewById(R.id.input_small_image)
-        inputButton1Label = findViewById(R.id.input_button1_label)
-        inputButton1Url = findViewById(R.id.input_button1_url)
-        inputButton2Label = findViewById(R.id.input_button2_label)
-        inputButton2Url = findViewById(R.id.input_button2_url)
-        switchTimestamps = findViewById(R.id.switch_timestamps)
-        textPreviewHeadline = findViewById(R.id.text_preview_headline)
-        textPreviewDetails = findViewById(R.id.text_preview_details)
-        textPreviewState = findViewById(R.id.text_preview_state)
         textStatus = findViewById(R.id.text_status)
     }
 
@@ -289,18 +246,6 @@ class DiscordPresenceActivity : AppCompatActivity() {
 
         inputApplicationId.setText(StringSetting.DISCORD_APPLICATION_ID.getString())
         inputToken.setText(StringSetting.DISCORD_TOKEN.getString())
-
-        val customisation = PresenceCustomization.load()
-        inputName.setText(customisation.name)
-        inputDetails.setText(customisation.details)
-        inputState.setText(customisation.state)
-        inputLargeImage.setText(customisation.largeImage)
-        inputSmallImage.setText(customisation.smallImage)
-        inputButton1Label.setText(customisation.button1Label)
-        inputButton1Url.setText(customisation.button1Url)
-        inputButton2Label.setText(customisation.button2Label)
-        inputButton2Url.setText(customisation.button2Url)
-        switchTimestamps.isChecked = customisation.showTimestamps
 
         applyModeVisibility(selectedMode())
         restoringViews = false
@@ -351,53 +296,16 @@ class DiscordPresenceActivity : AppCompatActivity() {
             if (isSocial && !DiscordPresence.isSocialSdkAvailable()) View.VISIBLE else View.GONE
     }
 
-    private fun wirePreview() {
+    private fun wireAutoSaveFields() {
+        // Nothing on the page is configurable any more; the only text edits left are the
+        // advanced credential fields, and those auto-save through the same debounce as every
+        // switch.
         val watcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
-            override fun afterTextChanged(s: Editable?) {
-                updatePreview()
-                scheduleSave()
-            }
+            override fun afterTextChanged(s: Editable?) = scheduleSave()
         }
-        listOf(
-            inputName,
-            inputDetails,
-            inputState,
-            inputLargeImage,
-            inputSmallImage,
-            inputApplicationId,
-            inputToken,
-            inputButton1Label,
-            inputButton1Url,
-            inputButton2Label,
-            inputButton2Url
-        ).forEach { it.addTextChangedListener(watcher) }
-        updatePreview()
-    }
-
-    private fun updatePreview() {
-        val headline = inputName.text?.toString().orEmpty()
-            .ifBlank { getString(R.string.discord_preview_playing) }
-        val details = inputDetails.text?.toString().orEmpty()
-        val state = inputState.text?.toString().orEmpty()
-
-        textPreviewHeadline.text = headline.take(128)
-        textPreviewDetails.text = details.take(128)
-        textPreviewDetails.visibility = if (details.isBlank()) View.GONE else View.VISIBLE
-        textPreviewState.text = state.take(128)
-        textPreviewState.visibility = if (state.isBlank()) View.GONE else View.VISIBLE
-        updateImagePreview(imagePreviewLarge, inputLargeImage.text?.toString().orEmpty())
-        updateImagePreview(imagePreviewSmall, inputSmallImage.text?.toString().orEmpty())
-    }
-
-    /** Origin of a http(s) URL loads in place; anything else leaves the preview empty. */
-    private fun updateImagePreview(view: ShapeableImageView, value: String) {
-        if (value.startsWith("https://") || value.startsWith("http://")) {
-            view.load(value) { crossfade(true) }
-        } else {
-            view.setImageDrawable(null)
-        }
+        listOf(inputApplicationId, inputToken).forEach { it.addTextChangedListener(watcher) }
     }
 
     private fun save() {
@@ -408,21 +316,6 @@ class DiscordPresenceActivity : AppCompatActivity() {
         )
         // Stored trimmed so a trailing newline from a paste cannot fail the shape check.
         StringSetting.DISCORD_TOKEN.setString(inputToken.text?.toString().orEmpty().trim())
-
-        PresenceCustomization.save(
-            PresenceCustomization(
-                name = inputName.text?.toString().orEmpty(),
-                details = inputDetails.text?.toString().orEmpty(),
-                state = inputState.text?.toString().orEmpty(),
-                largeImage = inputLargeImage.text?.toString().orEmpty().trim(),
-                smallImage = inputSmallImage.text?.toString().orEmpty().trim(),
-                button1Label = inputButton1Label.text?.toString().orEmpty(),
-                button1Url = inputButton1Url.text?.toString().orEmpty().trim(),
-                button2Label = inputButton2Label.text?.toString().orEmpty(),
-                button2Url = inputButton2Url.text?.toString().orEmpty().trim(),
-                showTimestamps = switchTimestamps.isChecked
-            )
-        )
 
         // Nothing survives a restart without this; the settings registry only owns the values.
         NativeConfig.saveGlobalConfig()

@@ -583,26 +583,6 @@
     <string name="discord_token_hint">Pasted here only, never sent anywhere else</string>
     <string name="discord_account_warning">Self-bot mode: this can put your Discord account at risk. Switch to Social SDK to avoid it.</string>
     <string name="discord_social_sdk_missing">Social SDK is not bundled in this build. Add discord_partner_sdk.aar to app/libs and enable the Social SDK for the application.</string>
-    <string name="discord_customise_header">Customise</string>
-    <string name="discord_customise_hint">Optional. Edits save themselves; changes reach Discord straight away.</string>
-    <string name="discord_activity_name">Headline</string>
-    <string name="discord_activity_name_hint">Empty uses the game title</string>
-    <string name="discord_details">Details line</string>
-    <string name="discord_details_hint">Shown under the headline</string>
-    <string name="discord_state">State line</string>
-    <string name="discord_state_hint">Shown under the details</string>
-    <string name="discord_large_image">Large image (optional)</string>
-    <string name="discord_large_image_hint">Empty uses the game cover art automatically</string>
-    <string name="discord_small_image">Small image (optional)</string>
-    <string name="discord_small_image_hint">Any image link, or an asset key</string>
-    <string name="discord_button_one">Button 1</string>
-    <string name="discord_button_two">Button 2</string>
-    <string name="discord_button_label">Label</string>
-    <string name="discord_button_url">https URL</string>
-    <string name="discord_show_timestamps">Show elapsed time</string>
-    <string name="discord_show_timestamps_description">Counts up from when the game started.</string>
-    <string name="discord_preview">Preview</string>
-    <string name="discord_preview_playing">Playing</string>
     <string name="discord_advanced_header">Advanced</string>
     <string name="discord_status_idle">Idle</string>
 
