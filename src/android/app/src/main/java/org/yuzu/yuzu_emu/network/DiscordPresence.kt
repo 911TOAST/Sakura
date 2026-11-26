@@ -466,12 +466,13 @@ object DiscordPresence {
             var large = customisation.largeImage
             if (large.isBlank()) {
                 // Zero-config art: the game's own icon, extracted from the running file and
-                // uploaded to Imgur once per game (cached). Discord's image proxy refuses many
-                // hosts — tinfoil.media included — so the cover URL is only a fallback. A
-                // missing cover simply means no image, never a failed presence.
+                // uploaded once to catbox (no account, no key), then registered through the
+                // external-assets API — the same flow ArchiveTune uses. The tinfoil cover URL
+                // is only a fallback for games whose icon cannot be extracted; a missing cover
+                // simply means no image, never a failed presence.
                 sessionTitleId?.takeIf { it.length >= 14 }?.let { id ->
-                    large = DiscordImageHost.cachedUrl(id)
-                        ?: DiscordImageHost.uploadGameIcon(id, gameIconBytes())
+                    large = DiscordArtUploader.cachedUrl(id)
+                        ?: DiscordArtUploader.uploadGameIcon(id, gameIconBytes())
                         ?: "https://tinfoil.media/ti/${id.lowercase()}/256/256/"
                 }
             }

@@ -18,15 +18,14 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.imageview.ShapeableImageView
 import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.StringSetting
+import org.yuzu.yuzu_emu.network.DiscordArtUploader
 import org.yuzu.yuzu_emu.network.DiscordAuthCoordinator
-import org.yuzu.yuzu_emu.network.DiscordImageHost
 import org.yuzu.yuzu_emu.network.DiscordOAuth
 import org.yuzu.yuzu_emu.network.DiscordPresence
 import org.yuzu.yuzu_emu.utils.NativeConfig
@@ -49,7 +48,6 @@ class DiscordPresenceActivity : AppCompatActivity() {
     private lateinit var textPreviewHeadline: TextView
     private lateinit var textPreviewState: TextView
     private lateinit var textStatus: TextView
-    private lateinit var inputImgurClientId: TextInputEditText
 
     private val statusListener: (String) -> Unit = { message ->
         runOnUiThread { textStatus.text = message }
@@ -92,11 +90,6 @@ class DiscordPresenceActivity : AppCompatActivity() {
         // The switch saves itself the same way: a short debounce, then the change applies and
         // the presence follows. The job dies with the lifecycle, so no save outlives the page.
         switchEnable.setOnCheckedChangeListener { _, _ -> scheduleSave() }
-        inputImgurClientId.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
-            override fun afterTextChanged(s: android.text.Editable?) = scheduleSave()
-        })
     }
 
     private fun scheduleSave() {
@@ -199,7 +192,7 @@ class DiscordPresenceActivity : AppCompatActivity() {
         // The presence prefers the uploaded game icon; the sized tinfoil form is the fallback
         // (the bare /ti/<id>/ URL returns HTTP 503).
         val artwork = preview.titleId?.takeIf { it.length >= 14 }?.let { id ->
-            DiscordImageHost.cachedUrl(id)
+            DiscordArtUploader.cachedUrl(id)
                 ?: "https://tinfoil.media/ti/${id.lowercase()}/256/256/"
         }
         if (artwork != null) {
@@ -228,19 +221,16 @@ class DiscordPresenceActivity : AppCompatActivity() {
         textPreviewHeadline = findViewById(R.id.text_preview_headline)
         textPreviewState = findViewById(R.id.text_preview_state)
         textStatus = findViewById(R.id.text_status)
-        inputImgurClientId = findViewById(R.id.input_imgur_client_id)
     }
 
     private fun loadFromSettings() {
         restoringViews = true
         switchEnable.isChecked = BooleanSetting.DISCORD_RICH_PRESENCE.getBoolean()
-        inputImgurClientId.setText(StringSetting.DISCORD_IMGUR_CLIENT_ID.getString())
         restoringViews = false
     }
 
     private fun save() {
         BooleanSetting.DISCORD_RICH_PRESENCE.setBoolean(switchEnable.isChecked)
-        StringSetting.DISCORD_IMGUR_CLIENT_ID.setString(inputImgurClientId.text?.toString()?.trim().orEmpty())
         // Nothing survives a restart without this; the settings registry only owns the values.
         NativeConfig.saveGlobalConfig()
     }

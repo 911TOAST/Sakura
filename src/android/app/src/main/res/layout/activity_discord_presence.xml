@@ -104,25 +104,6 @@
                 android:textAppearance="?attr/textAppearanceBodySmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
-            <!-- Imgur client id: the only setup the game icon asks for. Discord's own asset
-                 fetcher refuses most anonymous hosts, so the icon is uploaded to Imgur once per
-                 game; the id belongs to the user's own free Imgur application. -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:hint="@string/discord_imgur_client_id"
-                app:helperText="@string/discord_imgur_client_id_helper">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/input_imgur_client_id"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:imeOptions="actionDone"
-                    android:inputType="text"
-                    android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
-
             <!-- Live preview of exactly what the presence says: the running game's title and
                  cover art beside the signed-in account's name. Read-only; updated whenever the
                  page appears or the account changes. -->

@@ -573,8 +573,6 @@
     <string name="discord_preview_no_game">Start a game and its title appears here</string>
     <string name="discord_preview_signed_out">Sign in to publish this presence</string>
     <string name="discord_preview_state">using Sakura emulator</string>
-    <string name="discord_imgur_client_id">Imgur client ID</string>
-    <string name="discord_imgur_client_id_helper">Needed for the game icon on Discord: create a free Imgur application for anonymous uploads at api.imgur.com, then paste its client ID here. Each game icon is uploaded once and remembered.</string>
 
     <string name="discord_rich_presence">Rich Presence</string>
 

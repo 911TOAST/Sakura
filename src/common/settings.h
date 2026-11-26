@@ -1234,14 +1234,6 @@ struct Values {
     // display name. One key rather than four, edited only by the sign-in flow; the tokens are
     // read back only by DiscordPresence and never logged.
     Setting<std::string> discord_oauth_json{linkage, "", "discord_oauth_json", Category::Ui};
-    // Imgur application client id, used to upload the running game's icon somewhere Discord's
-    // image proxy can fetch. Empty means the cover-art fallback is used instead.
-    Setting<std::string> discord_imgur_client_id{linkage, "", "discord_imgur_client_id",
-                                                 Category::Ui};
-    // Uploaded game art, as a JSON map of title id to Imgur URL; written only by
-    // DiscordImageHost so each game is uploaded once.
-    Setting<std::string> discord_art_cache_json{linkage, "", "discord_art_cache_json",
-                                                Category::Ui};
 
     // Add-Ons
     std::map<u64, std::vector<std::string>> disabled_addons;
