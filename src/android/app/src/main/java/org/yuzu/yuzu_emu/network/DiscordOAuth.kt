@@ -218,10 +218,12 @@ object DiscordOAuth {
 
     // ---- HTTP --------------------------------------------------------------
 
-    private fun applicationId(): String =
-        StringSetting.DISCORD_APPLICATION_ID.getString().trim().ifEmpty {
-            DiscordPresence.DEFAULT_APPLICATION_ID
-        }
+    /**
+     * The application ID is pinned. Older builds let it be typed into a settings field, and any
+     * stale value left there would silently sign in against the wrong Discord application, whose
+     * scopes are rejected with "invalid OAuth2 scope". There is nothing to configure any more.
+     */
+    private fun applicationId(): String = DiscordPresence.DEFAULT_APPLICATION_ID
 
     /** No client secret: this is a public client identified by its ID, held in check by PKCE. */
     private fun exchangeCode(code: String, verifier: String): AuthSession =
