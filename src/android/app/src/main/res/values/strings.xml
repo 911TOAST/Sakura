@@ -1509,6 +1509,7 @@
 
     <!-- Audio output engines -->
     <string name="oboe" translatable="false">oboe</string>
+    <string name="aaudio" translatable="false">AAudio</string>
     <string name="cubeb" translatable="false">cubeb</string>
 
     <!-- Anisotropic filtering options -->
