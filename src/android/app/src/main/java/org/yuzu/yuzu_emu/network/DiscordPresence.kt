@@ -157,6 +157,10 @@ object DiscordPresence {
     @Volatile
     private var closedByUs = false
 
+    /** Set when a heartbeat is on the wire, cleared by the gateway's ack or a disconnect. */
+    @Volatile
+    private var awaitingHeartbeatAck = false
+
     private val socialSdk = SocialSdkBridge()
 
     // Access token for the current OAuth session, held only in memory so the gateway listener can
@@ -183,14 +187,17 @@ object DiscordPresence {
         sessionTitle = title
         sessionTitleId = titleId?.takeIf { it.isNotBlank() && it != "0" }
         if (title.isNullOrBlank()) {
-            disconnect()
+            // The game is gone: forget the title so the next launch restarts the elapsed timer,
+            // and any connect still queued sees no game and does nothing.
+            disconnectInternal(keepTitle = false)
+            publish("Disconnected")
             return
         }
         if (!isEnabled()) {
             publish("Rich Presence is off")
             return
         }
-        connect(title)
+        scheduleConnect()
     }
 
     /**
@@ -199,16 +206,24 @@ object DiscordPresence {
      */
     fun reconnectWithCurrentSettings() {
         disconnectInternal(keepTitle = true)
-        val title = sessionTitle
         if (!isEnabled()) {
             publish("Rich Presence is off")
             return
         }
-        if (title.isNullOrBlank()) {
+        if (sessionTitle.isNullOrBlank()) {
             publish("No game running; settings saved")
             return
         }
-        connect(title)
+        scheduleConnect()
+    }
+
+    /**
+     * All of connect()'s real work blocks (token refresh, HTTP) or uses the gateway, and the
+     * callers above run on the main thread; the scheduler thread must own it all, or a due token
+     * refresh becomes an NetworkOnMainThreadException on the game-start path.
+     */
+    private fun scheduleConnect() {
+        scheduler.execute { connect() }
     }
 
     fun disconnect() {
@@ -239,16 +254,26 @@ object DiscordPresence {
 
     // ---- dispatch ---------------------------------------------------------
 
-    private fun connect(title: String) {
+    private fun connect() {
+        val title = sessionTitle
+        // A connect can be queued behind the game that started it stopping; in that window the
+        // honest answer is to do nothing rather than publish a game that no longer runs.
+        if (title.isNullOrBlank() || !isEnabled()) {
+            return
+        }
         mode = currentMode()
         // The presence is never user-configured: it is always the running game. The headline is
         // the game title, the large image falls back to the game's cover art, and where an
         // account is signed in, its display name fills the state line.
+        // The elapsed time survives a reconnect (same game still running) but restarts with a
+        // new session; disconnectInternal(keepTitle = false) clears desiredTitle on game stop.
+        if (title != desiredTitle || startedAt == 0L) {
+            startedAt = System.currentTimeMillis()
+        }
         desiredTitle = title.take(128)
         customisation = PresenceCustomization(
             state = DiscordOAuth.account()?.displayName.orEmpty()
         )
-        startedAt = System.currentTimeMillis()
 
         when (mode) {
             Mode.SOCIAL_SDK -> connectSocialSdk()
@@ -349,6 +374,7 @@ object DiscordPresence {
                 sessionTitle = null
             }
             ready = false
+            awaitingHeartbeatAck = false
             closedByUs = true
             heartbeatFuture?.cancel(false)
             heartbeatFuture = null
@@ -488,7 +514,10 @@ object DiscordPresence {
                     DiscordPresence.sendIdentify(webSocket, token, oauth)
                 }
 
-                OP_HEARTBEAT_ACK -> Unit
+                OP_HEARTBEAT_ACK -> {
+                    // Proof the connection is alive; releases the watchdog in startHeartbeat.
+                    awaitingHeartbeatAck = false
+                }
 
                 OP_DISPATCH -> {
                     if (message.optString("t") == "READY") {
@@ -529,8 +558,24 @@ object DiscordPresence {
             }
         }
 
+        /**
+         * Nulls [webSocket] out as the live socket and reports whether it was something else —
+         * either a socket replaced by a newer connect, or one already torn down by disconnect.
+         * Reacting to a replaced socket's close would schedule a duplicate reconnect on top of
+         * the live one, so stale callbacks must die here.
+         */
+        fun retireSocket(webSocket: WebSocket): Boolean = synchronized(DiscordPresence.lock) {
+            val stale = DiscordPresence.socket !== webSocket
+            if (!stale) {
+                DiscordPresence.socket = null
+            }
+            stale
+        }
+
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            synchronized(DiscordPresence.lock) { DiscordPresence.socket = null }
+            if (retireSocket(webSocket)) {
+                return
+            }
             DiscordPresence.ready = false
             DiscordPresence.stopHeartbeat()
             if (DiscordPresence.closedByUs || DiscordPresence.desiredTitle == null) {
@@ -541,7 +586,9 @@ object DiscordPresence {
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            synchronized(DiscordPresence.lock) { DiscordPresence.socket = null }
+            if (retireSocket(webSocket)) {
+                return
+            }
             DiscordPresence.ready = false
             DiscordPresence.stopHeartbeat()
             if (DiscordPresence.closedByUs || DiscordPresence.desiredTitle == null) {
@@ -658,6 +705,7 @@ object DiscordPresence {
 
     private fun startHeartbeat(webSocket: WebSocket, intervalMs: Long) {
         stopHeartbeat()
+        awaitingHeartbeatAck = false
         if (intervalMs <= 0L) {
             return
         }
@@ -665,6 +713,17 @@ object DiscordPresence {
         val initialDelay = (intervalMs * Math.random()).toLong()
         heartbeatFuture = scheduler.scheduleAtFixedRate(
             {
+                // The gateway must acknowledge every beat. If the previous one was not
+                // acknowledged, the TCP connection is a zombie — a dead Wi-Fi, a NAT drop — and
+                // no amount of waiting on this socket will revive it. Cancelling it surfaces the
+                // death to the reconnect logic, which is the only path back to healthy.
+                if (awaitingHeartbeatAck) {
+                    Log.warning("[DiscordPresence] heartbeat unacknowledged; forcing reconnect")
+                    awaitingHeartbeatAck = false
+                    runCatching { webSocket.cancel() }
+                    return@scheduleAtFixedRate
+                }
+                awaitingHeartbeatAck = true
                 val beat = JSONObject().put("op", OP_HEARTBEAT)
                     .put("d", sequence ?: JSONObject.NULL)
                 webSocket.send(beat.toString())
@@ -690,7 +749,7 @@ object DiscordPresence {
         // would otherwise spin the socket forever in the background.
         val delaySeconds = 1L shl attempt
         scheduler.schedule(
-            { if (desiredTitle != null) connect(desiredTitle!!) },
+            { connect() },
             delaySeconds,
             TimeUnit.SECONDS
         )
