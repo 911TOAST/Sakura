@@ -4,7 +4,7 @@
 package org.yuzu.yuzu_emu.network
 
 import android.net.Uri
-import android.os.Base64
+import android.util.Base64
 import kotlinx.coroutines.flow.MutableSharedFlow
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
