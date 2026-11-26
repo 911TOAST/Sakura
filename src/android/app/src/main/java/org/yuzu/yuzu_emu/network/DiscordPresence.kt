@@ -46,15 +46,6 @@ object DiscordPresence {
      */
     const val DEFAULT_APPLICATION_ID = "1568619623023255604"
 
-    /**
-     * The Sakura launcher icon, straight from the repository: a public https URL the asset
-     * registrar registers against the application on the fly (see [DiscordAssetRegistrar]).
-     * Shown as the small badge on top of the game's cover art. If registration fails — the
-     * repository or file is unreachable — the badge is simply omitted, never a failed presence.
-     */
-    private const val SAKURA_LOGO_URL =
-        "https://raw.githubusercontent.com/911TOAST/Sakura/main/src/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
-
     // The OAuth session identifies as the embedded client; these are its capability and intent
     // bitfields (dedupe user objects, prioritised ready, auto call/lobby connect).
     private const val OAUTH_CAPABILITIES = (1 shl 4) or (1 shl 5) or (1 shl 12) or (1 shl 16)
@@ -243,10 +234,12 @@ object DiscordPresence {
             startedAt = System.currentTimeMillis()
         }
         desiredTitle = title.take(128)
-        // The state line is constant branding rather than the account name; the signed-in
-        // display name moves to the small-asset hover text (small_text) in sendPresenceUpdate.
+        // The state line is constant branding, and the button points at the project. The
+        // signed-in display name still shows in the READY status message on the settings page.
         customisation = PresenceCustomization(
-            state = "using Sakura emulator"
+            state = "using Sakura emulator",
+            button1Label = "View on GitHub",
+            button1Url = "https://github.com/911TOAST/Sakura"
         )
 
         connectOAuth()
@@ -465,27 +458,12 @@ object DiscordPresence {
                     large = "https://tinfoil.media/ti/${id.lowercase()}/"
                 }
             }
-            val resolved = DiscordAssetRegistrar.resolveImages(
-                token,
-                large,
-                customisation.smallImage.ifBlank { SAKURA_LOGO_URL }
-            )
+            val resolved = DiscordAssetRegistrar.resolveImages(token, large, "")
             val assets = JSONObject()
             if (resolved.first.isNotEmpty()) {
                 assets.put("large_image", resolved.first.take(256))
                 // Hover text on the cover art is the game title itself.
                 assets.put("large_text", title.take(128))
-            }
-            if (resolved.second.isNotEmpty()) {
-                assets.put("small_image", resolved.second.take(256))
-                // Hover text on the Sakura badge: the signed-in account's name when there is
-                // one, so the presence keeps identifying the player somewhere.
-                assets.put(
-                    "small_text",
-                    DiscordOAuth.account()?.displayName
-                        ?.takeIf { it.isNotBlank() }
-                        ?.take(128) ?: "Sakura Emulator"
-                )
             }
             if (assets.length() > 0) {
                 activity.put("assets", assets)
