@@ -141,6 +141,17 @@ object DiscordAssetRegistrar {
                     array.optJSONObject(index)
                         ?.optString("external_asset_path", "")
                         ?.takeIf { it.isNotBlank() }
+                        .also { key ->
+                            if (key == null) {
+                                Log.warning(
+                                    "[DiscordAssetRegistrar] no asset path returned for ${urls[index]}"
+                                )
+                            } else {
+                                Log.warning(
+                                    "[DiscordAssetRegistrar] registered ${urls[index]} -> $key"
+                                )
+                            }
+                        }
                 }
             }
         }.onFailure {

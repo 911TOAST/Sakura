@@ -468,6 +468,9 @@ object DiscordPresence {
             }
             if (assets.length() > 0) {
                 activity.put("assets", assets)
+                Log.warning("[DiscordPresence] assets sent: large=${resolved.first.take(64)}")
+            } else {
+                Log.warning("[DiscordPresence] no assets resolved for '$title' (large was '$large')")
             }
 
             activities.put(activity)
