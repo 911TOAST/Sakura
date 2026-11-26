@@ -83,6 +83,14 @@
     <string name="wallpaper_source">View source</string>
     <string name="wallpaper_source_unavailable">Source link could not be opened.</string>
     <string name="wallpaper_permission_error">Could not keep access to this image. Choose a document from another provider.</string>
+    <string name="wallpaper_contributions_title">From other apps</string>
+    <string name="wallpaper_contributions_note">Wallpapers shared into Sakura from other apps. Share an image to Sakura, or use the org.yuzu.yuzu_emu.action.CONTRIBUTE_WALLPAPER intent.</string>
+    <string name="wallpaper_contributions_empty">No shared wallpapers yet</string>
+    <string name="wallpaper_contributions_fallback_title">Shared wallpaper</string>
+    <string name="wallpaper_contribution_label">Add to library backgrounds</string>
+    <string name="wallpaper_contribution_added">Wallpaper added — find it under Library background → From other apps</string>
+    <string name="wallpaper_contribution_applied">Wallpaper applied</string>
+    <string name="wallpaper_contribution_failed">Could not add that wallpaper. Images up to 24 MB, JPEG/PNG/WebP.</string>
     <string-array name="wallpaper_orientations"><item>Any</item><item>Landscape</item><item>Portrait</item><item>Square</item></string-array>
     <string-array name="wallpaper_resolutions"><item>Any</item><item>HD (1080p)</item><item>4K (2160p)</item></string-array>
     <string-array name="wallpaper_sorts"><item>Relevance</item><item>Newest</item><item>Popular</item></string-array>

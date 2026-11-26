@@ -41,6 +41,7 @@ import org.yuzu.yuzu_emu.features.settings.ui.respectReducedMotion
 import org.yuzu.yuzu_emu.features.settings.ui.wallpaperColumns
 import org.yuzu.yuzu_emu.utils.background.OnlineBackground
 import org.yuzu.yuzu_emu.utils.background.SecureBackgroundStore
+import org.yuzu.yuzu_emu.utils.background.WallpaperContributions
 import org.yuzu.yuzu_emu.utils.background.WallpaperImages
 import org.yuzu.yuzu_emu.utils.background.WallpaperRenderer
 import org.yuzu.yuzu_emu.utils.background.WallpaperSelection
@@ -57,6 +58,7 @@ class WallpaperHubFragment : Fragment() {
     private var previewGeneration = 0L
     private val recommendationAdapters = mutableListOf<OnlineBackgroundAdapter>()
     private var popularAdapter: OnlineBackgroundAdapter? = null
+    private var contributionsAdapter: OnlineBackgroundAdapter? = null
     private var applyingPreference = false
     private var renderedRecommendations: Any? = null
 
@@ -95,6 +97,24 @@ class WallpaperHubFragment : Fragment() {
         binding.wallpaperPopularGrid.adapter = popularAdapter
         binding.wallpaperPopularGrid.respectReducedMotion()
 
+        // Shared-in wallpapers decode their thumbnails from local encrypted bytes, never
+        // the network; the hook is what keeps them off WallpaperHttp entirely.
+        contributionsAdapter = OnlineBackgroundAdapter(
+            viewLifecycleOwner,
+            { openEditor(it) },
+            localThumbnail = { item ->
+                item.thumb.removePrefix("contribution:").takeIf { prefixStripped ->
+                    prefixStripped != item.thumb
+                }?.let { id ->
+                    WallpaperContributions.thumbnail(requireContext().applicationContext, id)
+                }
+            }
+        )
+        binding.wallpaperContributionsGrid.layoutManager =
+            GridLayoutManager(requireContext(), wallpaperColumns(requireContext()))
+        binding.wallpaperContributionsGrid.adapter = contributionsAdapter
+        binding.wallpaperContributionsGrid.respectReducedMotion()
+
         binding.wallpaperEdit.setOnClickListener {
             viewModel.beginEdit(WallpaperSelection(viewModel.committed.value.uri))
             findNavController().navigate(R.id.wallpaperEditorFragment)
@@ -125,7 +145,16 @@ class WallpaperHubFragment : Fragment() {
     }
 
     private fun openEditor(item: OnlineBackground) {
-        viewModel.beginEdit(WallpaperSelection(online = item))
+        // Contributed wallpapers carry their pixels locally; they open as encrypted-selection
+        // drafts, not as online downloads (they have no full URL at all).
+        val selection = if (item.thumb.startsWith("contribution:")) {
+            WallpaperSelection(
+                WallpaperContributions.uriFor(item.thumb.removePrefix("contribution:"))
+            )
+        } else {
+            WallpaperSelection(online = item)
+        }
+        viewModel.beginEdit(selection)
         findNavController().navigate(R.id.wallpaperEditorFragment)
     }
 
@@ -161,6 +190,13 @@ class WallpaperHubFragment : Fragment() {
             else -> ""
         }
         binding.wallpaperPopularStatus.isVisible = binding.wallpaperPopularStatus.text.isNotEmpty()
+
+        val contributed = contributionsAdapter ?: return
+        contributed.submit(state.contributions)
+        binding.wallpaperContributionsStatus.text =
+            if (state.contributions.isEmpty()) getString(R.string.wallpaper_contributions_empty) else ""
+        binding.wallpaperContributionsStatus.isVisible =
+            binding.wallpaperContributionsStatus.text.isNotEmpty()
     }
 
     private fun renderRecommendations(state: WallpaperHubState) {
@@ -246,6 +282,7 @@ class WallpaperHubFragment : Fragment() {
         recommendationAdapters.clear()
         renderedRecommendations = null
         popularAdapter = null
+        contributionsAdapter = null
         _binding = null
     }
 }

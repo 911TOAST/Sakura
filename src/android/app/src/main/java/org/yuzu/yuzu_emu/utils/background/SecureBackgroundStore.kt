@@ -57,7 +57,8 @@ object SecureBackgroundStore {
     fun selectionFile(context: Context): File = File(File(context.filesDir, DIRECTORY), FILE_NAME)
 
     fun isEncryptedSelection(uri: String): Boolean = uri == SELECTION_URI ||
-        (uri.startsWith("$SELECTION_URI/") && VERSION.matches(uri.substringAfterLast('/')))
+        (uri.startsWith("$SELECTION_URI/") && VERSION.matches(uri.substringAfterLast('/'))) ||
+        WallpaperContributions.isContributionUri(uri)
 
     private val VERSION = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
@@ -65,8 +66,12 @@ object SecureBackgroundStore {
 
     private fun fileFor(uri: String): File {
         require(isEncryptedSelection(uri))
-        return if (uri == SELECTION_URI) selectionFile(context())
-        else File(selectionFile(context()).parentFile, "${uri.substringAfterLast('/')}.bin")
+        return when {
+            uri == SELECTION_URI -> selectionFile(context())
+            WallpaperContributions.isContributionUri(uri) ->
+                WallpaperContributions.fileFor(context(), uri)
+            else -> File(selectionFile(context()).parentFile, "${uri.substringAfterLast('/')}.bin")
+        }
     }
 
     private fun metadataKey(uri: String): String = if (uri == SELECTION_URI) PREF_METADATA else uri
@@ -113,6 +118,10 @@ object SecureBackgroundStore {
             temp.delete()
         }
     }
+
+    /** Contribution blobs share the same keystore key and on-disk format as selections. */
+    @Synchronized
+    fun writeEncryptedFile(file: File, bytes: ByteArray) = writeEncrypted(file, bytes)
 
     /** Called only after a successful commit. Abandoned encrypted drafts are safe to remove. */
     @Synchronized
@@ -184,6 +193,10 @@ object SecureBackgroundStore {
     @Synchronized
     fun readMetadata(uri: String = activeUri()): BackgroundMetadata? {
         if (!isEncryptedSelection(uri)) return null
+        // Contributions keep their attribution in the contributions index instead.
+        if (WallpaperContributions.isContributionUri(uri)) {
+            return WallpaperContributions.readMetadata(uri)
+        }
         val raw = preferences().getString(metadataKey(uri), null) ?: return null
         return runCatching {
             val json = JSONObject(raw)

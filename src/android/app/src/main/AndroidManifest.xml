@@ -154,6 +154,27 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </intent-filter>
         </activity>
 
+        <!-- Wallpaper contribution API: other apps hand over an image for the library
+             background. Translucent rather than NoDisplay because the work (stream read,
+             encryption) happens asynchronously before finish(). -->
+        <activity
+            android:name="org.yuzu.yuzu_emu.activities.WallpaperContributionActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:label="@string/wallpaper_contribution_label"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="org.yuzu.yuzu_emu.action.CONTRIBUTE_WALLPAPER"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/*"/>
+            </intent-filter>
+        </activity>
+
         <activity
             android:name="org.yuzu.yuzu_emu.features.dashboard.PerfDashboardActivity"
             android:theme="@style/Theme.Yuzu.Main"

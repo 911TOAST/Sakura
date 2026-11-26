@@ -86,6 +86,54 @@ without an API key. They are downloaded only when chosen.
 Only ship images you have the right to distribute. The catalog stores `author` and `source` so
 attribution can be shown, and the built-in provider is credited in this file and in the picker.
 
+## Contributing wallpapers from other apps
+
+Any Android app can hand Sakura an image for the library background. Contributions are stored
+encrypted at rest (same Keystore AES-GCM scheme as the selections above) and appear in the
+wallpaper hub under **From other apps**, where the user reviews and applies them. Contributing
+never silently replaces the current background.
+
+Two entry points, both exported on `WallpaperContributionActivity`:
+
+1. **The share sheet** — plain `ACTION_SEND` with `image/*` and the image in `EXTRA_STREAM`.
+   Any gallery app can do this with no code and no dependency on Sakura.
+2. **The documented action** — `org.yuzu.yuzu_emu.action.CONTRIBUTE_WALLPAPER`, image in
+   `intent.data` or `EXTRA_STREAM` (a `content://` URI the caller makes readable, as with a
+   normal share), plus these optional extras:
+
+| Extra | Type | Meaning |
+|---|---|---|
+| `org.yuzu.yuzu_emu.extra.TITLE` | String | Display title, up to 100 characters. |
+| `org.yuzu.yuzu_emu.extra.AUTHOR` | String | Attribution line, up to 100 characters. |
+| `org.yuzu.yuzu_emu.extra.SOURCE` | String | https page the image came from. |
+| `org.yuzu.yuzu_emu.extra.APPLY` | Boolean | Also make it the current background. Default off. |
+
+On success the activity returns `RESULT_OK` with `org.yuzu.yuzu_emu.extra.ID` (the contribution
+id) and `org.yuzu.yuzu_emu.extra.APPLIED`. On rejection it returns the regular result code and
+shows a toast; Sakura's acceptance rules are the same as everywhere else: JPEG/PNG/WebP, at
+most 24 MiB, sane dimensions, at most 32 stored contributions (oldest evicted).
+
+Minimal contributor example:
+
+```kotlin
+val uri = FileProvider.getUriForFile(context, authority, file)
+context.grantUriPermission("org.yuzu.yuzu_emu", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+context.startActivity(
+    Intent("org.yuzu.yuzu_emu.action.CONTRIBUTE_WALLPAPER")
+        .setDataAndType(uri, "image/png")
+        .putExtra("org.yuzu.yuzu_emu.extra.TITLE", "My wallpaper")
+        .putExtra("org.yuzu.yuzu_emu.extra.AUTHOR", "My app")
+        .putExtra("org.yuzu.yuzu_emu.extra.APPLY", true)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+)
+```
+
+Trust notes: the activity is exported, so everything from the caller is untrusted input — sizes
+are capped, text extras are length-capped, claimed source URLs must be https, and a caller can
+only ever add to the reviewable "From other apps" list unless it explicitly passes `APPLY`.
+Contribution blobs live in `files/secure_background/contributions/` and share the selection
+Keystore key, so the same backup/root protections apply as for the rest of the store.
+
 ## Privacy summary
 
 - No analytics or third-party SDK is involved.

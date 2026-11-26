@@ -29,7 +29,13 @@ import org.yuzu.yuzu_emu.utils.background.WallpaperImages
 /** Thumbnail grid for the online background browser. */
 class OnlineBackgroundAdapter(
     private val owner: LifecycleOwner,
-    private val onClick: (OnlineBackground) -> Unit
+    private val onClick: (OnlineBackground) -> Unit,
+    /**
+     * Optional local thumbnail source, consulted before the network: items whose pixels live
+     * on device (contributed wallpapers) return their decoded bitmap here; null falls through
+     * to the https thumbnail URL path.
+     */
+    private val localThumbnail: ((OnlineBackground) -> Bitmap?)? = null
 ) : ListAdapter<OnlineBackground, OnlineBackgroundAdapter.ViewHolder>(DIFF) {
 
     init { stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY }
@@ -106,7 +112,11 @@ class OnlineBackgroundAdapter(
             binding.backgroundProgress.visibility = View.VISIBLE
             job = owner.lifecycleScope.launch {
                 try {
-                    val bitmap = thumbnails.get(value.thumb) ?: withContext(Dispatchers.IO) {
+                    // Local pixels first: contributed wallpapers decode from their encrypted
+                    // blob on IO, never the network; null falls through to the https path.
+                    val bitmap = withContext(Dispatchers.IO) {
+                        localThumbnail?.invoke(value)?.takeIf { !it.isRecycled }
+                    } ?: thumbnails.get(value.thumb) ?: withContext(Dispatchers.IO) {
                         val bytes = WallpaperHttp.get(value.thumb, image = true)
                         WallpaperImages.decode(bytes, maxEdge = 512).also { thumbnails.put(value.thumb, it) }
                     }

@@ -27,6 +27,7 @@ import org.yuzu.yuzu_emu.utils.background.LoadedWallpaper
 import org.yuzu.yuzu_emu.utils.background.OnlineBackground
 import org.yuzu.yuzu_emu.utils.background.OnlineBackgroundCatalog
 import org.yuzu.yuzu_emu.utils.background.SecureBackgroundStore
+import org.yuzu.yuzu_emu.utils.background.WallpaperContributions
 import org.yuzu.yuzu_emu.utils.background.WallpaperImages
 import org.yuzu.yuzu_emu.utils.background.WallpaperRateLimitException
 import org.yuzu.yuzu_emu.utils.background.WallpaperProviders
@@ -60,7 +61,8 @@ data class WallpaperHubState(
     val recommendationError: WallpaperFailure? = null,
     val popular: List<OnlineBackground> = emptyList(),
     val popularLoading: Boolean = false,
-    val popularError: WallpaperFailure? = null
+    val popularError: WallpaperFailure? = null,
+    val contributions: List<OnlineBackground> = emptyList()
 )
 
 @Serializable
@@ -204,6 +206,14 @@ class WallpaperViewModel(application: Application, private val saved: SavedState
     /** Called on hub visits or explicit refresh; no timer or automatic wallpaper rotation. */
     fun refreshHub(force: Boolean = false) {
         _committed.value = WallpaperSettings.read()
+        // Contributions are read fresh on every hub visit: another app may have shared one
+        // into Sakura while the hub was in the background.
+        viewModelScope.launch {
+            val contributed = withContext(Dispatchers.IO) {
+                WallpaperContributions.listOnline(getApplication())
+            }
+            _hub.value = _hub.value.copy(contributions = contributed)
+        }
         if (popularJob?.isActive != true || force) {
             popularJob?.cancel()
             _hub.value = _hub.value.copy(popularLoading = true, popularError = null)
