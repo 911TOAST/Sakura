@@ -135,7 +135,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
             android:windowSoftInputMode="adjustResize"/>
 
         <!-- Return stop for "Sign in with Discord": the browser lands here with the OAuth
-             redirect, the activity hands it to the sign-in flow and finishes immediately. -->
+             redirect, the activity hands it to the sign-in flow and finishes immediately. Two
+             schemes: `discord-<app id>` is the one Discord's portal accepts for mobile apps and
+             the one the sign-in flow now asks for; `sakura` remains tolerated for older builds. -->
         <activity
             android:name="org.yuzu.yuzu_emu.activities.DiscordOAuthCallbackActivity"
             android:theme="@android:style/Theme.NoDisplay"
@@ -147,6 +149,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="discord-1568619623023255604"/>
                 <data android:scheme="sakura"/>
             </intent-filter>
         </activity>

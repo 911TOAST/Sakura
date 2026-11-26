@@ -47,10 +47,16 @@ object DiscordOAuth {
     private const val TOKEN_ENDPOINT = "https://discord.com/api/oauth2/token"
     private const val CURRENT_USER_ENDPOINT = "https://discord.com/api/v10/users/@me"
 
-    /** Ask Discord to come back to `sakura:/authorize/callback`. Register exactly this value. */
-    const val REDIRECT_URI = "sakura:/authorize/callback"
-    const val REDIRECT_SCHEME = "sakura"
+    /**
+     * The redirect must follow Discord's mobile-app convention, scheme `discord-<application id>`,
+     * because that is the shape of custom scheme the developer portal accepts and the browser
+     * dispatches back. The callback activity's intent-filter carries the default application id.
+     */
     const val REDIRECT_PATH = "/authorize/callback"
+
+    fun redirectScheme(): String = "discord-" + applicationId()
+
+    fun redirectUri(): String = "${redirectScheme()}:$REDIRECT_PATH"
 
     private const val SCOPES = "openid identify sdk.social_layer_presence"
 
@@ -174,7 +180,7 @@ object DiscordOAuth {
         val uri = Uri.parse(AUTHORIZATION_ENDPOINT).buildUpon()
             .appendQueryParameter("client_id", applicationId())
             .appendQueryParameter("response_type", "code")
-            .appendQueryParameter("redirect_uri", REDIRECT_URI)
+            .appendQueryParameter("redirect_uri", redirectUri())
             .appendQueryParameter("scope", SCOPES)
             .appendQueryParameter("state", state)
             .appendQueryParameter("code_challenge", challenge)
@@ -190,7 +196,7 @@ object DiscordOAuth {
      */
     fun completeAuthorization(session: Session, redirect: Uri): Result<AuthSession> {
         return runCatching {
-            check(redirect.scheme == REDIRECT_SCHEME) { "Unexpected redirect scheme" }
+            check(redirect.scheme == redirectScheme()) { "Unexpected redirect scheme" }
             check(redirect.path == REDIRECT_PATH) { "Unexpected redirect target" }
             check(redirect.getQueryParameter("state") == session.state) {
                 "Authorisation state mismatch"
@@ -208,7 +214,7 @@ object DiscordOAuth {
 
     /** True when the URI looks like our redirect, so the callback activity can ignore the rest. */
     fun isRedirectUri(uri: Uri?): Boolean =
-        uri != null && uri.scheme == REDIRECT_SCHEME && uri.path == REDIRECT_PATH
+        uri != null && uri.scheme == redirectScheme() && uri.path == REDIRECT_PATH
 
     // ---- HTTP --------------------------------------------------------------
 
@@ -224,7 +230,7 @@ object DiscordOAuth {
                 .add("client_id", applicationId())
                 .add("grant_type", "authorization_code")
                 .add("code", code)
-                .add("redirect_uri", REDIRECT_URI)
+                .add("redirect_uri", redirectUri())
                 .add("code_verifier", verifier)
                 .build()
         )
