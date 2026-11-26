@@ -184,6 +184,47 @@ private:
             return false;
         }
 
+        // The MMAP exclusive grant can come back with a different native rate on
+        // some MediaTek policies. A rate we did not ask for breaks the timing
+        // assumptions of the renderer, so reject it and re-open shared, where the
+        // driver resamples for us.
+        if (const auto actual_rate = AAudioStream_getSampleRate(stream);
+            actual_rate != static_cast<int32_t>(TargetSampleRate)) {
+            LOG_WARNING(Audio_Sink, "AAudio granted rate {} instead of {}, reopening shared",
+                        actual_rate, TargetSampleRate);
+            AAudioStream_close(stream);
+            stream = nullptr;
+
+            AAudioStreamBuilder* rebuild{};
+            if (AAudio_createStreamBuilder(&rebuild) != AAUDIO_OK) {
+                LOG_ERROR(Audio_Sink, "Failed to create AAudio stream builder for rate retry");
+                return false;
+            }
+            AAudioStreamBuilder_setDirection(
+                rebuild, is_input ? AAUDIO_DIRECTION_INPUT : AAUDIO_DIRECTION_OUTPUT);
+            AAudioStreamBuilder_setPerformanceMode(rebuild, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+            AAudioStreamBuilder_setSampleRate(rebuild, TargetSampleRate);
+            AAudioStreamBuilder_setFormat(rebuild, AAUDIO_FORMAT_PCM_I16);
+            AAudioStreamBuilder_setChannelCount(rebuild, expected_channels);
+            AAudioStreamBuilder_setBufferCapacityInFrames(rebuild, TargetSampleCount * 2);
+            AAudioStreamBuilder_setDataCallback(rebuild, DataCallbackThunk, this);
+            AAudioStreamBuilder_setErrorCallback(rebuild, ErrorCallbackThunk, this);
+            if (!is_input && ApiLevelAtLeast(28)) {
+                if (const SetUsageFn set_usage = GetSetUsageFn()) {
+                    set_usage(rebuild, AAUDIO_USAGE_GAME);
+                }
+            }
+            result = AAudioStreamBuilder_openStream(rebuild, &stream);
+            AAudioStreamBuilder_delete(rebuild);
+
+            if (result != AAUDIO_OK) {
+                stream = nullptr;
+                LOG_ERROR(Audio_Sink, "Failed to open shared AAudio stream after rate retry: {}",
+                          AAudio_convertResultToText(result));
+                return false;
+            }
+        }
+
         this->SetStreamProperties();
         return true;
     }
