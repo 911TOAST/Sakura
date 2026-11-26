@@ -202,6 +202,16 @@ object DiscordOAuth {
                 "Authorisation state mismatch"
             }
             redirect.getQueryParameter("error")?.let { error ->
+                if (error == "invalid_scope") {
+                    // Discord only grants sdk.social_layer_presence to applications that have
+                    // Social SDK access enabled in the developer portal, so this error means the
+                    // application needs that opt-in — not that the user did anything wrong.
+                    throw IllegalStateException(
+                        "Discord declined this application's sign-in: its Social SDK access is " +
+                            "not enabled. Enable the Social SDK for the application in the " +
+                            "Discord developer portal, then sign in again."
+                    )
+                }
                 throw IllegalStateException(redirect.getQueryParameter("error_description") ?: error)
             }
             val code = checkNotNull(redirect.getQueryParameter("code")) {
