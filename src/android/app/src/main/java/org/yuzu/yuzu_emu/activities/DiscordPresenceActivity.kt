@@ -37,12 +37,13 @@ import org.yuzu.yuzu_emu.network.PresenceCustomization
 import org.yuzu.yuzu_emu.utils.NativeConfig
 
 /**
- * Full-page editor for Discord Rich Presence.
+ * Discord Rich Presence, built around "sign in once, never touch it again".
  *
- * The page owns every Discord setting, so the settings list only has to carry one entry that
- * opens it. Fields are read from settings on create and written back on save; nothing is applied
- * live while typing, because half-typed credentials would otherwise reach the gateway on every
- * keystroke.
+ * The top of the page is the whole setup: the switch and the sign-in card. Every edit anywhere on
+ * the page is saved automatically a moment after typing stops and reconnects, so there is no save
+ * button to forget. Customisation (text, images, buttons) is collapsed under "Customise";
+ * transports and credentials — only relevant when sign-in is not an option — are collapsed under
+ * "Advanced", so the default view never asks a question the user does not have to answer.
  */
 class DiscordPresenceActivity : AppCompatActivity() {
 
@@ -54,6 +55,10 @@ class DiscordPresenceActivity : AppCompatActivity() {
     private lateinit var textSignedIn: TextView
     private lateinit var imagePreviewLarge: ShapeableImageView
     private lateinit var imagePreviewSmall: ShapeableImageView
+    private lateinit var headerCustomise: TextView
+    private lateinit var containerCustomise: View
+    private lateinit var headerAdvanced: TextView
+    private lateinit var containerAdvanced: View
     private lateinit var textModeSummary: TextView
     private lateinit var textSocialSdkMissing: TextView
     private lateinit var textWarning: TextView
@@ -83,6 +88,11 @@ class DiscordPresenceActivity : AppCompatActivity() {
     /** The authorisation currently in flight in the browser, or null between attempts. */
     private var authorizationSession: DiscordOAuth.Session? = null
 
+    /** True while the views are being filled from settings, so loading does not auto-save. */
+    private var restoringViews = true
+
+    private var saveJob: kotlinx.coroutines.Job? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_discord_presence)
@@ -100,17 +110,9 @@ class DiscordPresenceActivity : AppCompatActivity() {
         loadFromSettings()
         wireModeSelection()
         wirePreview()
-
-        findViewById<MaterialButton>(R.id.button_save).setOnClickListener { save() }
-        findViewById<MaterialButton>(R.id.button_apply).setOnClickListener {
-            save()
-            // Reconnecting reads the settings back, so the transport change takes effect now
-            // instead of at the next game launch.
-            DiscordPresence.reconnectWithCurrentSettings()
-        }
-        findViewById<MaterialButton>(R.id.button_disconnect).setOnClickListener {
-            DiscordPresence.disconnect()
-        }
+        wireSectionToggles()
+        wireAutoSave()
+        refreshSignInCard()
 
         buttonSignIn.setOnClickListener { launchSignIn() }
         buttonSignOut.setOnClickListener {
@@ -118,6 +120,46 @@ class DiscordPresenceActivity : AppCompatActivity() {
             NativeConfig.saveGlobalConfig()
             refreshSignInCard()
         }
+    }
+
+    /** Collapsed sections keep the default view to two controls; headers are the toggles. */
+    private fun wireSectionToggles() {
+        val toggle = { expanded: Boolean, container: View ->
+            container.visibility = if (expanded) View.VISIBLE else View.GONE
+        }
+        headerCustomise.setOnClickListener {
+            toggle(containerCustomise.visibility != View.VISIBLE, containerCustomise)
+        }
+        headerAdvanced.setOnClickListener {
+            toggle(containerAdvanced.visibility != View.VISIBLE, containerAdvanced)
+        }
+    }
+
+    /**
+     * Every edit saves itself. A short debounce groups a paste or a burst of keystrokes into one
+     * write and one reconnect; the job dies with the lifecycle, so no save outlives the page.
+     */
+    private fun wireAutoSave() {
+        switchEnable.setOnCheckedChangeListener { _, _ -> scheduleSave() }
+        switchTimestamps.setOnCheckedChangeListener { _, _ -> scheduleSave() }
+    }
+
+    private fun scheduleSave() {
+        if (restoringViews) {
+            return
+        }
+        saveJob?.cancel()
+        saveJob = lifecycleScope.launch {
+            kotlinx.coroutines.delay(800)
+            saveAndReconnect()
+        }
+    }
+
+    private fun saveAndReconnect() {
+        save()
+        // Reconnecting reads the settings back, so an edit takes effect now instead of at the
+        // next game launch; with no game running it is a no-op that just reports state.
+        DiscordPresence.reconnectWithCurrentSettings()
     }
 
     override fun onStart() {
@@ -142,8 +184,9 @@ class DiscordPresenceActivity : AppCompatActivity() {
                 result.onSuccess { authSession ->
                     authorizationSession = null
                     DiscordOAuth.saveSession(authSession)
-                    // Signing in IS choosing the transport: onSignedIn sets the mode, saves the
-                    // config and connects at once.
+                    // Signing in IS choosing the transport and enabling presence: no second
+                    // switch to find. onSignedIn sets the mode, saves the config and connects.
+                    switchEnable.isChecked = true
                     DiscordPresence.onSignedIn()
                     NativeConfig.saveGlobalConfig()
                     groupMode.check(R.id.mode_oauth)
@@ -206,6 +249,10 @@ class DiscordPresenceActivity : AppCompatActivity() {
         textSignedIn = findViewById(R.id.text_signed_in)
         imagePreviewLarge = findViewById(R.id.image_preview_large)
         imagePreviewSmall = findViewById(R.id.image_preview_small)
+        headerCustomise = findViewById(R.id.header_customise)
+        containerCustomise = findViewById(R.id.container_customise)
+        headerAdvanced = findViewById(R.id.header_advanced)
+        containerAdvanced = findViewById(R.id.container_advanced)
         textModeSummary = findViewById(R.id.text_mode_summary)
         textSocialSdkMissing = findViewById(R.id.text_social_sdk_missing)
         textWarning = findViewById(R.id.text_warning)
@@ -230,6 +277,7 @@ class DiscordPresenceActivity : AppCompatActivity() {
     }
 
     private fun loadFromSettings() {
+        restoringViews = true
         switchEnable.isChecked = BooleanSetting.DISCORD_RICH_PRESENCE.getBoolean()
 
         when (DiscordPresence.Mode.fromStored(IntSetting.DISCORD_PRESENCE_MODE.getInt())) {
@@ -255,6 +303,7 @@ class DiscordPresenceActivity : AppCompatActivity() {
         switchTimestamps.isChecked = customisation.showTimestamps
 
         applyModeVisibility(selectedMode())
+        restoringViews = false
     }
 
     private fun selectedMode(): DiscordPresence.Mode = when (groupMode.checkedRadioButtonId) {
@@ -265,7 +314,10 @@ class DiscordPresenceActivity : AppCompatActivity() {
     }
 
     private fun wireModeSelection() {
-        groupMode.setOnCheckedChangeListener { _, _ -> applyModeVisibility(selectedMode()) }
+        groupMode.setOnCheckedChangeListener { _, _ ->
+            applyModeVisibility(selectedMode())
+            scheduleSave()
+        }
     }
 
     /**
@@ -303,14 +355,23 @@ class DiscordPresenceActivity : AppCompatActivity() {
         val watcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
-            override fun afterTextChanged(s: Editable?) = updatePreview()
+            override fun afterTextChanged(s: Editable?) {
+                updatePreview()
+                scheduleSave()
+            }
         }
         listOf(
             inputName,
             inputDetails,
             inputState,
             inputLargeImage,
-            inputSmallImage
+            inputSmallImage,
+            inputApplicationId,
+            inputToken,
+            inputButton1Label,
+            inputButton1Url,
+            inputButton2Label,
+            inputButton2Url
         ).forEach { it.addTextChangedListener(watcher) }
         updatePreview()
     }
@@ -365,6 +426,5 @@ class DiscordPresenceActivity : AppCompatActivity() {
 
         // Nothing survives a restart without this; the settings registry only owns the values.
         NativeConfig.saveGlobalConfig()
-        textStatus.text = getString(R.string.discord_saved)
     }
 }
