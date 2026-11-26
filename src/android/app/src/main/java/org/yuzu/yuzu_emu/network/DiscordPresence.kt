@@ -61,6 +61,9 @@ object DiscordPresence {
     private const val OP_HELLO = 10
     private const val OP_HEARTBEAT_ACK = 11
 
+    /** How long to wait before re-sending a presence whose art was registered moments ago. */
+    private const val ASSET_REFRESH_DELAY_MS = 5000L
+
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             // The gateway requires its own heartbeat interval; OkHttp's ping is redundant.
@@ -106,6 +109,9 @@ object DiscordPresence {
 
     @Volatile
     private var heartbeatFuture: java.util.concurrent.ScheduledFuture<*>? = null
+
+    @Volatile
+    private var assetRefreshFuture: java.util.concurrent.ScheduledFuture<*>? = null
 
     @Volatile
     private var sequence: Long? = null
@@ -296,6 +302,8 @@ object DiscordPresence {
             closedByUs = true
             heartbeatFuture?.cancel(false)
             heartbeatFuture = null
+            assetRefreshFuture?.cancel(false)
+            assetRefreshFuture = null
             socket?.close(1000, null)
             socket = null
         }
@@ -469,6 +477,13 @@ object DiscordPresence {
             if (assets.length() > 0) {
                 activity.put("assets", assets)
                 Log.warning("[DiscordPresence] assets sent: large=${resolved.first.take(64)}")
+                // A freshly registered asset key is handed back before Discord's servers have
+                // finished fetching the image itself, so the first presence can render a
+                // placeholder. Re-send once the fetch has had time to land; Discord re-renders
+                // the card on every update. Cached art skips this entirely.
+                if (DiscordAssetRegistrar.consumeFreshRegistration()) {
+                    scheduleAssetRefresh(webSocket)
+                }
             } else {
                 Log.warning("[DiscordPresence] no assets resolved for '$title' (large was '$large')")
             }
@@ -485,6 +500,23 @@ object DiscordPresence {
                 .put("afk", false)
         )
         webSocket.send(payload.toString())
+    }
+
+    /**
+     * One delayed re-send of the presence, giving Discord's asset fetcher a window to finish
+     * before the card is rendered again. Only fires while the same socket is still live.
+     */
+    private fun scheduleAssetRefresh(webSocket: WebSocket) {
+        assetRefreshFuture?.cancel(false)
+        assetRefreshFuture = scheduler.schedule({
+            val live = synchronized(lock) {
+                if (ready && socket === webSocket) webSocket else null
+            }
+            if (live != null) {
+                Log.warning("[DiscordPresence] re-sending presence for freshly registered art")
+                sendPresenceUpdate(live)
+            }
+        }, ASSET_REFRESH_DELAY_MS, TimeUnit.MILLISECONDS)
     }
 
     private fun startHeartbeat(webSocket: WebSocket, intervalMs: Long) {

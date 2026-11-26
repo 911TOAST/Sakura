@@ -40,8 +40,23 @@ object DiscordAssetRegistrar {
 
     private val cache = ConcurrentHashMap<String, String>()
 
+    /**
+     * Set when a URL was registered just now (not served from cache). Discord hands back the
+     * asset key immediately but fetches the actual image in the background, so the first presence
+     * referencing a brand-new key can render before the art exists. [consumeFreshRegistration]
+     * lets the caller re-send the presence once the fetch has had time to land.
+     */
+    @Volatile private var freshRegistrationPending = false
+
+    fun consumeFreshRegistration(): Boolean {
+        val pending = freshRegistrationPending
+        freshRegistrationPending = false
+        return pending
+    }
+
     fun clearCache() {
         cache.clear()
+        freshRegistrationPending = false
     }
 
     /**
@@ -64,6 +79,7 @@ object DiscordAssetRegistrar {
             registerBatch(accessToken, pending).forEachIndexed { index, key ->
                 if (key != null) {
                     cache[pending[index]] = key
+                    freshRegistrationPending = true
                 }
             }
         }
