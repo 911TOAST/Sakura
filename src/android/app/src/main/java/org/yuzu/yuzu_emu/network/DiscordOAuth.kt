@@ -126,7 +126,9 @@ object DiscordOAuth {
         StringSetting.DISCORD_OAUTH_JSON.setString("")
     }
 
-    fun isSignedIn(): Boolean = !readStored().isNullOrBlank()
+    // readStored() returns null whenever there is no document or the token inside is blank, so a
+    // session "exists" exactly when it parses out with a usable token.
+    fun isSignedIn(): Boolean = readStored() != null
 
     fun account(): Account? = readStored()?.account
 
