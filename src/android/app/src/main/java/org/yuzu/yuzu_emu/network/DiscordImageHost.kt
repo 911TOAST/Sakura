@@ -77,7 +77,9 @@ object DiscordImageHost {
                 }
                 val cache = artCache().toMutableMap()
                 cache[id] = url
-                StringSetting.DISCORD_ART_CACHE_JSON.setString(JSONObject(cache).toString())
+                val cacheJson = JSONObject()
+                cache.forEach { (key, value) -> cacheJson.put(key, value) }
+                StringSetting.DISCORD_ART_CACHE_JSON.setString(cacheJson.toString())
                 Log.warning("[DiscordImageHost] uploaded game icon -> $url")
                 url
             }
