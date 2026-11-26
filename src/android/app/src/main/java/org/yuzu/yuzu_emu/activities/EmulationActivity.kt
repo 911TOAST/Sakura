@@ -917,7 +917,7 @@ class EmulationActivity : SakuraActivity(),
         processSessionGame = game
         // Presence follows the session, not the activity: it has to survive an activity restart
         // and it has to stop the moment the emulated game is torn down.
-        DiscordPresence.onSessionGameChanged(game?.title, game?.programIdHex)
+        DiscordPresence.onSessionGameChanged(game?.title, game?.programIdHex, game?.path)
     }
 
     fun onProgramChanged(programIndex: Int) {

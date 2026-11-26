@@ -19,7 +19,9 @@ enum class StringSetting(override val key: String) : AbstractStringSetting {
     DISCORD_APPLICATION_ID("discord_application_id"),
     DISCORD_TOKEN("discord_token"),
     DISCORD_ACTIVITY_JSON("discord_activity_json"),
-    DISCORD_OAUTH_JSON("discord_oauth_json")
+    DISCORD_OAUTH_JSON("discord_oauth_json"),
+    DISCORD_IMGUR_CLIENT_ID("discord_imgur_client_id"),
+    DISCORD_ART_CACHE_JSON("discord_art_cache_json")
     ;
 
     override fun getString(needsGlobal: Boolean): String = NativeConfig.getString(key, needsGlobal)

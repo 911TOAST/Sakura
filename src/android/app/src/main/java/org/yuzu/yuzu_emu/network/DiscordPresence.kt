@@ -12,6 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.StringSetting
+import org.yuzu.yuzu_emu.utils.GameMetadata
 import org.yuzu.yuzu_emu.utils.Log
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -93,6 +94,10 @@ object DiscordPresence {
     @Volatile
     private var sessionTitleId: String? = null
 
+    /** Path of the running game's file; the icon is extracted from it for the presence art. */
+    @Volatile
+    private var sessionGamePath: String? = null
+
     @Volatile
     private var desiredTitle: String? = null
 
@@ -157,9 +162,10 @@ object DiscordPresence {
      * Called when the emulated session starts or stops. [title] is the game's display name, or
      * null when no game is running; [titleId] is the game's canonical hex title id when known.
      */
-    fun onSessionGameChanged(title: String?, titleId: String? = null) {
+    fun onSessionGameChanged(title: String?, titleId: String? = null, gamePath: String? = null) {
         sessionTitle = title
         sessionTitleId = titleId?.takeIf { it.isNotBlank() && it != "0" }
+        sessionGamePath = gamePath?.takeIf { it.isNotBlank() }
         if (title.isNullOrBlank()) {
             // The game is gone: forget the title so the next launch restarts the elapsed timer,
             // and any connect still queued sees no game and does nothing.
@@ -459,12 +465,14 @@ object DiscordPresence {
             )
             var large = customisation.largeImage
             if (large.isBlank()) {
-                // Zero-config art: the URL is built locally from the title id and fetched by
-                // Discord's servers during registration, so the user never picks or pastes
-                // anything. A missing cover simply means no image, never a failed presence.
-                // The bare /ti/<id>/ URL returns HTTP 503; only the sized form is served.
+                // Zero-config art: the game's own icon, extracted from the running file and
+                // uploaded to Imgur once per game (cached). Discord's image proxy refuses many
+                // hosts — tinfoil.media included — so the cover URL is only a fallback. A
+                // missing cover simply means no image, never a failed presence.
                 sessionTitleId?.takeIf { it.length >= 14 }?.let { id ->
-                    large = "https://tinfoil.media/ti/${id.lowercase()}/256/256/"
+                    large = DiscordImageHost.cachedUrl(id)
+                        ?: DiscordImageHost.uploadGameIcon(id, gameIconBytes())
+                        ?: "https://tinfoil.media/ti/${id.lowercase()}/256/256/"
                 }
             }
             val resolved = DiscordAssetRegistrar.resolveImages(token, large, "")
@@ -502,11 +510,20 @@ object DiscordPresence {
         webSocket.send(payload.toString())
     }
 
+    /** The running game's icon bytes, extracted on the calling (scheduler) thread; null on any failure. */
+    private fun gameIconBytes(): ByteArray? {
+        val path = sessionGamePath ?: return null
+        return runCatching { GameMetadata.getIcon(path) }
+            .onFailure {
+                Log.warning("[DiscordPresence] icon extraction failed: ${it.javaClass.simpleName}")
+            }
+            .getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
     /**
      * One delayed re-send of the presence, giving Discord's asset fetcher a window to finish
      * before the card is rendered again. Only fires while the same socket is still live.
-     */
-    private fun scheduleAssetRefresh(webSocket: WebSocket) {
+     */    private fun scheduleAssetRefresh(webSocket: WebSocket) {
         assetRefreshFuture?.cancel(false)
         assetRefreshFuture = scheduler.schedule({
             val live = synchronized(lock) {
