@@ -564,7 +564,7 @@
     <string name="discord_signed_in_as">Signed in as %1$s</string>
     <string name="discord_authorization_success">Signed in — presence is ready</string>
     <string name="discord_authorization_failed">Sign-in failed</string>
-    <string name="discord_oauth_note">Nothing to set up: the game's title, cover art and timer go to Discord automatically.</string>
+    <string name="discord_oauth_note">Nothing to set up: the game title, cover art and timer go to Discord automatically.</string>
 
     <string name="discord_rich_presence_page_description">Sign in once and you are done — the game, its cover art and the timer go to Discord automatically.</string>
     <string name="discord_enable">Enable Rich Presence</string>
