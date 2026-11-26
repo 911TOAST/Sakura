@@ -30,8 +30,8 @@ import org.yuzu.yuzu_emu.utils.background.WallpaperSettingsSnapshot
  * Two ways in, both exported:
  * - `org.yuzu.yuzu_emu.action.CONTRIBUTE_WALLPAPER` with the image in `intent.data` or
  *   `EXTRA_STREAM`, plus the optional extras documented in `THEME_BACKGROUNDS.md`;
- * - plain `ACTION_SEND` with `image/*` (the standard Android share sheet), which every gallery
- *   app can drive with no code of its own.
+ * - plain `ACTION_SEND` with an image MIME type (the standard Android share sheet), which every
+ *   gallery app can drive with no code of its own.
  *
  * Trust model: this activity is exported, so everything from the caller is untrusted input.
  * Bytes are size-capped and validated through the same decoder as every other wallpaper,

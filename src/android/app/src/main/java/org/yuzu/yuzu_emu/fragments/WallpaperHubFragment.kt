@@ -92,7 +92,7 @@ class WallpaperHubFragment : Fragment() {
             binding.wallpaperPreviewCard.libraryBackgroundScrim
         )
         binding.wallpaperPreviewCard.bindGameCovers(this)
-        popularAdapter = OnlineBackgroundAdapter(viewLifecycleOwner) { openEditor(it) }
+        popularAdapter = OnlineBackgroundAdapter(viewLifecycleOwner, { openEditor(it) })
         binding.wallpaperPopularGrid.layoutManager = GridLayoutManager(requireContext(), wallpaperColumns(requireContext()))
         binding.wallpaperPopularGrid.adapter = popularAdapter
         binding.wallpaperPopularGrid.respectReducedMotion()
@@ -228,7 +228,7 @@ class WallpaperHubFragment : Fragment() {
                 layoutManager = GridLayoutManager(requireContext(), wallpaperColumns(requireContext()))
                 isNestedScrollingEnabled = false
                 respectReducedMotion()
-                adapter = OnlineBackgroundAdapter(viewLifecycleOwner) { openEditor(it) }
+                adapter = OnlineBackgroundAdapter(viewLifecycleOwner, { openEditor(it) })
                     .also { adapter ->
                         adapter.submit(group.items)
                         recommendationAdapters += adapter

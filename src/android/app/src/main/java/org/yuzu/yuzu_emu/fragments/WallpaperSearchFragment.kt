@@ -73,7 +73,7 @@ class WallpaperSearchFragment : Fragment() {
         binding.wallpaperToolbar.setNavigationOnClickListener {
             requireActivity().onBackPressedDispatcher.onBackPressed()
         }
-        adapter = OnlineBackgroundAdapter(viewLifecycleOwner) { openEditor(it) }
+        adapter = OnlineBackgroundAdapter(viewLifecycleOwner, { openEditor(it) })
         binding.wallpaperSearchGrid.layoutManager = GridLayoutManager(requireContext(), wallpaperColumns(requireContext()))
         binding.wallpaperSearchGrid.adapter = adapter
         binding.wallpaperSearchGrid.respectReducedMotion()
