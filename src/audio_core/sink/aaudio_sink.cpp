@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 suyu Emulator Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <dlfcn.h>
 #include <span>
 #include <utility>
 
@@ -20,10 +21,31 @@ namespace AudioCore::Sink {
 namespace {
 
 bool ApiLevelAtLeast(s32 level) {
-#if defined(__ANDROID__)
+#if defined(__ANDROID_API__)
     return android_get_device_api_level() >= level;
 #else
     return true;
+#endif
+}
+
+// AAudioStreamBuilder_setUsage is marked unavailable when compiling with
+// __ANDROID_API__=26 (it was introduced in 28), so it must be fetched at
+// runtime - same approach Oboe's AAudioLoader uses. Returns nullptr on
+// devices where libaaudio.so does not export it.
+using SetUsageFn = void (*)(AAudioStreamBuilder*, aaudio_usage_t);
+
+SetUsageFn GetSetUsageFn() {
+#if defined(__ANDROID_API__) && __ANDROID_API__ >= 28
+    return &AAudioStreamBuilder_setUsage;
+#else
+    static SetUsageFn fn = []() -> SetUsageFn {
+        void* handle = dlopen("libaaudio.so", RTLD_NOW | RTLD_LOCAL);
+        if (!handle) {
+            return nullptr;
+        }
+        return reinterpret_cast<SetUsageFn>(dlsym(handle, "AAudioStreamBuilder_setUsage"));
+    }();
+    return fn;
 #endif
 }
 
@@ -135,10 +157,11 @@ private:
         AAudioStreamBuilder_setDataCallback(builder, DataCallbackThunk, this);
         AAudioStreamBuilder_setErrorCallback(builder, ErrorCallbackThunk, this);
 
-        // Usage requires API 28; older versions simply ignore it, but the symbol
-        // must not be called at all on 26/27.
+        // Usage requires API 28; older versions silently ignore it.
         if (!is_input && ApiLevelAtLeast(28)) {
-            AAudioStreamBuilder_setUsage(builder, AAUDIO_USAGE_GAME);
+            if (const SetUsageFn set_usage = GetSetUsageFn()) {
+                set_usage(builder, AAUDIO_USAGE_GAME);
+            }
             // Exclusive (MMAP) mode is the native fast path. The device may
             // refuse it; fall back to shared below.
             AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_EXCLUSIVE);
