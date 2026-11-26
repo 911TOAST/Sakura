@@ -62,8 +62,8 @@ object DiscordPresence {
     private const val OP_HELLO = 10
     private const val OP_HEARTBEAT_ACK = 11
 
-    /** How long to wait before re-sending a presence whose art was registered moments ago. */
-    private const val ASSET_REFRESH_DELAY_MS = 5000L
+    /** When to re-send a presence whose art was registered moments ago. */
+    private val ASSET_REFRESH_DELAYS_MS = longArrayOf(5000L, 20000L, 60000L)
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -522,19 +522,27 @@ object DiscordPresence {
     }
 
     /**
-     * One delayed re-send of the presence, giving Discord's asset fetcher a window to finish
-     * before the card is rendered again. Only fires while the same socket is still live.
-     */    private fun scheduleAssetRefresh(webSocket: WebSocket) {
+     * Re-sends the presence a few times after a fresh asset registration. Discord hands back
+     * the asset key immediately but fetches the actual image in the background, and a client
+     * that rendered the card in that window keeps showing a placeholder until the *next*
+     * presence update re-renders it — one re-send proved not to be enough. Each send is only a
+     * small JSON frame, and every one dies with the socket it was scheduled for.
+     */
+    private fun scheduleAssetRefresh(webSocket: WebSocket) {
         assetRefreshFuture?.cancel(false)
-        assetRefreshFuture = scheduler.schedule({
-            val live = synchronized(lock) {
-                if (ready && socket === webSocket) webSocket else null
-            }
-            if (live != null) {
-                Log.warning("[DiscordPresence] re-sending presence for freshly registered art")
-                sendPresenceUpdate(live)
-            }
-        }, ASSET_REFRESH_DELAY_MS, TimeUnit.MILLISECONDS)
+        ASSET_REFRESH_DELAYS_MS.forEachIndexed { index, delay ->
+            assetRefreshFuture = scheduler.schedule({
+                val live = synchronized(lock) {
+                    if (ready && socket === webSocket) webSocket else null
+                }
+                if (live != null) {
+                    Log.warning(
+                        "[DiscordPresence] re-sending presence for freshly registered art (${index + 1})"
+                    )
+                    sendPresenceUpdate(live)
+                }
+            }, delay, TimeUnit.MILLISECONDS)
+        }
     }
 
     private fun startHeartbeat(webSocket: WebSocket, intervalMs: Long) {
