@@ -454,8 +454,9 @@ object DiscordPresence {
                 // Zero-config art: the URL is built locally from the title id and fetched by
                 // Discord's servers during registration, so the user never picks or pastes
                 // anything. A missing cover simply means no image, never a failed presence.
+                // The bare /ti/<id>/ URL returns HTTP 503; only the sized form is served.
                 sessionTitleId?.takeIf { it.length >= 14 }?.let { id ->
-                    large = "https://tinfoil.media/ti/${id.lowercase()}/"
+                    large = "https://tinfoil.media/ti/${id.lowercase()}/256/256/"
                 }
             }
             val resolved = DiscordAssetRegistrar.resolveImages(token, large, "")

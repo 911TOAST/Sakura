@@ -187,8 +187,9 @@ class DiscordPresenceActivity : AppCompatActivity() {
             ?.let { getString(R.string.discord_preview_state) }
             ?: getString(R.string.discord_preview_signed_out)
 
+        // Sized form only: the bare /ti/<id>/ URL returns HTTP 503.
         val artwork = preview.titleId?.takeIf { it.length >= 14 }
-            ?.let { "https://tinfoil.media/ti/${it.lowercase()}/" }
+            ?.let { "https://tinfoil.media/ti/${it.lowercase()}/256/256/" }
         if (artwork != null) {
             imagePreviewLarge.load(artwork) { crossfade(true) }
         } else {
