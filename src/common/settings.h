@@ -1217,6 +1217,9 @@ struct Values {
     //       player's own account. It is a self-bot and therefore against Discord's Terms.
     //   2 = bot token over the gateway. Lawful, but the presence belongs to the bot account and is
     //       only visible to members of a guild it has been invited to.
+    //   3 = "Sign in with Discord": an OAuth authorisation (PKCE, social-layer presence scope)
+    //       publishes on the player's own profile with no pasted credential. This is the easy,
+    //       recommended path.
     // The token is read at runtime and never logged.
     SwitchableSetting<bool> discord_rich_presence{linkage, false, "discord_rich_presence",
                                                   Category::Ui};
@@ -1227,6 +1230,10 @@ struct Values {
     // The activity customiser, as a JSON document. One key rather than a dozen: the whole
     // structure is edited by the dedicated Discord page and is meaningless outside it.
     Setting<std::string> discord_activity_json{linkage, "", "discord_activity_json", Category::Ui};
+    // The OAuth session behind "Sign in with Discord": access and refresh token, expiry and the
+    // display name. One key rather than four, edited only by the sign-in flow; the tokens are
+    // read back only by DiscordPresence and never logged.
+    Setting<std::string> discord_oauth_json{linkage, "", "discord_oauth_json", Category::Ui};
 
     // Add-Ons
     std::map<u64, std::vector<std::string>> disabled_addons;

@@ -134,6 +134,23 @@ SPDX-License-Identifier: GPL-3.0-or-later
             android:label="@string/discord_rich_presence"
             android:windowSoftInputMode="adjustResize"/>
 
+        <!-- Return stop for "Sign in with Discord": the browser lands here with the OAuth
+             redirect, the activity hands it to the sign-in flow and finishes immediately. -->
+        <activity
+            android:name="org.yuzu.yuzu_emu.activities.DiscordOAuthCallbackActivity"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:label="@string/discord"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="sakura"/>
+            </intent-filter>
+        </activity>
+
         <activity
             android:name="org.yuzu.yuzu_emu.features.dashboard.PerfDashboardActivity"
             android:theme="@style/Theme.Yuzu.Main"

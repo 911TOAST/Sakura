@@ -133,16 +133,22 @@ data class PresenceCustomization(
             }
 
             val buttons = JSONArray()
-            addButton(buttons, customization.button1Label, customization.button1Url)
-            addButton(buttons, customization.button2Label, customization.button2Url)
+            val buttonUrls = JSONArray()
+            addButton(buttons, buttonUrls, customization.button1Label, customization.button1Url)
+            addButton(buttons, buttonUrls, customization.button2Label, customization.button2Url)
             if (buttons.length() > 0) {
                 activity.put("buttons", buttons)
+                // The gateway presence form is label strings plus a parallel metadata array.
+                activity.put(
+                    "metadata",
+                    JSONObject().put("button_urls", buttonUrls)
+                )
             }
 
             return activity
         }
 
-        private fun addButton(target: JSONArray, label: String, url: String) {
+        private fun addButton(target: JSONArray, urls: JSONArray, label: String, url: String) {
             // Discord drops the activity if a button has a label without a URL, so both are
             // required; the URL must also be absolute http(s).
             if (label.isBlank() || url.isBlank()) {
@@ -151,11 +157,8 @@ data class PresenceCustomization(
             if (!url.startsWith("https://") && !url.startsWith("http://")) {
                 return
             }
-            target.put(
-                JSONObject()
-                    .put("label", label.take(32))
-                    .put("url", url)
-            )
+            target.put(label.take(32))
+            urls.put(url)
         }
     }
 }

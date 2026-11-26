@@ -3,6 +3,7 @@
 
 package org.yuzu.yuzu_emu.activities
 
+import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -13,15 +14,24 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.lifecycleScope
+import coil.load
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.imageview.ShapeableImageView
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.yuzu.yuzu_emu.R
 import org.yuzu.yuzu_emu.features.settings.model.BooleanSetting
 import org.yuzu.yuzu_emu.features.settings.model.IntSetting
 import org.yuzu.yuzu_emu.features.settings.model.StringSetting
+import org.yuzu.yuzu_emu.network.DiscordAuthCoordinator
+import org.yuzu.yuzu_emu.network.DiscordOAuth
 import org.yuzu.yuzu_emu.network.DiscordPresence
 import org.yuzu.yuzu_emu.network.PresenceCustomization
 import org.yuzu.yuzu_emu.utils.NativeConfig
@@ -38,9 +48,12 @@ class DiscordPresenceActivity : AppCompatActivity() {
 
     private lateinit var switchEnable: MaterialSwitch
     private lateinit var groupMode: RadioGroup
-    private lateinit var modeSocial: View
-    private lateinit var modeAccount: View
-    private lateinit var modeBot: View
+    private lateinit var buttonSignIn: MaterialButton
+    private lateinit var cardSignedIn: MaterialCardView
+    private lateinit var buttonSignOut: MaterialButton
+    private lateinit var textSignedIn: TextView
+    private lateinit var imagePreviewLarge: ShapeableImageView
+    private lateinit var imagePreviewSmall: ShapeableImageView
     private lateinit var textModeSummary: TextView
     private lateinit var textSocialSdkMissing: TextView
     private lateinit var textWarning: TextView
@@ -66,6 +79,9 @@ class DiscordPresenceActivity : AppCompatActivity() {
     private val statusListener: (String) -> Unit = { message ->
         runOnUiThread { textStatus.text = message }
     }
+
+    /** The authorisation currently in flight in the browser, or null between attempts. */
+    private var authorizationSession: DiscordOAuth.Session? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,6 +111,13 @@ class DiscordPresenceActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.button_disconnect).setOnClickListener {
             DiscordPresence.disconnect()
         }
+
+        buttonSignIn.setOnClickListener { launchSignIn() }
+        buttonSignOut.setOnClickListener {
+            DiscordPresence.onSignedOut()
+            NativeConfig.saveGlobalConfig()
+            refreshSignInCard()
+        }
     }
 
     override fun onStart() {
@@ -102,6 +125,66 @@ class DiscordPresenceActivity : AppCompatActivity() {
         DiscordPresence.statusListener = statusListener
         textStatus.text = DiscordPresence.status().ifBlank {
             getString(R.string.discord_status_idle)
+        }
+        refreshSignInCard()
+
+        // The browser comes back through DiscordOAuthCallbackActivity, which emits its redirect
+        // here; completing it does a network call, so that part leaves the main thread.
+        lifecycleScope.launch {
+            DiscordAuthCoordinator.redirects.collect { redirect ->
+                val session = authorizationSession ?: return@collect
+                if (redirect.getQueryParameter("state") != session.state) {
+                    return@collect
+                }
+                val result = withContext(Dispatchers.IO) {
+                    DiscordOAuth.completeAuthorization(session, redirect)
+                }
+                result.onSuccess { authSession ->
+                    authorizationSession = null
+                    DiscordOAuth.saveSession(authSession)
+                    // Signing in IS choosing the transport: onSignedIn sets the mode, saves the
+                    // config and connects at once.
+                    DiscordPresence.onSignedIn()
+                    NativeConfig.saveGlobalConfig()
+                    groupMode.check(R.id.mode_oauth)
+                    refreshSignInCard()
+                    textStatus.text = authSession.account?.displayName?.takeIf { it.isNotBlank() }
+                        ?.let { getString(R.string.discord_signed_in_as, it) }
+                        ?: getString(R.string.discord_authorization_success)
+                }.onFailure { error ->
+                    authorizationSession = null
+                    textStatus.text = error.message
+                        ?: getString(R.string.discord_authorization_failed)
+                }
+            }
+        }
+    }
+
+    private fun launchSignIn() {
+        val session = DiscordOAuth.createAuthorizationSession()
+        authorizationSession = session
+        runCatching {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, session.authorizationUri).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                }
+            )
+        }.onFailure {
+            authorizationSession = null
+            textStatus.text = it.message ?: getString(R.string.discord_authorization_failed)
+        }
+    }
+
+    /** Shows exactly one of: the sign-in button, or who is signed in with a way out. */
+    private fun refreshSignInCard() {
+        val account = DiscordOAuth.account()
+        val signedIn = DiscordOAuth.isSignedIn()
+        buttonSignIn.visibility = if (signedIn) View.GONE else View.VISIBLE
+        cardSignedIn.visibility = if (signedIn) View.VISIBLE else View.GONE
+        if (signedIn) {
+            textSignedIn.text = account?.displayName?.takeIf { it.isNotBlank() }
+                ?.let { getString(R.string.discord_signed_in_as, it) }
+                ?: getString(R.string.discord_signed_in)
         }
     }
 
@@ -117,9 +200,12 @@ class DiscordPresenceActivity : AppCompatActivity() {
     private fun bindViews() {
         switchEnable = findViewById(R.id.switch_enable)
         groupMode = findViewById(R.id.group_mode)
-        modeSocial = findViewById(R.id.mode_social)
-        modeAccount = findViewById(R.id.mode_account)
-        modeBot = findViewById(R.id.mode_bot)
+        buttonSignIn = findViewById(R.id.button_sign_in)
+        cardSignedIn = findViewById(R.id.card_signed_in)
+        buttonSignOut = findViewById(R.id.button_sign_out)
+        textSignedIn = findViewById(R.id.text_signed_in)
+        imagePreviewLarge = findViewById(R.id.image_preview_large)
+        imagePreviewSmall = findViewById(R.id.image_preview_small)
         textModeSummary = findViewById(R.id.text_mode_summary)
         textSocialSdkMissing = findViewById(R.id.text_social_sdk_missing)
         textWarning = findViewById(R.id.text_warning)
@@ -147,9 +233,10 @@ class DiscordPresenceActivity : AppCompatActivity() {
         switchEnable.isChecked = BooleanSetting.DISCORD_RICH_PRESENCE.getBoolean()
 
         when (DiscordPresence.Mode.fromStored(IntSetting.DISCORD_PRESENCE_MODE.getInt())) {
-            DiscordPresence.Mode.SOCIAL_SDK -> modeSocial.id
-            DiscordPresence.Mode.ACCOUNT_TOKEN -> modeAccount.id
-            DiscordPresence.Mode.BOT_TOKEN -> modeBot.id
+            DiscordPresence.Mode.OAUTH -> R.id.mode_oauth
+            DiscordPresence.Mode.SOCIAL_SDK -> R.id.mode_social
+            DiscordPresence.Mode.ACCOUNT_TOKEN -> R.id.mode_account
+            DiscordPresence.Mode.BOT_TOKEN -> R.id.mode_bot
         }.let { groupMode.check(it) }
 
         inputApplicationId.setText(StringSetting.DISCORD_APPLICATION_ID.getString())
@@ -171,6 +258,7 @@ class DiscordPresenceActivity : AppCompatActivity() {
     }
 
     private fun selectedMode(): DiscordPresence.Mode = when (groupMode.checkedRadioButtonId) {
+        R.id.mode_oauth -> DiscordPresence.Mode.OAUTH
         R.id.mode_account -> DiscordPresence.Mode.ACCOUNT_TOKEN
         R.id.mode_bot -> DiscordPresence.Mode.BOT_TOKEN
         else -> DiscordPresence.Mode.SOCIAL_SDK
@@ -187,22 +275,25 @@ class DiscordPresenceActivity : AppCompatActivity() {
      * which is exactly the confusion this page exists to remove.
      */
     private fun applyModeVisibility(mode: DiscordPresence.Mode) {
+        val isOAuth = mode == DiscordPresence.Mode.OAUTH
         val isSocial = mode == DiscordPresence.Mode.SOCIAL_SDK
         val isAccount = mode == DiscordPresence.Mode.ACCOUNT_TOKEN
 
+        // OAuth has no credential field at all: the browser authorisation IS the credential.
         layoutApplicationId.visibility = if (isSocial) View.VISIBLE else View.GONE
-        layoutToken.visibility = if (isSocial) View.GONE else View.VISIBLE
+        layoutToken.visibility = if (isSocial || isOAuth) View.GONE else View.VISIBLE
 
         textModeSummary.setText(
             when (mode) {
+                DiscordPresence.Mode.OAUTH -> R.string.discord_mode_oauth_summary
                 DiscordPresence.Mode.SOCIAL_SDK -> R.string.discord_mode_social_sdk_summary
                 DiscordPresence.Mode.ACCOUNT_TOKEN -> R.string.discord_mode_account_summary
                 DiscordPresence.Mode.BOT_TOKEN -> R.string.discord_mode_bot_summary
             }
         )
 
-        // The warning belongs to account-token mode only: bot mode is lawful and Social SDK mode
-        // involves no credential at all.
+        // The warning belongs to account-token mode only: bot mode is lawful and the OAuth and
+        // Social SDK paths involve no credential at all.
         textWarning.visibility = if (isAccount) View.VISIBLE else View.GONE
         textSocialSdkMissing.visibility =
             if (isSocial && !DiscordPresence.isSocialSdkAvailable()) View.VISIBLE else View.GONE
@@ -214,7 +305,13 @@ class DiscordPresenceActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
             override fun afterTextChanged(s: Editable?) = updatePreview()
         }
-        listOf(inputName, inputDetails, inputState).forEach { it.addTextChangedListener(watcher) }
+        listOf(
+            inputName,
+            inputDetails,
+            inputState,
+            inputLargeImage,
+            inputSmallImage
+        ).forEach { it.addTextChangedListener(watcher) }
         updatePreview()
     }
 
@@ -229,6 +326,17 @@ class DiscordPresenceActivity : AppCompatActivity() {
         textPreviewDetails.visibility = if (details.isBlank()) View.GONE else View.VISIBLE
         textPreviewState.text = state.take(128)
         textPreviewState.visibility = if (state.isBlank()) View.GONE else View.VISIBLE
+        updateImagePreview(imagePreviewLarge, inputLargeImage.text?.toString().orEmpty())
+        updateImagePreview(imagePreviewSmall, inputSmallImage.text?.toString().orEmpty())
+    }
+
+    /** Origin of a http(s) URL loads in place; anything else leaves the preview empty. */
+    private fun updateImagePreview(view: ShapeableImageView, value: String) {
+        if (value.startsWith("https://") || value.startsWith("http://")) {
+            view.load(value) { crossfade(true) }
+        } else {
+            view.setImageDrawable(null)
+        }
     }
 
     private fun save() {
