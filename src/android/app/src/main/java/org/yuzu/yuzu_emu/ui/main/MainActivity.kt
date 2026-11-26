@@ -24,6 +24,7 @@ import androidx.activity.viewModels
 import org.yuzu.yuzu_emu.ui.theme.SakuraActivity
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.splashscreen.SplashScreenViewProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -92,6 +93,10 @@ class MainActivity : SakuraActivity() {
         // Hold the branded sakura splash only until the storage directories are ready.
         splashScreen.setKeepOnScreenCondition {
             !DirectoryInitialization.areDirectoriesReady
+        }
+        // Hand the splash over with the app's motion language instead of the system's hard cut.
+        splashScreen.setOnExitAnimationListener { provider ->
+            dismissSplash(provider)
         }
 
         super.onCreate(savedInstanceState)
@@ -318,6 +323,39 @@ class MainActivity : SakuraActivity() {
         if (variant > 0) {
             theme.applyStyle(SPLASH_VARIANTS[variant], true)
         }
+    }
+
+    /**
+     * Without this the splash vanishes in one system-driven cut and the main content pops in
+     * underneath, static. Give the handoff the same motion language as the rest of the app: the
+     * sakura icon blooms and lifts while the main content springs in beneath the fading splash.
+     * The motion settings are honoured throughout - instant style removes every piece of it, and
+     * the speed slider scales the durations through [SuyuMotion].
+     */
+    private fun dismissSplash(provider: SplashScreenViewProvider) {
+        if (!SuyuMotion.animationsEnabled() || !this::binding.isInitialized) {
+            provider.remove()
+            return
+        }
+        if (SuyuMotion.entrancesEnabled()) {
+            SuyuMotion.springIn(binding.root, fromScale = 0.97f)
+        }
+        val fade = SuyuMotion.durationMedium2(this)
+        val ease = SuyuMotion.emphasizedDecelerate(this)
+        provider.view.animate()
+            .alpha(0f)
+            .setDuration(fade)
+            .setInterpolator(ease)
+            .withEndAction { provider.remove() }
+            .start()
+        // The icon blooms past its resting size as the overlay it sits on dissolves away.
+        provider.iconView.animate()
+            .scaleX(1.15f)
+            .scaleY(1.15f)
+            .alpha(0f)
+            .setDuration(fade)
+            .setInterpolator(ease)
+            .start()
     }
 
     fun displayMultiplayerDialog() {
