@@ -572,6 +572,7 @@
     <string name="discord_preview">What Discord shows</string>
     <string name="discord_preview_no_game">Start a game and its title appears here</string>
     <string name="discord_preview_signed_out">Sign in to publish this presence</string>
+    <string name="discord_preview_state">using Sakura emulator</string>
 
     <string name="discord_rich_presence">Rich Presence</string>
 

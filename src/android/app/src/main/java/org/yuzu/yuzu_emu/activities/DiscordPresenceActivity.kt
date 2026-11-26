@@ -183,7 +183,8 @@ class DiscordPresenceActivity : AppCompatActivity() {
         val preview = DiscordPresence.livePreview()
         textPreviewHeadline.text = preview.title
             ?: getString(R.string.discord_preview_no_game)
-        textPreviewState.text = preview.accountName
+        textPreviewState.text = preview.accountName?.takeIf { it.isNotBlank() }
+            ?.let { getString(R.string.discord_preview_state) }
             ?: getString(R.string.discord_preview_signed_out)
 
         val artwork = preview.titleId?.takeIf { it.length >= 14 }
