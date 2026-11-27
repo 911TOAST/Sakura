@@ -127,6 +127,10 @@ public:
         return is_built.load(std::memory_order::relaxed);
     }
 
+    /// Block the CALLING (render) thread until the async build finishes. Must never be invoked
+    /// from inside a scheduler command lambda on VulkanWorker while a VkCommandBuffer is open.
+    void WaitForBuild();
+
     template <typename Spec>
     static auto MakeConfigureSpecFunc() {
         return [](GraphicsPipeline* pl, bool is_indexed) { return pl->ConfigureImpl<Spec>(is_indexed); };

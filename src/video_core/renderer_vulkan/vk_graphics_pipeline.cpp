@@ -584,16 +584,26 @@ bool GraphicsPipeline::ConfigureImpl(bool is_indexed) {
     return true;
 }
 
+void GraphicsPipeline::WaitForBuild() {
+    if (is_built.load(std::memory_order::relaxed)) {
+        return;
+    }
+    std::unique_lock lock{build_mutex};
+    build_condvar.wait(lock, [this] { return is_built.load(std::memory_order::relaxed); });
+}
+
 void GraphicsPipeline::ConfigureDraw(const RescalingPushConstant& rescaling,
                                      const RenderAreaPushConstant& render_area) {
     scheduler.RequestRenderpass(texture_cache.GetFramebuffer(), uses_general_render_pass,
                                 uses_feedback_render_pass);
     if (!is_built.load(std::memory_order::relaxed)) {
-        // Wait for the pipeline to be built
-        scheduler.Record([this](vk::CommandBuffer) {
-            std::unique_lock lock{build_mutex};
-            build_condvar.wait(lock, [this] { return is_built.load(std::memory_order::relaxed); });
-        });
+        // Block the render thread here, NOT inside a scheduler command lambda. Recording
+        // build_condvar.wait onto VulkanWorker froze the worker mid-command-buffer, preventing
+        // already-recorded draws before it from being submitted and blocking all subsequent frames
+        // until the shader compiler finished, while it held an open VkCommandBuffer. Waiting on the
+        // render thread lets VulkanWorker keep draining already-recorded work. (Tiny draws block
+        // here; large async draws are dropped earlier in PipelineCache::BuiltPipeline.)
+        WaitForBuild();
     }
     const bool is_rescaling{texture_cache.IsRescaling()};
     const bool update_rescaling{scheduler.UpdateRescaling(is_rescaling)};
