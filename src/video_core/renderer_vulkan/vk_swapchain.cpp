@@ -194,25 +194,6 @@ void Swapchain::Create(
 
 bool Swapchain::AcquireNextImage(bool wait_previous_work) {
     const VkSemaphore acquire_semaphore{*present_semaphores[frame_index]};
-    const VkResult result = device.GetLogical().AcquireNextImageKHR(
-        *swapchain, (std::numeric_limits<u64>::max)(), acquire_semaphore, VK_NULL_HANDLE,
-        &image_index);
-    switch (result) {
-    case VK_SUCCESS:
-        break;
-    case VK_SUBOPTIMAL_KHR:
-        is_suboptimal = true;
-        break;
-    case VK_ERROR_OUT_OF_DATE_KHR:
-        is_outdated = true;
-        break;
-    case VK_ERROR_SURFACE_LOST_KHR:
-        vk::Check(result);
-        break;
-    default:
-        LOG_ERROR(Render_Vulkan, "vkAcquireNextImageKHR returned {}", string_VkResult(result));
-        break;
-    }
 
     const auto wait_with_frame_pacing = [this](u64 tick) {
         switch (Settings::values.frame_pacing_mode.GetValue()) {
@@ -234,17 +215,43 @@ bool Swapchain::AcquireNextImage(bool wait_previous_work) {
         }
     };
 
-    // Target_Auto is a plain tick wait, i.e. exactly what the removed Android API>=30 bypass
-    // hardcoded, so default behaviour is unchanged; the explicit 30/60/90/120 targets give the
-    // user a working frame-rate cap, which on a 120 Hz panel is the main GPU-load lever.
-    //
-    // The tick itself is only needed when the caller cannot prove the image is idle. In the
-    // zero-copy path the image is only handed back by the presentation engine after the GPU
+    // Frame-pacing sleep must NOT run while holding an acquired swapchain image: sleeping after
+    // vkAcquireNextImageKHR starves Android SurfaceFlinger/BufferQueue and increases frame-time
+    // variance. Pace BEFORE acquiring. (VK_GOOGLE_display_timing / PresentId and prediction from
+    // previous frame completion would refine this; the per-image GPU tick wait, which needs
+    // image_index, stays after acquire.) Target_Auto is a plain tick wait; explicit 30/60/90/120
+    // targets give a frame-rate cap. tick=0 skips the GPU wait and keeps just the pacing sleep.
+    if (!wait_previous_work) {
+        wait_with_frame_pacing(0);
+    }
+
+    const VkResult result = device.GetLogical().AcquireNextImageKHR(
+        *swapchain, (std::numeric_limits<u64>::max)(), acquire_semaphore, VK_NULL_HANDLE,
+        &image_index);
+    switch (result) {
+    case VK_SUCCESS:
+        break;
+    case VK_SUBOPTIMAL_KHR:
+        is_suboptimal = true;
+        break;
+    case VK_ERROR_OUT_OF_DATE_KHR:
+        is_outdated = true;
+        break;
+    case VK_ERROR_SURFACE_LOST_KHR:
+        vk::Check(result);
+        break;
+    default:
+        LOG_ERROR(Render_Vulkan, "vkAcquireNextImageKHR returned {}", string_VkResult(result));
+        break;
+    }
+
+    // The per-image tick itself is only needed when the caller cannot prove the image is idle. In
+    // the zero-copy path the image is only handed back by the presentation engine after the GPU
     // finished the frame that rendered into it, so waiting on the timeline again duplicated a
-    // guarantee the acquire already made and stalled the render thread for up to a full frame.
-    // Passing 0 keeps the pacing sleep (which lives in Scheduler::Wait) and skips just the wait.
-    const u64 previous_tick = wait_previous_work ? resource_ticks[image_index] : 0;
-    wait_with_frame_pacing(previous_tick);
+    // guarantee the acquire already made. Passing 0 keeps pacing + skips just the wait.
+    if (wait_previous_work) {
+        wait_with_frame_pacing(resource_ticks[image_index]);
+    }
 
     resource_ticks[image_index] = scheduler.CurrentTick();
 
