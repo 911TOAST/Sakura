@@ -347,7 +347,11 @@ private:
 
         size_t command_offset = 0;
         bool submit = false;
-        alignas(std::max_align_t) std::array<u8, 0x8000> data{};
+        // 256 KiB chunks: hot draw loops record several commands per draw; the previous 32 KiB
+        // filled in ~80-150 draws and forced premature DispatchWork() (queue_mutex + notify_all).
+        // (A full POD-opcode flat stream to eliminate virtual TypedCommand is further work; the
+        // draw-burst fast path already emits draws as POD BurstDrawParams.)
+        alignas(std::max_align_t) std::array<u8, 0x40000> data{};
     };
 
     struct State {
