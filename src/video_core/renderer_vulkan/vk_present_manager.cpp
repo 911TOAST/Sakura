@@ -8,6 +8,7 @@
 #include "common/adpf.h"
 #include "common/logging.h"
 #include "common/settings.h"
+#include "common/settings_enums.h"
 #include "common/thread.h"
 #include "core/frontend/emu_window.h"
 #include "video_core/renderer_vulkan/present/lemon_fg.h"
@@ -110,6 +111,24 @@ VkFilter GetPresentBlitFilter(const vk::PhysicalDevice& physical_device, VkForma
                 .depth = 1,
             },
     };
+}
+
+// ADPF compares the measured frame duration against a target budget. Reporting a fixed 16.67 ms
+// while the user asked for a 30/90/120 FPS cap makes every correctly paced frame look like an
+// overrun, which drives the platform's clock/thermal governor the wrong way.
+[[nodiscard]] int64_t FramePacingTargetNs() {
+    switch (Settings::values.frame_pacing_mode.GetValue()) {
+    case Settings::FramePacingMode::Target_30:
+        return 33'333'333;
+    case Settings::FramePacingMode::Target_90:
+        return 11'111'111;
+    case Settings::FramePacingMode::Target_120:
+        return 8'333'333;
+    case Settings::FramePacingMode::Target_60:
+    case Settings::FramePacingMode::Target_Auto:
+    default:
+        return 16'666'666;
+    }
 }
 
 } // Anonymous namespace
@@ -462,7 +481,7 @@ void PresentManager::PresentDirect(Frame* frame) {
         int64_t dt = std::chrono::duration_cast<std::chrono::nanoseconds>(cur_t - prev_t).count();
         prev_t = cur_t;
         last_present_ns.store(dt, std::memory_order_relaxed);
-        Common::AdpfFrameTick(dt, 16666666LL);
+        Common::AdpfFrameTick(dt, FramePacingTargetNs());
     } catch (const vk::Exception& except) {
         // A lost surface is rebuilt by the render thread on its next frame: surface and swapchain
         // objects belong to that thread, and this frame has nothing left to retry with.

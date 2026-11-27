@@ -227,7 +227,10 @@ public:
             }
             master_semaphore->Wait(tick);
         }
-        if (Settings::values.use_speed_limit.GetValue() && target_fps > 0.0) {
+        // The frame-rate cap is a presentation limit, not a speed limit. It must work whether or
+        // not the user has speed limiting enabled; otherwise selecting Target 30/60/90/120 does
+        // nothing in the common "unlocked" configuration.
+        if (target_fps > 0.0) {
             auto now = std::chrono::steady_clock::now();
             if (last_target_fps != target_fps) {
                 frame_interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(1.0 / target_fps));
@@ -240,8 +243,11 @@ public:
             auto target_time = start_time + frame_interval * frame_counter;
             if (target_time >= now) {
                 const auto sleep_time = target_time - now;
+                // Sleep down to the spin threshold, then busy-wait only the last fraction. The
+                // old "> 1 ms" check spun the full remaining time whenever it was under a
+                // millisecond, burning a core for up to a millisecond every paced frame.
                 constexpr auto spin_threshold = std::chrono::microseconds(250);
-                if (sleep_time > std::chrono::milliseconds(1)) {
+                if (sleep_time > spin_threshold) {
                     std::this_thread::sleep_for(sleep_time - spin_threshold);
                 }
                 while (std::chrono::steady_clock::now() < target_time) {
