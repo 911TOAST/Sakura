@@ -154,12 +154,16 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
     };
     // Both layout variants must carry an identical dependency list: dependencies are part of
     // render pass compatibility, and a pipeline built for one variant is used with the other.
-    // The self-dependency makes attachment writes visible to same-subpass fragment shader reads,
-    // which is what the GENERAL variant needs for feedback loops. The two external dependencies
-    // synchronize the automatic attachment layout transitions the optimal variant performs when
-    // the images enter and leave GENERAL.
+    // The two external dependencies synchronize the automatic attachment layout transitions the
+    // optimal variant performs when the images enter and leave GENERAL.
     boost::container::static_vector<VkSubpassDependency, 3> dependencies;
-    // Experimental stage-mask narrowing (renderer_narrow_pass_barriers, default off). ALL_COMMANDS
+    // The subpass self-dependency makes attachment writes visible to same-subpass fragment shader
+    // reads. It must stay on every variant: pipelines built against one variant can be used with
+    // another, and render-pass compatibility requires an identical dependency list, so it cannot be
+    // gated per-pass without splitting the cache key (and the pipeline-side render-pass key) to
+    // match. Keep it unconditional.
+    const bool needs_self_dependency = true;
+    // Stage-mask narrowing (renderer_narrow_pass_barriers, default on). ALL_COMMANDS
     // makes the next pass's vertex/geometry work wait for every fragment stage; Arm's Mali guidance
     // calls that a pipeline bubble. Narrow to the stages that actually produce (entry src) and
     // consume (exit dst) attachments. Access masks stay unchanged so cache coherency is preserved.
@@ -173,25 +177,30 @@ VkRenderPass RenderPassCache::Get(const RenderPassKey& key) {
                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
                         : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    // VERTEX_SHADER / DRAW_INDIRECT are intentionally NOT in the exit scope: a render-pass exit
+    // must not serialize pass N+1's vertex/geometry work behind pass N's fragment shading (Mali
+    // pipeline bubble). Pass N only publishes attachment writes; any consumer reading an attachment
+    // in a later pass's vertex shader needs an explicit image barrier, which is emitted separately.
     const VkPipelineStageFlags exit_dst_stage =
         narrow_barriers ? (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
                            VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                           VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT)
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
                         : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    dependencies.push_back(VkSubpassDependency{
-        .srcSubpass = 0,  // Current subpass
-        .dstSubpass = 0,  // Same subpass (self-dependency)
-        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
-    });
+    if (needs_self_dependency) {
+        dependencies.push_back(VkSubpassDependency{
+            .srcSubpass = 0,  // Current subpass
+            .dstSubpass = 0,  // Same subpass (self-dependency)
+            .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+            .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+        });
+    }
     dependencies.push_back(VkSubpassDependency{
         .srcSubpass = VK_SUBPASS_EXTERNAL,
         .dstSubpass = 0,

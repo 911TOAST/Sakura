@@ -545,8 +545,9 @@ struct Values {
     // ALL_COMMANDS to the stages that actually produce/consume attachments, so the next pass's
     // vertex/geometry work is not forced to wait for all fragment work (Arm Mali pipeline-bubble
     // guidance). Access masks are unchanged, so cache coherency is preserved. Correctness-sensitive:
-    // a missed consumer can show stale pixels, so it defaults off and is meant for on-device A/B.
-    SwitchableSetting<bool> renderer_narrow_pass_barriers{linkage, false, "renderer_narrow_pass_barriers",
+    // a missed consumer can show stale pixels; it defaults on (Mali TBDR) and can be turned off
+    // for on-device A/B. Vertex-read transitions are handled explicitly via image barriers.
+    SwitchableSetting<bool> renderer_narrow_pass_barriers{linkage, true, "renderer_narrow_pass_barriers",
                                                           Category::RendererDebug,
                                                           Specialization::Default, true, true};
     // Second half of the steady-state draw: when the same pipeline is configured again and no
