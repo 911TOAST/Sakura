@@ -8,6 +8,7 @@
 #include <array>
 #include <cstring>
 #include <span>
+#include <utility>
 #include <vector>
 
 #include "video_core/buffer_cache/buffer_cache_base.h"
@@ -166,7 +167,15 @@ public:
             return;
         }
 
-        scheduler.Finish();
+        // Do NOT call scheduler.Finish() here: draining the entire CPU/GPU pipeline synchronously
+        // mid-frame stalls every already-recorded draw and blocks all subsequent frames. Instead,
+        // retire the old buffer into a deferred-deletion queue tagged with the current scheduler
+        // tick; it is destroyed only once the GPU can no longer be reading it. Allocate the new
+        // buffer immediately and record the populate/copy without waiting.
+        ReapRetiredBuffers();
+        if (buffer) {
+            retired_buffers.emplace_back(std::move(buffer), scheduler.CurrentTick());
+        }
 
         num_indices = num_indices_;
         index_type = IndexTypeFromNumElements(device, num_indices);
@@ -268,6 +277,17 @@ protected:
     u32 num_indices = 0;
     /// Null when standalone; set so quad binds share the runtime's index-bind dedup.
     BufferCacheRuntime* owner = nullptr;
+
+    /// Old buffers retired on growth, kept alive until the GPU tick recorded at retire time has
+    /// completed (scheduler.IsFree), then reaped. Replaces the synchronous scheduler.Finish().
+    std::vector<std::pair<vk::Buffer, u64>> retired_buffers;
+
+    void ReapRetiredBuffers() {
+        auto& retired = retired_buffers;
+        const auto it = std::remove_if(retired.begin(), retired.end(),
+                                       [this](const auto& entry) { return scheduler.IsFree(entry.second); });
+        retired.erase(it, retired.end());
+    }
 };
 
 class QuadArrayIndexBuffer : public QuadIndexBuffer {
