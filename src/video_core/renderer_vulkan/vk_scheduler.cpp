@@ -520,7 +520,7 @@ void Scheduler::RegisterUploadBuffer(VkBuffer buffer, vk::CommandBuffer upload_c
             .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
             .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
         };
-        upload_cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        upload_cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER,
                                      VK_PIPELINE_STAGE_TRANSFER_BIT, 0, READ_BARRIER);
     }
     if (use_global_upload_barrier) {

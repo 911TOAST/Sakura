@@ -2885,9 +2885,12 @@ void TextureCacheRuntime::TransitionImageLayout(Image& image) {
                 .layerCount = VK_REMAINING_ARRAY_LAYERS,
             },
         };
+        // UNDEFINED -> * needs no source synchronization: srcStage=TOP_OF_PIPE, srcAccess=0.
+        // (Routing this to upload_cmdbuf to avoid breaking an open render pass needs explicit
+        // ordering between upload_cmdbuf and cmdbuf at the Submit() boundary; see vk_scheduler.)
         scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::ImageLayout);
         scheduler.Record([barrier](vk::CommandBuffer cmdbuf) {
-            cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE,
+            cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                                    vk::PIPELINE_STAGE_GRAPHICS_COMPUTE, 0, barrier);
         });
         image.SetCurrentLayout(init_layout);

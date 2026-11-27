@@ -509,9 +509,7 @@ void BufferCacheRuntime::CopyBuffer(VkBuffer dst_buffer, VkBuffer src_buffer,
     // upload-completion barrier already uses exactly this narrower mask, so non-upload copies
     // match it instead of syncing every driver stream.
     const VkPipelineStageFlags write_dst_stage =
-        device.IsMali() ? (vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER |
-                           VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT)
-                        : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
     for (size_t i = 0; i < copies.size(); i += 8) {
         std::array<VkBufferCopy, 8> q{};
         const size_t n = std::min(q.size(), copies.size() - i);
@@ -572,9 +570,7 @@ void BufferCacheRuntime::PostCopyBarrier() {
     scheduler.RequestOutsideRenderPassOperationContext(TileFlowBreak::BufferCopy);
     // Same destination scope as the CopyBuffer write barrier (see above).
     const VkPipelineStageFlags write_dst_stage =
-        device.IsMali() ? (vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER |
-                           VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT)
-                        : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
     scheduler.Record([write_dst_stage](vk::CommandBuffer cmdbuf) {
         cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, write_dst_stage, 0, WRITE_BARRIER);
     });
