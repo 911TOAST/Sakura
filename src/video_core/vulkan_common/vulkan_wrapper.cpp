@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/alignment.h"
 #include "common/common_types.h"
 #include "common/logging.h"
 #include "video_core/vulkan_common/vk_enum_string_helper.h"
@@ -523,6 +524,54 @@ void Buffer::Flush() const {
 void Buffer::Invalidate() const {
     if (!is_coherent) {
         vmaInvalidateAllocation(allocator, allocation, 0, VK_WHOLE_SIZE);
+    }
+}
+
+namespace {
+// Align a dirty range to nonCoherentAtomSize and clamp to the allocation size.
+std::pair<VkDeviceSize, VkDeviceSize> AlignedRange(VmaAllocator allocator, VmaAllocation allocation,
+                                                   VkDeviceSize atom, VkDeviceSize offset,
+                                                   VkDeviceSize size) {
+    VmaAllocationInfo info{};
+    vmaGetAllocationInfo(allocator, allocation, &info);
+    const VkDeviceSize total = info.size;
+    if (offset >= total) {
+        return {0, 0};
+    }
+    if (size == VK_WHOLE_SIZE || offset + size > total) {
+        size = total - offset;
+    }
+    if (size == 0) {
+        return {0, 0};
+    }
+    const VkDeviceSize aligned_begin = Common::AlignDown(offset, atom);
+    VkDeviceSize aligned_end = Common::AlignUp(offset + size, atom);
+    if (aligned_end > total) {
+        aligned_end = total;  // clamp; Vulkan allows the final range to reach allocation end
+    }
+    return {aligned_begin, aligned_end - aligned_begin};
+}
+} // Anonymous namespace
+
+void Buffer::Flush(VkDeviceSize offset, VkDeviceSize size) const {
+    if (is_coherent) {
+        return;
+    }
+    const auto [aligned_offset, aligned_size] =
+        AlignedRange(allocator, allocation, non_coherent_atom_size, offset, size);
+    if (aligned_size != 0) {
+        vmaFlushAllocation(allocator, allocation, aligned_offset, aligned_size);
+    }
+}
+
+void Buffer::Invalidate(VkDeviceSize offset, VkDeviceSize size) const {
+    if (is_coherent) {
+        return;
+    }
+    const auto [aligned_offset, aligned_size] =
+        AlignedRange(allocator, allocation, non_coherent_atom_size, offset, size);
+    if (aligned_size != 0) {
+        vmaInvalidateAllocation(allocator, allocation, aligned_offset, aligned_size);
     }
 }
 

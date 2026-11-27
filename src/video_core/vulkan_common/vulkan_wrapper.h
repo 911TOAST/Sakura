@@ -739,9 +739,10 @@ class Buffer {
 public:
     explicit Buffer(VkBuffer handle_, VkDevice owner_, VmaAllocator allocator_,
                     VmaAllocation allocation_, std::span<u8> mapped_, bool is_coherent_,
-                    const DeviceDispatch& dld_) noexcept
+                    const DeviceDispatch& dld_, VkDeviceSize non_coherent_atom_size_ = 1) noexcept
         : handle{handle_}, owner{owner_}, allocator{allocator_},
-          allocation{allocation_}, mapped{mapped_}, is_coherent{is_coherent_}, dld{&dld_} {}
+          allocation{allocation_}, mapped{mapped_}, is_coherent{is_coherent_}, dld{&dld_},
+          non_coherent_atom_size{non_coherent_atom_size_ ? non_coherent_atom_size_ : 1} {}
     Buffer() = default;
 
     Buffer(const Buffer&) = delete;
@@ -750,7 +751,8 @@ public:
     Buffer(Buffer&& rhs) noexcept
         : handle{std::exchange(rhs.handle, VkBuffer{})}, owner{rhs.owner}, allocator{rhs.allocator},
           allocation{rhs.allocation}, mapped{rhs.mapped},
-          is_coherent{rhs.is_coherent}, dld{rhs.dld} {}
+          is_coherent{rhs.is_coherent}, dld{rhs.dld},
+          non_coherent_atom_size{rhs.non_coherent_atom_size} {}
 
     Buffer& operator=(Buffer&& rhs) noexcept {
         Release();
@@ -761,6 +763,7 @@ public:
         mapped = rhs.mapped;
         is_coherent = rhs.is_coherent;
         dld = rhs.dld;
+        non_coherent_atom_size = rhs.non_coherent_atom_size;
         return *this;
     }
 
@@ -799,6 +802,16 @@ public:
 
     void Invalidate() const;
 
+    /// Flush a dirty byte range [offset, offset+size). On non-coherent memory the range is aligned
+    /// to limits.nonCoherentAtomSize (offset down, end up) and clamped to the allocation size, so
+    /// only affected cache lines are maintained instead of VK_WHOLE_SIZE. No-op on coherent memory.
+    /// Use size == VK_WHOLE_SIZE to flush from offset to the end. Only call on host-visible buffers.
+    void Flush(VkDeviceSize offset, VkDeviceSize size) const;
+
+    /// Invalidate a byte range [offset, offset+size) before CPU reads. Same alignment/clamping as
+    /// Flush(offset,size). No-op on coherent memory. Only call on host-visible buffers.
+    void Invalidate(VkDeviceSize offset, VkDeviceSize size) const;
+
     void SetObjectNameEXT(const char* name) const;
 
 private:
@@ -811,6 +824,7 @@ private:
     std::span<u8> mapped = {};
     bool is_coherent = false;
     const DeviceDispatch* dld = nullptr;
+    VkDeviceSize non_coherent_atom_size = 1;
 };
 
 class Queue {

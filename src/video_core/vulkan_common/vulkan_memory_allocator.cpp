@@ -335,9 +335,11 @@ namespace Vulkan {
         const std::span<u8> mapped_data = data ? std::span<u8>{data, ci.size} : std::span<u8>{};
         const bool is_coherent = (property_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
 
+        const VkDeviceSize non_coherent_atom_size =
+            device.GetPhysical().GetProperties().limits.nonCoherentAtomSize;
         return vk::Buffer(handle, *device.GetLogical(), allocator, allocation, mapped_data,
                           is_coherent,
-                          device.GetDispatchLoader());
+                          device.GetDispatchLoader(), non_coherent_atom_size);
     }
 
     MemoryCommit MemoryAllocator::Commit(const VkMemoryRequirements &reqs, MemoryUsage usage)
