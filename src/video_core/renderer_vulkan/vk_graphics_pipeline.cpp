@@ -1136,8 +1136,12 @@ void GraphicsPipeline::MakePipeline(VkRenderPass render_pass) {
         .basePipelineIndex = 0,
     };
 
+    // Require graphicsPipelineLibraryFastLinking: without fast linking, building 4 sub-libraries +
+    // a fast-linked pipeline + a background LTO pipeline and retaining everything is a net loss on
+    // mobile drivers. Only use GPL when the driver guarantees fast linking.
     const bool use_gpl = Settings::values.use_graphics_pipeline_library.GetValue() &&
-                         device.SupportsGraphicsPipelineLibrary();
+                         device.SupportsGraphicsPipelineLibrary() &&
+                         device.SupportsGraphicsPipelineLibraryFastLinking();
     if (!use_gpl) {
         pipeline = device.GetLogical().CreateGraphicsPipeline(mono_ci, *pipeline_cache);
         mono_builds.fetch_add(1, std::memory_order_relaxed);
@@ -1323,6 +1327,14 @@ void GraphicsPipeline::LinkOptimized() {
         }, *pipeline_cache);
         use_opt.store(true, std::memory_order_release);
         gpl_opt.fetch_add(1, std::memory_order_relaxed);
+        // The 4 intermediate library VkPipelines were created with
+        // VK_PIPELINE_CREATE_RETAIN_LINK_TIME_OPTIMIZATION_INFO_BIT_EXT only to feed this LTO link.
+        // Once optimized_pipeline is linked (and fast-link is no longer needed), release them so we
+        // don't retain 4 sub-libraries per variant forever. (Intermediate libraries are not bound
+        // directly; draws bind `pipeline`/`opt_pipeline`.)
+        for (auto& lib : gpl_libs) {
+            lib.reset();
+        }
     } catch (const vk::Exception& e) {
         LOG_WARNING(Render_Vulkan, "[GPL] optimized link failed, keeping fast-link: {}", e.what());
     }
