@@ -195,7 +195,7 @@ StagingBufferRef StagingBufferPool::GetStreamBuffer(size_t size) {
     free_iterator = (std::max)(free_iterator, iterator + size);
 
     const size_t offset = iterator;
-    iterator = Common::AlignUp(iterator + size, MAX_ALIGNMENT);
+    iterator = Common::AlignUp(iterator + size, max_alignment);
     return StagingBufferRef{
         .buffer = *stream_buffer,
         .offset = static_cast<VkDeviceSize>(offset),
