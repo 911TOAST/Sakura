@@ -106,6 +106,7 @@ private:
     std::span<u8> stream_pointer;
     VkDeviceSize stream_buffer_size;
     VkDeviceSize region_size;
+    VkDeviceSize max_alignment;
 
     size_t iterator = 0;
     size_t used_iterator = 0;

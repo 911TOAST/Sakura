@@ -29,8 +29,20 @@ namespace {
 
 using namespace Common::Literals;
 
-// Maximum potential alignment of a Vulkan buffer
+// Minimum potential alignment of a Vulkan buffer; the effective max_alignment is the maximum of
+// this and the device's nonCoherentAtomSize / minUniformBufferOffsetAlignment /
+// minStorageBufferOffsetAlignment / minTexelBufferOffsetAlignment (not a hardcoded 256).
 constexpr VkDeviceSize MAX_ALIGNMENT = 256;
+
+VkDeviceSize ComputeMaxAlignment(const Device& device) {
+    const VkPhysicalDeviceProperties& properties = device.GetPhysical().GetProperties();
+    return (std::max)(
+        {MAX_ALIGNMENT,
+         static_cast<VkDeviceSize>(properties.limits.nonCoherentAtomSize),
+         static_cast<VkDeviceSize>(properties.limits.minUniformBufferOffsetAlignment),
+         static_cast<VkDeviceSize>(properties.limits.minStorageBufferOffsetAlignment),
+         static_cast<VkDeviceSize>(properties.limits.minTexelBufferOffsetAlignment)});
+}
 
 // Stream buffer size in bytes
 // *NIX drivers are more sensitive to increased buffers for streaming.
@@ -75,7 +87,7 @@ size_t GetStreamBufferSize(const Device& device) {
     } else {
         size = MAX_STREAM_BUFFER_SIZE;
     }
-    return (std::min)(Common::AlignUp(size, MAX_ALIGNMENT), MAX_STREAM_BUFFER_SIZE);
+    return (std::min)(Common::AlignUp(size, ComputeMaxAlignment(device)), MAX_STREAM_BUFFER_SIZE);
 }
 } // Anonymous namespace
 
@@ -83,7 +95,8 @@ StagingBufferPool::StagingBufferPool(const Device& device_, MemoryAllocator& mem
                                      Scheduler& scheduler_)
     : device{device_}, memory_allocator{memory_allocator_}, scheduler{scheduler_},
       stream_buffer_size{GetStreamBufferSize(device)}, region_size{stream_buffer_size /
-                                                                   StagingBufferPool::NUM_SYNCS} {
+                                                                   StagingBufferPool::NUM_SYNCS},
+      max_alignment{ComputeMaxAlignment(device_)} {
     VkBufferCreateInfo stream_ci = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
@@ -165,7 +178,7 @@ StagingBufferRef StagingBufferPool::GetStreamBuffer(size_t size) {
         free_iterator = size;
 
         const size_t offset = iterator;
-        iterator = Common::AlignUp(iterator + size, MAX_ALIGNMENT);
+        iterator = Common::AlignUp(iterator + size, max_alignment);
         return StagingBufferRef{
             .buffer = *stream_buffer,
             .offset = static_cast<VkDeviceSize>(offset),
