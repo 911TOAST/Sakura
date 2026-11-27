@@ -476,7 +476,7 @@ struct Values {
     // Drop degenerate draws that cannot produce a primitive: triangles with fewer than three
     // vertices and lines with fewer than two. Titles issue these for empty batches and the pipeline
     // setup costs more than the draw. Turn it off if a scene loses geometry.
-    SwitchableSetting<bool> skip_micro_draws{linkage, false, "skip_micro_draws",
+    SwitchableSetting<bool> skip_micro_draws{linkage, true, "skip_micro_draws",
                                              Category::RendererDebug,
                                              Specialization::Default, true, true};
     // Skip draws that provably write neither colour nor depth/stencil, and depth-only passes that
@@ -557,7 +557,7 @@ struct Values {
     // skipped entirely. The pipeline key derivation is unaffected; renderer_maxwell_bypass covers
     // that half. Also drops the two cache mutexes from the steady-state draw, because nothing is
     // resolved and therefore nothing needs guarding against the CPU thread.
-    SwitchableSetting<bool> renderer_draw_state_cache{linkage, false, "renderer_draw_state_cache",
+    SwitchableSetting<bool> renderer_draw_state_cache{linkage, true, "renderer_draw_state_cache",
                                                       Category::RendererDebug,
                                                       Specialization::Default, true, true};
     // Draw-burst fast path: consecutive steady-state draws that resolve to identical
@@ -565,10 +565,9 @@ struct Values {
     // burst packet by the scheduler and emitted as a single recorded command, instead of one
     // command object per draw. Command-stream order is preserved exactly (see Scheduler::
     // RecordDraw); this only removes per-draw recording overhead, so correctness does not
-    // depend on it. Draws are only eligible after the draw-state cache has confirmed nothing
-    // changed, which is why it is listed as an experimental A/B toggle here rather than a
-    // measured default.
-    SwitchableSetting<bool> renderer_draw_burst{linkage, false, "renderer_draw_burst",
+    // depend on it, so it is enabled by default; turn it off if a title shows geometry drawn
+    // with the wrong state.
+    SwitchableSetting<bool> renderer_draw_burst{linkage, true, "renderer_draw_burst",
                                                 Category::RendererDebug,
                                                 Specialization::Default, true, true};
     // Learning flush governor (see FLUSH_GOVERNOR.md): the texture cache learns, per image,
@@ -579,8 +578,8 @@ struct Values {
     // instead of whole images. Every reduction is backed by data a previous download of
     // this very image already produced, so the bytes the CPU observes are bit-exact; any
     // GPU modification bumps the image's modification tick and expires the learned spans.
-    // Experimental A/B toggle, off by default, mirroring the flush path exactly when off.
-    SwitchableSetting<bool> renderer_flush_governor{linkage, false, "renderer_flush_governor",
+    // Enabled by default; turning it off mirrors the legacy flush path exactly.
+    SwitchableSetting<bool> renderer_flush_governor{linkage, true, "renderer_flush_governor",
                                                     Category::RendererDebug,
                                                     Specialization::Default, true, true};
     // Marks every FP32 arithmetic result in a fragment shader RelaxedPrecision, which tells the
