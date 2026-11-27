@@ -35,8 +35,13 @@ void KLightLock::Lock() {
     const uintptr_t cur_thread = uintptr_t(GetCurrentThreadPointer(m_kernel));
     while (true) {
         uintptr_t old_tag = m_tag.load(std::memory_order_relaxed);
-        while (!m_tag.compare_exchange_weak(old_tag, (old_tag == 0) ? cur_thread : (old_tag | 1), std::memory_order_acquire))
-            ;
+        while (!m_tag.compare_exchange_weak(old_tag, (old_tag == 0) ? cur_thread : (old_tag | 1), std::memory_order_acquire)) {
+            // Lost the CAS under contention; hint the core instead of hammering
+            // the line (mirrors the KScheduler context-guard spin).
+#if defined(__aarch64__)
+            __builtin_arm_yield();
+#endif
+        }
         if (old_tag == 0 || this->LockSlowPath(old_tag | 1, cur_thread)) {
             break;
         }

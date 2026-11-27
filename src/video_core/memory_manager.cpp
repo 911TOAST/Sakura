@@ -91,7 +91,7 @@ void MemoryManager::SetEntry(size_t position, MemoryManager::EntryType entry) {
 }
 
 PTEKind MemoryManager::GetPageKind(GPUVAddr gpu_addr) const {
-    std::unique_lock<std::mutex> lock(guard);
+    std::unique_lock lock(guard);
     return kind_map.GetValueAt(gpu_addr);
 }
 
@@ -171,7 +171,7 @@ GPUVAddr MemoryManager::BigPageTableOp(GPUVAddr gpu_addr, [[maybe_unused]] DAddr
         remaining_size -= big_page_size;
     }
     {
-        std::unique_lock<std::mutex> lock(guard);
+        std::unique_lock lock(guard);
         kind_map.Map(gpu_addr, gpu_addr + size, kind);
     }
     return gpu_addr;
@@ -565,7 +565,9 @@ size_t MemoryManager::MaxContinuousRange(GPUVAddr gpu_addr, size_t size) const {
 }
 
 size_t MemoryManager::GetMemoryLayoutSize(GPUVAddr gpu_addr, size_t max_size) const {
-    std::unique_lock<std::mutex> lock(guard);
+    // Read-mostly query (hit per indexed draw via the DrawIndexed macro); only
+    // map/unmap needs exclusive access, so take the shared side.
+    std::shared_lock lock(guard);
     return kind_map.GetContinuousSizeFrom(gpu_addr);
 }
 

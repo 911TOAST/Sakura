@@ -2872,9 +2872,11 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
     }
 
     fun onControllerInputDetected() {
+        // Cheap guard first: this is called on every controller/motion event and
+        // the setting reads below are more expensive than this check.
+        if (controllerInputReceived) return
         if (!BooleanSetting.HIDE_OVERLAY_ON_CONTROLLER_INPUT.getBoolean()) return
         if (!BooleanSetting.SHOW_INPUT_OVERLAY.getBoolean()) return
-        if (controllerInputReceived) return
         controllerInputReceived = true
         autoHideOverlay()
     }

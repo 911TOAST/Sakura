@@ -49,12 +49,23 @@ object InputHandler {
         MotionEvent.AXIS_RTRIGGER
     )
 
+    // Classification result per InputDevice id. The check itself is expensive
+    // (hasKeys() + a motionRanges scan) and gets hit on every key/motion event,
+    // so cache it; the cache is invalidated whenever the device set changes.
+    private val controllerCache = mutableMapOf<Int, Boolean>()
+
+    fun clearControllerCache() {
+        controllerCache.clear()
+    }
+
     fun isPhysicalGameController(device: InputDevice?): Boolean {
         device ?: return false
 
         if (device.isVirtual) {
             return false
         }
+
+        controllerCache[device.id]?.let { return it }
 
         val sources = device.sources
         val hasControllerSource =
@@ -68,7 +79,9 @@ object InputHandler {
         val hasControllerAxes = device.motionRanges.any { range ->
             controllerAxes.contains(range.axis)
         }
-        return hasControllerButtons || hasControllerAxes
+        val result = hasControllerButtons || hasControllerAxes
+        controllerCache[device.id] = result
+        return result
     }
 
     fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -130,6 +143,7 @@ object InputHandler {
     }
 
     fun updateControllerData() {
+        controllerCache.clear()
         androidControllers = getDevices()
         androidControllers.forEach {
             NativeInput.registerController(it.value)

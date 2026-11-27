@@ -68,6 +68,14 @@ class InputOverlay(context: Context, attrs: AttributeSet?) :
     private var touchStartX = 0f
     private var touchStartY = 0f
     private var hasMoved = false
+
+    // Config flags touched on every motion event. Each read goes over JNI into
+    // the native config, so they are snapshotted here and refreshed whenever
+    // the controls are rebuilt (refreshControls), not per touch event.
+    private var cachedPlayerIndex = 0
+    private var cachedDpadSlide = false
+    private var cachedHapticFeedback = false
+    private var cachedTouchscreenEnabled = true
     private val moveThreshold = 20f
 
     private val gridPaint = Paint().apply {
@@ -233,10 +241,7 @@ class InputOverlay(context: Context, attrs: AttributeSet?) :
         }
 
         var shouldUpdateView = false
-        val playerIndex = when (NativeInput.getStyleIndex(0)) {
-            NpadStyleIndex.Handheld -> 8
-            else -> 0
-        }
+        val playerIndex = cachedPlayerIndex
 
         for (button in overlayButtons) {
             if (!button.updateStatus(event)) {
@@ -252,7 +257,7 @@ class InputOverlay(context: Context, attrs: AttributeSet?) :
         }
 
         for (dpad in overlayDpads) {
-            if (!dpad.updateStatus(event, BooleanSetting.DPAD_SLIDE.getBoolean())) {
+            if (!dpad.updateStatus(event, cachedDpadSlide)) {
                 continue
             }
             NativeInput.onOverlayButtonEvent(
@@ -302,7 +307,7 @@ class InputOverlay(context: Context, attrs: AttributeSet?) :
             invalidate()
         }
 
-        if (!BooleanSetting.TOUCHSCREEN.getBoolean()) {
+        if (!cachedTouchscreenEnabled) {
             return true
         }
 
@@ -339,7 +344,7 @@ class InputOverlay(context: Context, attrs: AttributeSet?) :
     }
 
     private fun playHaptics(event: MotionEvent) {
-        if (BooleanSetting.HAPTIC_FEEDBACK.getBoolean()) {
+        if (cachedHapticFeedback) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN,
                 MotionEvent.ACTION_POINTER_DOWN ->
@@ -808,6 +813,16 @@ class InputOverlay(context: Context, attrs: AttributeSet?) :
         if (gamelessMode || BooleanSetting.SHOW_INPUT_OVERLAY.getBoolean()) {
             addOverlayControls(layout)
         }
+
+        // Re-snapshot the per-touch config reads.
+        cachedPlayerIndex = when (NativeInput.getStyleIndex(0)) {
+            NpadStyleIndex.Handheld -> 8
+            else -> 0
+        }
+        cachedDpadSlide = BooleanSetting.DPAD_SLIDE.getBoolean()
+        cachedHapticFeedback = BooleanSetting.HAPTIC_FEEDBACK.getBoolean()
+        cachedTouchscreenEnabled = BooleanSetting.TOUCHSCREEN.getBoolean()
+
         invalidate()
     }
 

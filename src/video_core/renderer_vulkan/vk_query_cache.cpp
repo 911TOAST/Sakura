@@ -225,11 +225,17 @@ public:
             PauseCounter();
         }
         AbandonCurrentQuery();
-        std::function<void()> func([this] {
-            amend_value = 0;
-            accumulation_value = 0;
-        });
-        rasterizer->SyncOperation(std::move(func));
+        // This runs on every SubmitExecution. When no query was started and no
+        // accumulation happened since the last sync, the values the sync op
+        // would clear are already zero — skip the heap-allocated sync op.
+        if (has_started || accumulation_since_last_sync || amend_value != 0 ||
+            accumulation_value != 0) {
+            std::function<void()> func([this] {
+                amend_value = 0;
+                accumulation_value = 0;
+            });
+            rasterizer->SyncOperation(std::move(func));
+        }
         accumulation_since_last_sync = false;
         first_accumulation_checkpoint = (std::min)(first_accumulation_checkpoint, num_slots_used);
         last_accumulation_checkpoint = (std::max)(last_accumulation_checkpoint, num_slots_used);

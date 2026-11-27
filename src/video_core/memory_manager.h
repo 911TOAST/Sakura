@@ -10,6 +10,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <vector>
 #include <boost/container/small_vector.hpp>
 
@@ -241,7 +242,7 @@ private:
     boost::container::small_vector<std::pair<DAddr, std::size_t>, 32> page_stash{};
     boost::container::small_vector<std::pair<DAddr, std::size_t>, 32> page_stash2{};
 
-    mutable std::mutex guard;
+    mutable std::shared_mutex guard;
 
     static constexpr size_t continuous_bits = 64;
 

@@ -357,6 +357,7 @@ GraphicsPipeline::GraphicsPipeline(
 }
 
 void GraphicsPipeline::AddTransition(GraphicsPipeline* transition) {
+    transition_key_hashes.push_back(transition->key.Hash());
     transition_keys.push_back(transition->key);
     transitions.push_back(transition);
 }

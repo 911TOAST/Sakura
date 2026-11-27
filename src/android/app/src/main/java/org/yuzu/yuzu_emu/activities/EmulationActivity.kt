@@ -551,12 +551,22 @@ class EmulationActivity : SakuraActivity(),
         return InputHandler.dispatchGenericMotionEvent(event)
     }
 
-    private fun notifyControllerInput() {
+    // Cached so per-event input dispatch (60–120 Hz for axis streams) doesn't
+    // walk the fragment manager each time; invalidated whenever it can change.
+    private var cachedEmulationFragment: org.yuzu.yuzu_emu.fragments.EmulationFragment? = null
+
+    private fun findEmulationFragment(): org.yuzu.yuzu_emu.fragments.EmulationFragment? {
+        cachedEmulationFragment?.let { if (it.isAdded) return it }
         val navHostFragment =
             supportFragmentManager.findFragmentById(R.id.fragment_container) as? NavHostFragment
         val emulationFragment =
             navHostFragment?.childFragmentManager?.fragments?.firstOrNull() as? org.yuzu.yuzu_emu.fragments.EmulationFragment
-        emulationFragment?.onControllerInputDetected()
+        cachedEmulationFragment = emulationFragment
+        return emulationFragment
+    }
+
+    private fun notifyControllerInput() {
+        findEmulationFragment()?.onControllerInputDetected()
     }
 
     private fun isGameController(deviceId: Int): Boolean {
@@ -571,11 +581,13 @@ class EmulationActivity : SakuraActivity(),
     }
 
     override fun onInputDeviceRemoved(deviceId: Int) {
+        InputHandler.clearControllerCache()
         InputHandler.updateControllerData()
         notifyPhysicalControllerState()
     }
 
     override fun onInputDeviceChanged(deviceId: Int) {
+        InputHandler.clearControllerCache()
         if (isGameController(deviceId)) {
             InputHandler.updateControllerData()
             notifyPhysicalControllerState()
@@ -583,11 +595,7 @@ class EmulationActivity : SakuraActivity(),
     }
 
     private fun notifyPhysicalControllerState() {
-        val navHostFragment =
-            supportFragmentManager.findFragmentById(R.id.fragment_container) as? NavHostFragment
-        val emulationFragment =
-            navHostFragment?.childFragmentManager?.fragments?.firstOrNull() as? org.yuzu.yuzu_emu.fragments.EmulationFragment
-        emulationFragment?.onPhysicalControllerStateChanged(InputHandler.androidControllers.isNotEmpty())
+        findEmulationFragment()?.onPhysicalControllerStateChanged(InputHandler.androidControllers.isNotEmpty())
     }
 
     override fun onSensorChanged(event: SensorEvent) {

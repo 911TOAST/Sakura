@@ -111,9 +111,16 @@ public:
         if (key == current_key) {
             return this;
         }
-        const auto it{std::find(transition_keys.begin(), transition_keys.end(), current_key)};
-        return it != transition_keys.end() ? transitions[std::distance(transition_keys.begin(), it)]
-                                           : nullptr;
+        // Cheap u64 prefilter before the full ~1.5 KB key comparison; the list
+        // can be long and this runs on every draw that changes state groups.
+        const size_t current_hash{current_key.Hash()};
+        const auto matches{[&](size_t i) { return transition_key_hashes[i] == current_hash; }};
+        for (size_t i = 0; i < transition_keys.size(); ++i) {
+            if (matches(i) && transition_keys[i] == current_key) {
+                return transitions[i];
+            }
+        }
+        return nullptr;
     }
 
     [[nodiscard]] bool IsBuilt() const noexcept {
@@ -156,6 +163,7 @@ private:
 
     bool (*configure_func)(GraphicsPipeline*, bool){};
 
+    std::vector<size_t> transition_key_hashes;
     std::vector<GraphicsPipelineCacheKey> transition_keys;
     std::vector<GraphicsPipeline*> transitions;
 

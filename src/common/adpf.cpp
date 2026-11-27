@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <algorithm>
+#include <mutex>
 #include "common/drs_policy.h"
 #if defined(__ANDROID__)
 #include <dlfcn.h>
@@ -118,18 +119,20 @@ void Adpf::Report(int64_t act, int64_t tgt) {
 static constexpr size_t MAX_TIDS = 8;
 static int32_t  g_tids[MAX_TIDS]{};
 static std::atomic<size_t> g_ntids{0};
-static std::atomic_flag    g_tid_lock = ATOMIC_FLAG_INIT;
+// A plain mutex instead of an atomic-flag spin: these sections are tiny and
+// AdpfFrameTick runs on every presented frame, so a spinning loser on a
+// big.LITTLE core just burns a sibling's time with no backoff.
+static std::mutex g_tid_mutex;
 static Adpf g_adpf;
 
 void AdpfRegisterThread(int32_t tid) {
     if (tid <= 0) {
         return;
     }
-    while (g_tid_lock.test_and_set(std::memory_order_acquire)) {}
+    std::lock_guard lock{g_tid_mutex};
     size_t cur = g_ntids.load(std::memory_order_relaxed);
     for (size_t i = 0; i < cur; ++i) {
         if (g_tids[i] == tid) {
-            g_tid_lock.clear(std::memory_order_release);
             return;
         }
     }
@@ -141,25 +144,22 @@ void AdpfRegisterThread(int32_t tid) {
     if (g_adpf.Active()) {
         g_adpf.SetThr(g_tids, cur);
     }
-    g_tid_lock.clear(std::memory_order_release);
 }
 
 void AdpfReset() {
-    while (g_tid_lock.test_and_set(std::memory_order_acquire)) {}
+    std::lock_guard lock{g_tid_mutex};
     g_adpf.Reset();
-    g_tid_lock.clear(std::memory_order_release);
 }
 
 void AdpfPurge() {
-    while (g_tid_lock.test_and_set(std::memory_order_acquire)) {}
+    std::lock_guard lock{g_tid_mutex};
     g_adpf.Reset();
     g_ntids.store(0, std::memory_order_relaxed);
     for (auto& t : g_tids) { t = 0; }
-    g_tid_lock.clear(std::memory_order_release);
 }
 
 void AdpfFrameTick(int64_t act_ns, int64_t tgt_ns) {
-    while (g_tid_lock.test_and_set(std::memory_order_acquire)) {}
+    std::lock_guard lock{g_tid_mutex};
     if (!g_adpf.Active()) {
         size_t n = g_ntids.load(std::memory_order_relaxed);
         if (n > 0) {
@@ -169,7 +169,6 @@ void AdpfFrameTick(int64_t act_ns, int64_t tgt_ns) {
     if (g_adpf.Active()) {
         g_adpf.Report(act_ns, tgt_ns);
     }
-    g_tid_lock.clear(std::memory_order_release);
 }
 
 #if defined(__ANDROID__)
