@@ -240,8 +240,7 @@ RasterizerVulkan::RasterizerVulkan(Core::Frontend::EmuWindow& emu_window_, Tegra
       pipeline_cache(device_memory, device, scheduler, descriptor_pool, guest_descriptor_queue,
                      render_pass_cache, buffer_cache, texture_cache, gpu.ShaderNotify()),
       accelerate_dma(buffer_cache, texture_cache, scheduler),
-      fence_manager(*this, gpu, texture_cache, buffer_cache, query_cache, device, scheduler),
-      wfi_event(device.GetLogical().CreateEvent()) {
+      fence_manager(*this, gpu, texture_cache, buffer_cache, query_cache, device, scheduler) {
     scheduler.SetQueryCache(query_cache);
 }
 
@@ -1144,10 +1143,22 @@ void RasterizerVulkan::WaitForIdle() {
 
     query_cache.NotifyWFI();
 
+    // Order prior work before subsequent work with an explicit memory barrier. vkCmdSetEvent +
+    // vkCmdWaitEvents with dstStage=TOP_OF_PIPE provides NO memory visibility and splits GPU jobs
+    // on Mali/PanVK; vkCmdPipelineBarrier scoped to the exact stages with explicit
+    // MEMORY_WRITE -> MEMORY_READ|MEMORY_WRITE access gives real ordering. (If only
+    // fragment-after-fragment ordering within a tile is needed, VK_DEPENDENCY_BY_REGION_BIT /
+    // VK_EXT_rasterization_order_attachment_access or an attachment-scoped barrier could avoid the
+    // render-pass split; we still split here, as before.)
     scheduler.RequestOutsideRenderPassOperationContext();
-    scheduler.Record([event = *wfi_event, flags](vk::CommandBuffer cmdbuf) {
-        cmdbuf.SetEvent(event, flags);
-        cmdbuf.WaitEvents(event, flags, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, {}, {}, {});
+    scheduler.Record([flags](vk::CommandBuffer cmdbuf) {
+        const VkMemoryBarrier barrier{
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+        };
+        cmdbuf.PipelineBarrier(flags, flags, 0, barrier);
     });
     fence_manager.SignalOrdering();
 }
