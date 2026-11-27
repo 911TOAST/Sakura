@@ -919,10 +919,11 @@ struct Values {
     SwitchableSetting<ExtendedDynamicState> dyna_state{linkage,
 #if defined(__ANDROID__) && defined(SAKURA_OPTIMIZED)
                                            // Keep more guest raster state out of Mali's pipeline
-                                           // keys to reduce graphics-pipeline variants. Device
-                                           // setup still disables EDS on old ARM drivers with
-                                           // broken dynamic vertex-buffer binding.
-                                           ExtendedDynamicState::EDS2,
+                                           // keys to reduce graphics-pipeline variants. Prefer EDS3
+                                           // so blend/enable state is dynamic too; Device setup
+                                           // removes unsupported EDS3 and still disables EDS on old
+                                           // ARM drivers with broken dynamic vertex-buffer binding.
+                                           ExtendedDynamicState::EDS3,
 #elif defined(__ANDROID__) || defined(__APPLE__)
                                            ExtendedDynamicState::Disabled,
 #else

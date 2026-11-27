@@ -773,7 +773,13 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
     functions.vkGetInstanceProcAddr = dld.vkGetInstanceProcAddr;
     functions.vkGetDeviceProcAddr = dld.vkGetDeviceProcAddr;
 
-    VmaAllocatorCreateFlags flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
+    // VMA is called from multiple threads (render thread, async present, buffer/texture paths).
+    // Do NOT set VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT: without it VMA guards its
+    // internal block/allocation management with lightweight locks. (vkCreateBuffer/vkCreateImage
+    // and queue submission are separately thread-safe; see Vulkan thread-safety guarantees.)
+    // Previously EXTERNALLY_SYNCHRONIZED disabled VMA's mutexes while no global lock protected
+    // vmaCreateBuffer/vmaCreateImage/vmaFlushAllocation/vmaInvalidateAllocation/vmaDestroy*.
+    VmaAllocatorCreateFlags flags = 0;
     if (extensions.memory_budget) {
         flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
     }

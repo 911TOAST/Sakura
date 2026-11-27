@@ -250,7 +250,14 @@ void ApplyPerformanceProfile() {
     values.current_speed_mode.SetValue(SpeedMode::Standard);
 
     // Fewer pipeline permutations and less per-draw state churn.
-    values.dyna_state.SetValue(ExtendedDynamicState::EDS2);
+    // Prefer EDS3 (dynamic blend/enables) so per-draw blend/enable state stays out of the pipeline
+    // key, which keeps the MaxwellBypass steady-state path effective. Do NOT force EDS2 here:
+    // EDS2 strips VK_EXT_extended_dynamic_state3 in Device, which both restores blend/enable
+    // pipeline-key permutations and loses the EDS3 dynamic-state coverage. Hardware/driver quirks
+    // are handled where they are knowable, in Device construction: unsupported EDS3 features are
+    // removed, and known-broken drivers (e.g. ARM proprietary below r42) fall back to EDS1/EDS2
+    // or Disabled automatically.
+    values.dyna_state.SetValue(ExtendedDynamicState::EDS3);
     values.vertex_input_dynamic_state.SetValue(true);
 
     // Draw-burst fast path: fold consecutive steady-state draws into one scheduler packet.
@@ -288,7 +295,7 @@ void ApplyPerformanceProfile() {
 
     LOG_INFO(Common,
              "[Malikan] Performance defaults applied once: native 1x + bilinear, mailbox present, "
-             "async GPU, EDS2 + dynamic vertex input, reactive flushing, "
+             "async GPU, EDS3 (quirk-gated) + dynamic vertex input, reactive flushing, "
              "low GPU accuracy");
 #endif
 }

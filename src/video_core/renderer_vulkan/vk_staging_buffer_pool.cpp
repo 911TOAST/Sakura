@@ -142,23 +142,45 @@ StagingBufferRef StagingBufferPool::GetStreamBuffer(size_t size) {
         return GetStagingBuffer(size, MemoryUsage::Upload);
     }
     const u64 current_tick = scheduler.CurrentTick();
-    std::fill(sync_ticks.begin() + Region(used_iterator), sync_ticks.begin() + Region(iterator),
-              current_tick);
-    used_iterator = iterator;
-    free_iterator = (std::max)(free_iterator, iterator + size);
 
     if (iterator + size >= stream_buffer_size) {
+        // Wrap-around. The region(s) we are about to reuse at offset 0 may still be in flight on
+        // the GPU. CRITICAL: check region 0 *before* committing any wrap state. The previous code
+        // reset used_iterator/iterator/free_iterator first and then returned a fallback staging
+        // buffer on active region 0, leaving iterator=0/free_iterator=size while region 0 was still
+        // read by the GPU; the next call's active check then used an inverted range and handed out
+        // offset 0 again (wrap-around use-after-free / active-region corruption).
+        //
+        // A scratch buffer (if needed) does not disturb the stream ring at all. Only commit the
+        // wrap once region 0 is provably free, and never leave an inverted active-check range.
+        if (AreRegionsActive(0, Region(size) + 1)) {
+            // Avoid waiting for the previous usages to be free; leave stream state untouched.
+            return GetStagingBuffer(size, MemoryUsage::Upload);
+        }
+        // Everything from used_iterator to the end was handed out in this ring before wrapping.
         std::fill(sync_ticks.begin() + Region(used_iterator), sync_ticks.begin() + NUM_SYNCS,
                   current_tick);
         used_iterator = 0;
         iterator = 0;
         free_iterator = size;
 
-        if (AreRegionsActive(0, Region(size) + 1)) {
-            // Avoid waiting for the previous usages to be free
-            return GetStagingBuffer(size, MemoryUsage::Upload);
-        }
+        const size_t offset = iterator;
+        iterator = Common::AlignUp(iterator + size, MAX_ALIGNMENT);
+        return StagingBufferRef{
+            .buffer = *stream_buffer,
+            .offset = static_cast<VkDeviceSize>(offset),
+            .mapped_span = stream_pointer.subspan(offset, size),
+            .usage{},
+            .log2_level{},
+            .index{},
+        };
     }
+
+    std::fill(sync_ticks.begin() + Region(used_iterator), sync_ticks.begin() + Region(iterator),
+              current_tick);
+    used_iterator = iterator;
+    free_iterator = (std::max)(free_iterator, iterator + size);
+
     const size_t offset = iterator;
     iterator = Common::AlignUp(iterator + size, MAX_ALIGNMENT);
     return StagingBufferRef{
@@ -172,6 +194,13 @@ StagingBufferRef StagingBufferPool::GetStreamBuffer(size_t size) {
 }
 
 bool StagingBufferPool::AreRegionsActive(size_t region_begin, size_t region_end) const {
+    // Never form an inverted or out-of-bounds range: an empty range means nothing to check. The
+    // old wrap-around path could hand us region_begin > region_end (after resetting iterator), which
+    // is undefined behaviour for std::any_of and let in-flight region 0 be handed out again.
+    region_end = (std::min)(region_end, NUM_SYNCS);
+    if (region_begin >= region_end) {
+        return false;
+    }
     const u64 gpu_tick = scheduler.GetMasterSemaphore().KnownGpuTick();
     return std::any_of(sync_ticks.begin() + region_begin, sync_ticks.begin() + region_end,
                        [gpu_tick](u64 sync_tick) { return gpu_tick < sync_tick; });
