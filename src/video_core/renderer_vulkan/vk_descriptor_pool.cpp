@@ -19,8 +19,11 @@
 
 namespace Vulkan {
 
-// Prefer small grow rates to avoid saturating the descriptor pool with barely used pipelines
-constexpr size_t SETS_GROW_RATE = 16;
+// Grow descriptor pages in larger chunks to avoid frequent vkCreateDescriptorPool + linear
+// rescans and reduce per-set allocation overhead. (The ResourcePool ticks[] scan is
+// hint-amortized; a circular (pool_index, tick) FIFO for strict O(1) commit is further work.)
+// Pools are created with device.GetSetsPerPool() (>=64) sets each; page size divides it.
+constexpr size_t SETS_GROW_RATE = 64;
 constexpr s32 SCORE_THRESHOLD = 3;
 
 struct DescriptorBank {
