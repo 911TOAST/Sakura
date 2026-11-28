@@ -645,7 +645,8 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .support_native_ndc = device.IsExtDepthClipControlSupported(),
         .support_scaled_attributes = !device.MustEmulateScaledFormats(),
         .support_multi_viewport = device.SupportsMultiViewport(),
-        .support_geometry_streams = device.AreTransformFeedbackGeometryStreamsSupported(),
+        .support_geometry_streams = device.AreTransformFeedbackGeometryStreamsSupported() &&
+                                    !Settings::values.renderer_no_geometry_streams.GetValue(),
         .support_sampled_image_array_nonuniform_indexing =
             device.IsSampledImageArrayNonUniformIndexingSupported(),
 
@@ -722,6 +723,13 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
                         ((static_cast<u64>(profile.force_implicit_lod_explicit) *
                           implicit_lod_revision)
                          << 40) ^
+                        // RendererDebug toggles that change the emitted SPIR-V: geometry-stream
+                        // passthrough and vertex-compaction on/off. Folded into one term so each
+                        // new debug toggle only needs a bit position here.
+                        ((static_cast<u64>(profile.support_geometry_streams ? 0U : 1U) << 0) ^
+                         (static_cast<u64>(Settings::values.renderer_no_vertex_compaction.GetValue())
+                          << 1))
+                            << 32 ^
                         static_cast<u64>(Shader::Serialize::InfoSerializationVersion);
 
     host_info = Shader::HostTranslateInfo{
@@ -808,9 +816,12 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
     // (vkCmdSetVertexInput, vk_graphics_pipeline.cpp) always records guest locations, so
     // compacting there would make shaders read the wrong attributes (black geometry on drivers
     // that both expose the extension and report maxVertexInputAttributes < 32).
-    profile.max_vertex_input_attributes = dynamic_features.has_dynamic_vertex_input
-                                              ? 0u
-                                              : device.GetMaxVertexInputAttributes();
+    profile.max_vertex_input_attributes =
+        dynamic_features.has_dynamic_vertex_input
+            ? 0u
+            : (Settings::values.renderer_no_vertex_compaction.GetValue()
+                   ? 0u
+                   : device.GetMaxVertexInputAttributes());
 
     dynamic_features.has_provoking_vertex = device.IsExtProvokingVertexSupported();
     dynamic_features.has_provoking_vertex_first_mode =

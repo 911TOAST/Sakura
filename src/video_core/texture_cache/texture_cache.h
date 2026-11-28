@@ -433,7 +433,7 @@ bool TextureCache<P>::RescaleRenderTargets() {
         }
         check_rescale(render_targets.depth_buffer_id, tmp_depth_image);
 
-        if (can_rescale) {
+        if (can_rescale && !Settings::values.renderer_no_texture_rescale.GetValue()) {
             rescaled = any_rescaled || scale_rating >= 2;
             const auto scale_up = [this](ImageId image_id) {
                 if (image_id != CORRUPT_ID) {
@@ -2808,7 +2808,7 @@ void TextureCache<P>::SynchronizeAliases(ImageId image_id) {
     }
     const bool can_rescale = ImageCanRescale(image);
     if (any_rescaled) {
-        if (can_rescale) {
+        if (can_rescale && !Settings::values.renderer_no_texture_rescale.GetValue()) {
             ScaleUp(image);
         } else {
             ScaleDown(image);

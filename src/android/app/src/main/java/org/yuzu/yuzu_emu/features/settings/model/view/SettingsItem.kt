@@ -765,6 +765,34 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.RENDERER_NO_GEOMETRY_STREAMS,
+                    titleId = R.string.renderer_no_geometry_streams,
+                    descriptionId = R.string.renderer_no_geometry_streams_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_NO_ASTC_DECODE_MODE,
+                    titleId = R.string.renderer_no_astc_decode_mode,
+                    descriptionId = R.string.renderer_no_astc_decode_mode_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_NO_TEXTURE_RESCALE,
+                    titleId = R.string.renderer_no_texture_rescale,
+                    descriptionId = R.string.renderer_no_texture_rescale_description
+                )
+            )
+            put(
+                SwitchSetting(
+                    BooleanSetting.RENDERER_NO_VERTEX_COMPACTION,
+                    titleId = R.string.renderer_no_vertex_compaction,
+                    descriptionId = R.string.renderer_no_vertex_compaction_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_BCN_TO_ASTC,
                     titleId = R.string.renderer_bcn_to_astc,
                     descriptionId = R.string.renderer_bcn_to_astc_description

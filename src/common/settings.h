@@ -444,6 +444,28 @@ struct Values {
     SwitchableSetting<bool> force_implicit_lod_explicit{linkage, false,
                                                         "force_implicit_lod_explicit",
                                                         Category::RendererDebug};
+    // Diagnostic: compile geometry shaders without transform-feedback streams (the passthrough
+    // path). NieR emits a geometry shader that writes ViewportMask; drivers reporting
+    // maxViewports == 1 are the suspect for its glitches, and this isolates the geometry path.
+    SwitchableSetting<bool> renderer_no_geometry_streams{linkage, false,
+                                                         "renderer_no_geometry_streams",
+                                                         Category::RendererDebug};
+    // Diagnostic: never apply VK_EXT_astc_decode_mode to image views. The fixed-point decode
+    // mode is a known wash-out suspect: a wrong decode format makes ASTC content render pale.
+    SwitchableSetting<bool> renderer_no_astc_decode_mode{linkage, false,
+                                                         "renderer_no_astc_decode_mode",
+                                                         Category::RendererDebug};
+    // Diagnostic: never rescale render targets or textures; everything stays at guest size.
+    // Isolates rescale-related black or misaligned geometry.
+    SwitchableSetting<bool> renderer_no_texture_rescale{linkage, false,
+                                                        "renderer_no_texture_rescale",
+                                                        Category::RendererDebug};
+    // Diagnostic: never compact vertex input locations, even on low-limit drivers. Inverse of
+    // the NieR black-models fix; shaders above the host limit then fail to build, so use only
+    // to check whether the compaction itself misbinds attributes on a driver.
+    SwitchableSetting<bool> renderer_no_vertex_compaction{linkage, false,
+                                                          "renderer_no_vertex_compaction",
+                                                          Category::RendererDebug};
     // Experimental: never use VK_EXT_vertex_input_dynamic_state, even in Malikan mode. Diagnostic
     // for suspected ARM r4x driver bugs where dynamic vertex input strides/bindings misbehave
     // (ANGLE blacklists the feature on ARM < r48).

@@ -2375,6 +2375,7 @@ ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageViewI
     const bool native_astc_view =
         (Settings::values.native_gpu_mode.GetValue() || device->IsMalikanMode()) &&
         device->IsAstcDecodeModeSupported() &&
+        !Settings::values.renderer_no_astc_decode_mode.GetValue() &&
         format_info.format >= VK_FORMAT_ASTC_4x4_UNORM_BLOCK &&
         format_info.format <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK;
     if (native_astc_view) {
