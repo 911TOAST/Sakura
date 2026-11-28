@@ -69,6 +69,12 @@ struct Profile {
     // Opt-in via Settings::values.force_implicit_lod_explicit: LOD 0 disables derivative-based
     // mip selection, so leaving it forced on made textures look blurry on healthy drivers.
     bool force_implicit_lod_explicit{};
+    // Workaround for drivers (ARM Mali r44) that fail texel-buffer type punning: reading an
+    // integer-format VkBufferView through a float-typed sampled image returns garbage instead of
+    // the raw bits. When set, texture buffers are declared as R32ui in SPIR-V and the fetch is
+    // bitcast to float in-shader, so no format reinterpretation ever crosses the descriptor.
+    // The runtime must bind every texture buffer view as R32_UINT (vk_buffer_cache.cpp).
+    bool force_uint_texel_buffers{};
 
     bool warp_size_potentially_larger_than_guest{};
 

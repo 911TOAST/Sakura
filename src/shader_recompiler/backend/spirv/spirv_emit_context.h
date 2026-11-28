@@ -50,6 +50,12 @@ struct TextureDefinition {
 struct TextureBufferDefinition {
     Id id;
     u32 count;
+    /// True when the buffer is declared as R32ui (force_uint_texel_buffers): fetches return
+    /// u32vec4 and must be bitcast to float by the emit.
+    bool is_uint{};
+    /// The image type of this buffer (float or R32ui per is_uint). Stored per definition because
+    /// ctx.image_buffer_type is overwritten by DefineImageBuffers after this runs.
+    Id image_type{};
 };
 
 struct ImageBufferDefinition {

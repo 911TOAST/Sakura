@@ -466,6 +466,14 @@ struct Values {
     SwitchableSetting<bool> renderer_no_vertex_compaction{linkage, false,
                                                           "renderer_no_vertex_compaction",
                                                           Category::RendererDebug};
+    // Workaround for drivers (ARM Mali r44) that fail texel-buffer type punning — the one
+    // FauxVkTest check they fail. Texture buffers are then declared R32ui in SPIR-V, fetched as
+    // integers and bitcast to float in-shader, and every bound view is forced to R32_UINT, so no
+    // format reinterpretation crosses the descriptor. Reads of 16-bit or multi-word guest texel
+    // formats assume 32-bit words while this is on.
+    SwitchableSetting<bool> renderer_uint_texel_buffers{linkage, false,
+                                                        "renderer_uint_texel_buffers",
+                                                        Category::RendererDebug};
     // Experimental: never use VK_EXT_vertex_input_dynamic_state, even in Malikan mode. Diagnostic
     // for suspected ARM r4x driver bugs where dynamic vertex input strides/bindings misbehave
     // (ANGLE blacklists the feature on ARM < r48).

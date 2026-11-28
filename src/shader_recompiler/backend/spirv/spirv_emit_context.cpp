@@ -1328,8 +1328,13 @@ void EmitContext::DefineTextureBuffers(const Info& info, u32& binding) {
     if (info.texture_buffer_descriptors.empty()) {
         return;
     }
-    const spv::ImageFormat format{spv::ImageFormat::Unknown};
-    image_buffer_type = TypeImage(F32[1], spv::Dim::Buffer, 0U, false, false, 1, format);
+    // force_uint_texel_buffers: declare the buffer as R32ui and bitcast in the emit. Drivers that
+    // fail texel-buffer punning (ARM Mali r44) return garbage for a float read of an integer view;
+    // a uint read of a uint view is never a reinterpretation.
+    const bool as_uint{profile.force_uint_texel_buffers};
+    const spv::ImageFormat format{as_uint ? spv::ImageFormat::R32ui : spv::ImageFormat::Unknown};
+    image_buffer_type = TypeImage(as_uint ? U32[1] : F32[1], spv::Dim::Buffer, 0U, false, false, 1,
+                                  format);
 
     const Id type{TypePointer(spv::StorageClass::UniformConstant, image_buffer_type)};
     texture_buffers.reserve(info.texture_buffer_descriptors.size());
@@ -1344,6 +1349,8 @@ void EmitContext::DefineTextureBuffers(const Info& info, u32& binding) {
         texture_buffers.push_back({
             .id = id,
             .count = desc.count,
+            .is_uint = as_uint,
+            .image_type = image_buffer_type,
         });
         if (profile.supported_spirv >= 0x00010400) {
             interfaces.push_back(id);

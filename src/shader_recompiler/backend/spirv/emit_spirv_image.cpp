@@ -210,12 +210,15 @@ Id Texture(EmitContext& ctx, IR::TextureInstInfo info, [[maybe_unused]] const IR
 Id TextureImage(EmitContext& ctx, IR::TextureInstInfo info, const IR::Value& index) {
     if (info.type == TextureType::Buffer) {
         const TextureBufferDefinition& def{ctx.texture_buffers.at(info.descriptor_index)};
+        // def.image_type, not ctx.image_buffer_type: DefineImageBuffers overwrites the shared
+        // field after DefineTextureBuffers runs, and with force_uint_texel_buffers this buffer
+        // is R32ui while storage image buffers stay their own type.
         if (def.count > 1) {
             const Id idx{index.IsImmediate() ? ctx.Const(index.U32()) : ctx.Def(index)};
-            const Id ptr{ctx.OpAccessChain(ctx.image_buffer_type, def.id, idx)};
-            return ctx.OpLoad(ctx.image_buffer_type, ptr);
+            const Id ptr{ctx.OpAccessChain(def.image_type, def.id, idx)};
+            return ctx.OpLoad(def.image_type, ptr);
         }
-        return ctx.OpLoad(ctx.image_buffer_type, def.id);
+        return ctx.OpLoad(def.image_type, def.id);
     } else {
         const TextureDefinition& def{ctx.textures.at(info.descriptor_index)};
         if (def.count > 1) {
@@ -659,7 +662,11 @@ Id EmitImageGatherDref(EmitContext& ctx, IR::Inst* inst, const IR::Value& index,
 Id EmitImageFetch(EmitContext& ctx, IR::Inst* inst, const IR::Value& index, Id coords, Id offset,
                   Id lod, Id ms) {
     const auto info{inst->Flags<IR::TextureInstInfo>()};
-    const bool is_integer{IsTextureInteger(ctx, info)};
+    // force_uint_texel_buffers: texture buffers are declared R32ui, so fetch as integers and
+    // bitcast; a float fetch of the uint view would be the punning Mali r44 gets wrong.
+    const bool buffer_is_uint{info.type == TextureType::Buffer &&
+                              ctx.texture_buffers.at(info.descriptor_index).is_uint};
+    const bool is_integer{IsTextureInteger(ctx, info) || buffer_is_uint};
     const Id result_type{is_integer ? ctx.U32[4] : ctx.F32[4]};
     AddOffsetToCoordinates(ctx, info, coords, offset);
     if (info.type == TextureType::Buffer) {

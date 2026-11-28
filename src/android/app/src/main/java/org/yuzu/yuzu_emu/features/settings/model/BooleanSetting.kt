@@ -45,6 +45,7 @@ enum class BooleanSetting(override val key: String) : AbstractBooleanSetting {
     RENDERER_NO_ASTC_DECODE_MODE("renderer_no_astc_decode_mode"),
     RENDERER_NO_TEXTURE_RESCALE("renderer_no_texture_rescale"),
     RENDERER_NO_VERTEX_COMPACTION("renderer_no_vertex_compaction"),
+    RENDERER_UINT_TEXEL_BUFFERS("renderer_uint_texel_buffers"),
     RENDERER_BCN_TO_ASTC("renderer_bcn_to_astc"),
     RENDERER_AFBC_LAYOUTS("renderer_afbc_layouts"),
     RENDERER_OPTIMAL_ATTACHMENTS("renderer_optimal_attachments"),

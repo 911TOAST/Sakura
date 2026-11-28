@@ -21,6 +21,7 @@
 #include "video_core/vulkan_common/vulkan_memory_allocator.h"
 #include "video_core/vulkan_common/vulkan_wrapper.h"
 #include "video_core/texture_cache/util.h"
+#include "common/settings.h"
 
 namespace Vulkan {
 namespace {
@@ -128,6 +129,12 @@ VkBufferView Buffer::View(u32 offset, u32 size, VideoCore::Surface::PixelFormat 
         // Null buffer not supported, adjust offset and size
         offset = 0;
         size = 0;
+    }
+    if (Settings::values.renderer_uint_texel_buffers.GetValue()) {
+        // force_uint_texel_buffers: the SPIR-V side fetches every texture buffer as R32ui and
+        // bitcasts (emit_spirv_image.cpp EmitImageFetch), so the view must be R32_UINT too —
+        // a float-typed read of a uint view is the punning ARM Mali r44 gets wrong.
+        format = VideoCore::Surface::PixelFormat::R32_UINT;
     }
     const auto it{std::ranges::find_if(views, [offset, size, format](const BufferView& view) {
         return offset == view.offset && size == view.size && format == view.format;

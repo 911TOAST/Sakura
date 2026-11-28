@@ -662,6 +662,9 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         // for a driver that actually returns black on implicit-LOD samples in divergent flow.
         .force_implicit_lod_explicit =
             Settings::values.force_implicit_lod_explicit.GetValue(),
+        // Opt-in: ARM Mali r44 fails texel-buffer type punning (see profile.h); R32ui texel
+        // buffers sidestep it entirely.
+        .force_uint_texel_buffers = Settings::values.renderer_uint_texel_buffers.GetValue(),
 
         .warp_size_potentially_larger_than_guest = device.IsWarpSizePotentiallyBiggerThanGuest(),
 
@@ -728,7 +731,8 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
                         // new debug toggle only needs a bit position here.
                         ((static_cast<u64>(profile.support_geometry_streams ? 0U : 1U) << 0) ^
                          (static_cast<u64>(Settings::values.renderer_no_vertex_compaction.GetValue())
-                          << 1))
+                          << 1) ^
+                         (static_cast<u64>(profile.force_uint_texel_buffers) << 2))
                             << 32 ^
                         static_cast<u64>(Shader::Serialize::InfoSerializationVersion);
 

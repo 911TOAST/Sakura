@@ -793,6 +793,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.RENDERER_UINT_TEXEL_BUFFERS,
+                    titleId = R.string.renderer_uint_texel_buffers,
+                    descriptionId = R.string.renderer_uint_texel_buffers_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_BCN_TO_ASTC,
                     titleId = R.string.renderer_bcn_to_astc,
                     descriptionId = R.string.renderer_bcn_to_astc_description
