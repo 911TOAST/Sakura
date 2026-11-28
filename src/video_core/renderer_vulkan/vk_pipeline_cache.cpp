@@ -656,7 +656,11 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         // derivatives incorrectly for implicit-LOD samples inside divergent fragment branches,
         // so those samples return black. Force explicit LOD 0 on every Mali driver while this
         // is being verified (see docs/DriverBugs.md when the workaround lands for real).
-        .force_implicit_lod_explicit = device.IsMali(),
+        // Opt-in (force_implicit_lod_explicit): forcing LOD 0 on every Mali driver killed
+        // derivative-based mip selection game-wide and made textures look blurry. Only enable it
+        // for a driver that actually returns black on implicit-LOD samples in divergent flow.
+        .force_implicit_lod_explicit =
+            Settings::values.force_implicit_lod_explicit.GetValue(),
 
         .warp_size_potentially_larger_than_guest = device.IsWarpSizePotentiallyBiggerThanGuest(),
 
@@ -702,6 +706,8 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
     // Compaction gating changed (now off on the dynamic vertex input path): bump so devices with
     // VK_EXT_vertex_input_dynamic_state do not reuse SPIR-V cached by builds that compacted there.
     constexpr u64 vertex_compaction_revision = 2;
+    // Bump whenever the implicit-LOD workaround rules change (see force_implicit_lod_explicit).
+    constexpr u64 implicit_lod_revision = 1;
     shader_cache_salt = Common::CityHash64(model_name.data(), model_name.size()) ^
                         (static_cast<u64>(device.GetDriverVersion()) << 32) ^
                         static_cast<u64>(device.ApiVersion()) ^
@@ -710,6 +716,12 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
                           relaxed_precision_revision)
                          << 56) ^
                         (vertex_compaction_revision << 48) ^
+                        // force_implicit_lod_explicit changes the emitted SPIR-V (implicit-LOD
+                        // samples become explicit LOD 0); keep cached shaders from other builds
+                        // or with the switch flipped from being reused.
+                        ((static_cast<u64>(profile.force_implicit_lod_explicit) *
+                          implicit_lod_revision)
+                         << 40) ^
                         static_cast<u64>(Shader::Serialize::InfoSerializationVersion);
 
     host_info = Shader::HostTranslateInfo{

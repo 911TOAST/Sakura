@@ -66,6 +66,8 @@ struct Profile {
     // Experimental workaround for drivers (MediaTek-bundled ARM Mali, r44) that mis-evaluate
     // derivatives for implicit-LOD samples inside divergent fragment control flow, returning
     // black. Forces every implicit-LOD sample in the fragment stage down to explicit LOD 0.
+    // Opt-in via Settings::values.force_implicit_lod_explicit: LOD 0 disables derivative-based
+    // mip selection, so leaving it forced on made textures look blurry on healthy drivers.
     bool force_implicit_lod_explicit{};
 
     bool warp_size_potentially_larger_than_guest{};

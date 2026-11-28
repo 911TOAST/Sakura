@@ -437,6 +437,13 @@ struct Values {
     // shadow_compare_bypass (false: depth <= ref is "lit", true: depth >= ref is "lit").
     SwitchableSetting<bool> shadow_compare_manual_flip{linkage, false, "shadow_compare_manual_flip",
                                                        Category::RendererDebug};
+    // Experimental: force every implicit-LOD fragment sample down to explicit LOD 0. Turn this on
+    // only if a game shows black sampling on a driver that mis-evaluates derivatives in divergent
+    // control flow (MediaTek-bundled ARM Mali r44); it disables derivative-based mip selection, so
+    // expect softer or aliased textures while it is on.
+    SwitchableSetting<bool> force_implicit_lod_explicit{linkage, false,
+                                                        "force_implicit_lod_explicit",
+                                                        Category::RendererDebug};
     // Experimental: never use VK_EXT_vertex_input_dynamic_state, even in Malikan mode. Diagnostic
     // for suspected ARM r4x driver bugs where dynamic vertex input strides/bindings misbehave
     // (ANGLE blacklists the feature on ARM < r48).

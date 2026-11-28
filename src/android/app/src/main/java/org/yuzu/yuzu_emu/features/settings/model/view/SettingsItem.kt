@@ -758,6 +758,13 @@ abstract class SettingsItem(
             )
             put(
                 SwitchSetting(
+                    BooleanSetting.FORCE_IMPLICIT_LOD_EXPLICIT,
+                    titleId = R.string.force_implicit_lod_explicit,
+                    descriptionId = R.string.force_implicit_lod_explicit_description
+                )
+            )
+            put(
+                SwitchSetting(
                     BooleanSetting.RENDERER_BCN_TO_ASTC,
                     titleId = R.string.renderer_bcn_to_astc,
                     descriptionId = R.string.renderer_bcn_to_astc_description
