@@ -255,11 +255,14 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
                 VideoCore::Surface::IsPixelFormatInteger(image_view.format)) {
                 vk_sampler = sampler.HandleWithNearestFilter();
             }
-            // TEMPORARY DEBUG (black models on Mali): when manual depth-compare is enabled via
-            // shadow_compare_manual_flip, sample depth textures WITHOUT the hardware compare.
+            // Manual depth-compare: on ARM Mali r44 the in-shader manual compare is forced
+            // (vk_pipeline_cache.cpp, NeedsManualShadowCompare); depth textures must then be
+            // sampled WITHOUT the hardware compare. Keep the settings as the healthy-driver
+            // override, with the same pairing the profile uses.
             if (desc.is_depth && sampler.HasDepthComparison() &&
                 ((Settings::values.shadow_compare_bypass.GetValue() &&
                   Settings::values.shadow_compare_manual_flip.GetValue()) ||
+                 device->NeedsManualShadowCompare() ||
                  !image_view.SupportsDepthComparison())) {
                 vk_sampler = sampler.HandleWithoutDepthComparison();
             }

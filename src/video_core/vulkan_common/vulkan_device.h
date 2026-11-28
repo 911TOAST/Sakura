@@ -1043,6 +1043,14 @@ FN_MAX_LIMIT_LIST
                properties.properties.vendorID == 0x13B5;
     }
 
+    /// True on ARM Mali drivers before r45 (e.g. MTK's r44p1, documented in MaliBridge issue #72):
+    /// hardware depth-compare sampling misbehaves and raw reads of compare-op samplers return 0.0.
+    /// Both the shader profile (vk_pipeline_cache.cpp) and the descriptor binding
+    /// (pipeline_helper.h) must agree on this, so it lives here.
+    bool NeedsManualShadowCompare() const noexcept {
+        return IsMali() && VK_VERSION_MAJOR(properties.properties.driverVersion) < 45;
+    }
+
     bool IsMoltenVK() const noexcept {
         return properties.driver.driverID == VK_DRIVER_ID_MOLTENVK;
     }

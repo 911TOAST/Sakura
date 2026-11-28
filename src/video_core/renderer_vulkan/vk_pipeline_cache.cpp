@@ -650,8 +650,25 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .support_sampled_image_array_nonuniform_indexing =
             device.IsSampledImageArrayNonUniformIndexingSupported(),
 
-        .shadow_compare_bypass = Settings::values.shadow_compare_bypass.GetValue(),
-        .shadow_compare_manual_flip = Settings::values.shadow_compare_manual_flip.GetValue(),
+        // Shadow compare on ARM Mali r44 is broken twice over (documented: MaliBridge issue #72,
+        // driver v1.r44p1-01eac0): hardware depth-compare sampling misbehaves, and raw reads of a
+        // compare-op sampler (undefined behaviour in Vulkan) return 0.0 - fully shadowed - so lit
+        // surfaces render black while emissive content still glows (NieR's black machines).
+        // On known-bad Mali drivers force the in-shader manual compare (bypass + flip) by default;
+        // the settings below remain the override for healthy drivers. The pair is also what makes
+        // pipeline_helper.h bind the compare-disable sampler for raw depth reads.
+        .shadow_compare_bypass = [&] {
+            if (device.NeedsManualShadowCompare()) {
+                return true;
+            }
+            return Settings::values.shadow_compare_bypass.GetValue();
+        }(),
+        .shadow_compare_manual_flip = [&] {
+            if (device.NeedsManualShadowCompare()) {
+                return true;
+            }
+            return Settings::values.shadow_compare_manual_flip.GetValue();
+        }(),
 
         // TEMPORARY Mali driver workaround (black models): MTK's ARM Mali r44 evaluates
         // derivatives incorrectly for implicit-LOD samples inside divergent fragment branches,
