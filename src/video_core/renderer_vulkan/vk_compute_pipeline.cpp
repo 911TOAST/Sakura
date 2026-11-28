@@ -239,7 +239,7 @@ void ComputePipeline::Configure(Tegra::Engines::KeplerCompute& kepler_compute,
     const VideoCommon::SamplerId* samplers_it{samplers.data()};
     const VideoCommon::ImageViewInOut* views_it{views.data()};
     PushImageDescriptors(texture_cache, guest_descriptor_queue, info, rescaling, samplers_it,
-                         views_it);
+                         views_it, device.NeedsManualShadowCompare());
 
     if (!is_built.load(std::memory_order::relaxed)) {
         // Wait for the pipeline to be built

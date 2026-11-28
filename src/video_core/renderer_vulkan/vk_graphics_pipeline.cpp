@@ -542,7 +542,7 @@ bool GraphicsPipeline::ConfigureImpl(bool is_indexed) {
     const auto prepare_stage{[&](size_t stage) LAMBDA_FORCEINLINE {
         buffer_cache.BindHostStageBuffers(stage);
         PushImageDescriptors(texture_cache, guest_descriptor_queue, stage_infos[stage], rescaling,
-                             samplers_it, views_it);
+                             samplers_it, views_it, device.NeedsManualShadowCompare());
         const auto& info{stage_infos[stage]};
         if (info.uses_render_area) {
             render_area.uses_render_area = true;
@@ -619,6 +619,11 @@ void GraphicsPipeline::ConfigureDraw(const RescalingPushConstant& rescaling,
     }
     const bool push_rescaling_words{
         scheduler.UpdateRescalingWords(rescaling.Data(), !bind_pipeline)};
+    const bool needs_descriptor_cmd{descriptor_set_layout && bind_descriptors};
+    if (!bind_pipeline && !push_rescaling_words && !update_rescaling &&
+        !render_area.uses_render_area && !needs_descriptor_cmd) {
+        return;
+    }
     scheduler.Record([this, descriptor_data, bind_pipeline, bind_descriptors,
                       push_rescaling_words,
                       rescaling_data = rescaling.Data(),

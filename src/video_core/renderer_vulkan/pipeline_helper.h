@@ -219,7 +219,8 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
                                  GuestDescriptorQueue& guest_descriptor_queue,
                                  const Shader::Info& info, RescalingPushConstant& rescaling,
                                  const VideoCommon::SamplerId*& samplers,
-                                 const VideoCommon::ImageViewInOut*& views) {
+                                 const VideoCommon::ImageViewInOut*& views,
+                                 bool manual_shadow_compare) {
     const u32 num_texture_buffers = Shader::NumDescriptors(info.texture_buffer_descriptors);
     const u32 num_image_buffers = Shader::NumDescriptors(info.image_buffer_descriptors);
     views += num_texture_buffers;
@@ -262,7 +263,7 @@ inline void PushImageDescriptors(TextureCache& texture_cache,
             if (desc.is_depth && sampler.HasDepthComparison() &&
                 ((Settings::values.shadow_compare_bypass.GetValue() &&
                   Settings::values.shadow_compare_manual_flip.GetValue()) ||
-                 device->NeedsManualShadowCompare() ||
+                 manual_shadow_compare ||
                  !image_view.SupportsDepthComparison())) {
                 vk_sampler = sampler.HandleWithoutDepthComparison();
             }
